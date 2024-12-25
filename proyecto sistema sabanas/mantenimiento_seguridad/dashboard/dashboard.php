@@ -214,7 +214,7 @@ $rol = $_SESSION['rol']; // Acceder al rol del usuario
         <?php endif; ?>
 
         <?php if ($rol == 'admin' || $rol == 'venta'): ?>
-            <div class="card">
+            <div class="card" class=>
                 <h3>Módulo de Ventas</h3>
                 <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas//venta_v2/ui_apertura_cierre_caja.php">Ir al módulo de Ventas</a>
             </div>
