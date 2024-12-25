@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Formulario de Facturación</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+
+        }
+
+        * {
+            box-sizing: border-box;
+            /*border: 1px solid;*/
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        form {
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin: 20px auto;
+            max-width: 1000px;
+        }
+
+        .section {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+
+        button {
+            background-color: #007BFF;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #ccc;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        tr:hover {
+            background-color: #ddd;
+        }
+
+        /* Estilo para el botón de eliminación en la tabla */
+        button.eliminar {
+            background-color: #dc3545;
+        }
+
+        button.eliminar:hover {
+            background-color: #a71b28;
+        }
+
+        .conetenedor_cabezera {
+            display: flex;
+            flex-wrap: wrap;
+            width: 100%;
+            /* Permite que las columnas se envuelvan si no caben en el ancho del contenedor */
+        }
+
+        .div-cliente,
+        .div-factura {
+            width: 50%;
+            display: flex;
+            flex-wrap: wrap;
+            /* Ambas columnas ocupan el 50% del ancho */
+            box-sizing: border-box;
+            /* Incluye el padding en el ancho */
+            padding: 10px;
+        }
+
+        .div_agregar {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .div_totales {
+            display: flex;
+            flex-wrap: wrap;
+        }
+
+        .h2_informacion_cliente,
+        .h2_detalles_de_factura {
+            display: block;
+            width: 100%;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Facturación</h1>
+    <form action="procesar_factura.php" method="post">
+        <!-- Información del Cliente -->
+        <div class="conetenedor_cabezera">
+
+            <div class="div-cliente">
+                <h2 class="h2_informacion_cliente">Información del Cliente</h2>
+                <div class="form-group">
+                    <label for="nombre">Nombre:</label>
+                    <input type="text" id="nombre" name="nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="apellido">Apellido:</label>
+                    <input type="text" id="apellido" name="apellido" required>
+                </div>
+                <div class="form-group">
+                    <label for="direccion">Dirección:</label>
+                    <input type="text" id="direccion" name="direccion">
+                </div>
+                <div class="form-group">
+                    <label for="telefono">Teléfono:</label>
+                    <input type="text" id="telefono" name="telefono">
+                </div>
+                <div class="form-group">
+                    <label for="ruc">RUC o CI:</label>
+                    <input type="text" id="ruc" name="ruc">
+                </div>
+            </div>
+
+            <!-- Detalles de la Factura -->
+            <div class="div-factura">
+                <h2 class="h2_detalles_de_factura">Detalles de la Factura</h2>
+                <div class="form-group">
+                    <label for="nro_factura">Número de Factura:</label>
+                    <input type="text" id="nro_factura" name="nro_factura" required>
+                </div>
+                <div class="form-group">
+                    <label for="fecha">Fecha de Factura:</label>
+                    <input type="date" id="fecha" name="fecha" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="ruc_empresa">RUC de la Empresa:</label>
+                    <input type="text" id="ruc_empresa" name="ruc_empresa">
+                </div>
+                <div class="form-group">
+                    <label for="metodoPago">Condición de Venta:</label>
+                    <select id="metodoPago" name="metodoPago">
+                        <option value="contado">Contado</option>
+                        <option value="credito">Crédito</option>
+                    </select>
+                </div>
+                <div class="form-group ">
+                    <label for="cuotas">Cuotas:</label>
+                    <input type="text" id="cuotas" name="cuotas" disabled>
+                </div>
+                <div class="form-group ">
+                    <label for="Intervalo">Intervalo:</label>
+                    <input type="text" id="Intervalo" name="Intervalo" disabled>
+                </div>
+
+                <script>
+                    const metodoPagoSelect = document.getElementById("metodoPago");
+                    const cuotasInput = document.getElementById("cuotas");
+                    const IntervalosInput = document.getElementById("Intervalo");
+
+
+                    metodoPagoSelect.addEventListener("change", function () {
+                        if (metodoPagoSelect.value === "credito") {
+                            cuotasInput.disabled = false;
+                            IntervalosInput.disabled = false; // Habilitar el campo de cuotas
+                        } else {
+                            cuotasInput.disabled = true;
+                            IntervalosInput.disabled = true; // Deshabilitar el campo de cuotas
+                        }
+                    });
+                </script>
+
+            </div>
+            <!-- Agregar Productos -->
+            <h2>Agregar Productos</h2>
+            <div class="div_agregar">
+
+                <div class="form-group">
+                    <label for="cod_producto">Código de Producto:</label>
+                    <input type="text" id="cod_producto" name="cod_producto">
+                </div>
+                <div class="form-group">
+                    <label for="producto">Producto:</label>
+                    <input type="text" id="producto" name="producto">
+                </div>
+                <div class="form-group">
+                    <label for="precio_unitario">Precio Unitario:</label>
+                    <input type="number" id="precio_unitario" name="precio_unitario">
+                </div>
+                <div class="form-group">
+                    <label for="cantidad">Cantidad:</label>
+                    <input type="number" id="cantidad" name="cantidad">
+                </div>
+                <div class="form-group">
+                    <label for="productos">Seleccionar Producto:</label>
+                    <select id="productos" name="productos">
+                        <!-- Agrega más opciones según tus productos -->
+                    </select>
+                </div>
+                <button type="button" id="agregar_a_tabla">Agregar a la Tabla</button>
+            </div>
+
+            <!-- Tabla de Productos -->
+            <div class="section">
+                <table id="tabla_productos">
+                    <thead>
+                        <tr>
+                            <th>Código de Producto</th>
+                            <th>Producto</th>
+                            <th>Precio</th>
+                            <th>Cantidad</th>
+                            <th>Exenta</th>
+                            <th>IVA 5%</th>
+                            <th>IVA 10%</th>
+                            <th>SUB TOTAL</th>
+
+                            <th>Acciones</th> <!-- Columna para botón de eliminación -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Esta tabla comienza vacía -->
+                    </tbody>
+                </table>
+            </div>
+
+
+            <script>
+                document.getElementById('agregar_a_tabla').addEventListener('click', function () {
+                    // Obtener los valores de los campos del formulario
+                    var codigo = document.getElementById('cod_producto').value;
+                    var producto = document.getElementById('producto').value;
+                    var precioUnitario = document.getElementById('precio_unitario').value;
+                    var cantidad = document.getElementById('cantidad').value;
+                    var exenta = ('0');
+                    var iva5 = ('0');
+                    var iva10total = precioUnitario * cantidad;
+                    var iva10 = iva10total * 0.10;
+                    var subtotal = precioUnitario * cantidad;
+                    // Crear una nueva fila en la tabla
+                    var tabla = document.getElementById('tabla_productos').getElementsByTagName('tbody')[0];
+                    var nuevaFila = tabla.insertRow(tabla.rows.length);
+
+                    // Agregar celdas con los valores
+                    var celdaCodigo = nuevaFila.insertCell(0);
+                    celdaCodigo.innerHTML = codigo;
+
+                    var celdaProducto = nuevaFila.insertCell(1);
+                    celdaProducto.innerHTML = producto;
+
+                    var celdaPrecioUnitario = nuevaFila.insertCell(2);
+                    celdaPrecioUnitario.innerHTML = precioUnitario;
+
+                    var celdaCantidad = nuevaFila.insertCell(3);
+                    celdaCantidad.innerHTML = cantidad;
+
+                    var celdaExenta = nuevaFila.insertCell(4);
+                    celdaExenta.innerHTML = exenta;
+
+                    var celdaIva5 = nuevaFila.insertCell(5);
+                    celdaIva5.innerHTML = iva5;
+
+                    var celdaIva10 = nuevaFila.insertCell(6);
+                    celdaIva10.innerHTML = iva10;
+
+                    var celdasubtotal = nuevaFila.insertCell(7);
+                    celdasubtotal.innerHTML = subtotal;
+                    // Crear una celda para el botón de eliminación
+                    var celdaEliminar = nuevaFila.insertCell(8);
+                    calcularTotalIVA10();
+                    calcularTotalVenta();
+                    // Crear un botón de eliminación y establecer su función
+                    var botonEliminar = document.createElement('button');
+                    botonEliminar.textContent = 'Eliminar';
+                    botonEliminar.addEventListener('click', function () {
+                        eliminarFila(this);
+                    });
+
+                    // Agregar el botón de eliminación a la celda
+                    celdaEliminar.appendChild(botonEliminar);
+                });
+                function eliminarFila(boton) {
+                    var fila = boton.parentNode.parentNode;
+                    fila.parentNode.removeChild(fila);
+                    calcularTotalIVA10();
+                    calcularTotalVenta();
+
+                }
+
+                function calcularTotalIVA10() {
+                    var filas = document.querySelectorAll('#tabla_productos tbody tr');
+                    var totalIVA10 = 0;
+
+                    filas.forEach(function (fila) {
+                        var celdas = fila.getElementsByTagName('td'); // Obtén todas las celdas de la fila
+                        var iva10 = parseFloat(celdas[6].textContent); // IVA 10% en la séptima columna (índice 6)
+                        totalIVA10 += iva10;
+                    });
+
+                    // Actualiza el campo "Total IVA 10%" con el resultado
+                    document.getElementById('total_iva10').value = totalIVA10.toFixed(2);
+                }
+
+                function calcularTotalVenta() {
+                    var filas = document.querySelectorAll('#tabla_productos tbody tr');
+                    var totalVenta = 0;
+
+                    filas.forEach(function (fila) {
+                        var celdas = fila.getElementsByTagName('td'); // Obtén todas las celdas de la fila
+                        var subtotal = parseFloat(celdas[7].textContent); // IVA 10% en la séptima columna (índice 6)
+                        totalVenta += subtotal;
+                    });
+
+                    // Actualiza el campo "Total IVA 10%" con el resultado
+                    document.getElementById('total_venta').value = totalVenta.toFixed(2);
+                }
+
+
+            </script>
+
+            <!-- Totales y Botones -->
+            <div class="div_totales">
+                <div class="form-group">
+                    <label for="total_iva5">Total IVA 5%:</label>
+                    <input type="text" id="total_iva5" name="total_iva5">
+                </div>
+                <div class="form-group">
+                    <label for="total_iva10">Total IVA 10%:</label>
+                    <input type="text" id="total_iva10" name="total_iva10">
+                </div>
+                <div class="form-group">
+                    <label for="total_iva">Total IVA:</label>
+                    <input type="text" id="total_iva" name="total_iva">
+                </div>
+                <div class="form-group">
+                    <label for="total_venta">Total Venta:</label>
+                    <input type="text" id="total_venta" name="total_venta">
+                </div>
+
+            </div>
+            <input type="hidden" id="datosTabla" name="datosTabla">
+
+            <script>
+                document.addEventListener("DOMContentLoaded", function () {
+                    var guardarButton = document.getElementById("guardar");
+                    if (guardarButton) {
+                        guardarButton.addEventListener("click", function () {
+                            alert("Código JavaScript ejecutándose");
+
+                            var data = [];
+                            var rows = document.querySelectorAll("#tabla_productos tbody tr");
+                            rows.forEach(function (row) {
+                                var cells = row.querySelectorAll("td");
+                                data.push({
+                                    codigoProducto: cells[0].textContent,
+                                    producto: cells[1].textContent,
+                                    precio: cells[2].textContent,
+                                    cantidad: cells[3].textContent,
+                                    exenta: cells[4].textContent,
+                                    iva5: cells[5].textContent,
+                                    iva10: cells[6].textContent,
+                                    subTotal: cells[7].textContent,
+                                });
+                            });
+                            console.log("Datos a enviar:", JSON.stringify(data));
+
+                            // Actualiza el campo oculto con los datos en formato JSON
+                            var datosTabla = document.getElementById("datosTabla");
+                            if (datosTabla) {
+                                datosTabla.value = JSON.stringify(data);
+                            }
+
+                            // Envía el formulario
+                            var form = document.querySelector("form");
+                            if (form) {
+                                form.submit();
+                            }
+                        });
+                    }
+                });
+            </script>
+
+            <!-- Botones -->
+            <div class="section">
+                <button type="button" id="nuevo">Nuevo</button>
+                <button type="submit" id="guardar">Guardar</button>
+                <button type="button" id="salir">Salir</button>
+            </div>
+
+
+
+    </form>
+    <script>
+        var data;
+        // Obtén una referencia al select de productos
+        var selectProductos = document.getElementById('productos');
+        // Obtén referencias a los campos para llenar
+        var codProducto = document.getElementById('cod_producto');
+        var nombreProducto = document.getElementById('producto');
+        var precioUnitario = document.getElementById('precio_unitario');
+
+        // Cargar productos desde el servidor (PHP)
+        fetch('../menu/select_producto.php')
+            .then(response => response.json())
+            .then(products => {
+                data = products;
+                // Iterar sobre los productos y agregar opciones al select
+                data.forEach(producto => {
+                    var option = document.createElement('option');
+                    option.value = producto.id_producto;
+                    option.text = producto.nombre;
+                    selectProductos.appendChild(option);
+                });
+            })
+            .catch(error => console.error('Error al cargar productos:', error));
+
+        // Agrega un oyente de eventos para el cambio en el select
+        selectProductos.addEventListener('change', function () {
+            var productoId = selectProductos.value;
+            // Encuentra el producto seleccionado en la lista
+            var producto = data.find(p => p.id_producto == productoId);
+
+            if (producto) {
+                // Rellena los campos con los datos del producto seleccionado
+                codProducto.value = producto.id_producto;
+                nombreProducto.value = producto.nombre;
+                precioUnitario.value = producto.precio_unitario;
+            }
+        });
+
+    </script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Obtén una referencia al elemento de entrada de tipo date
+            var inputFecha = document.getElementById('fecha');
+
+            // Obtiene la fecha actual en el formato requerido por el campo de entrada
+            var fechaActual = new Date().toISOString().split('T')[0];
+
+            // Asigna la fecha actual al campo de entrada
+            inputFecha.value = fechaActual;
+        });
+    </script>
+
+</body>
+
+</html>

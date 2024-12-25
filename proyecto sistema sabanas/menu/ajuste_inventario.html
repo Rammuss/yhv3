@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+
+    <title>Ajuste de Inventario</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .form-container {
+            max-width: 600px;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .form-container h1 {
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .form-group button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .form-group button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="navbar-container"></div>
+
+
+<div class="form-container">
+    <h1>Registrar Ajuste de Inventario</h1>
+    <form action="ajuste_inventario.php" method="post">
+        <div class="form-group">
+            <label for="id_producto">ID del Producto:</label>
+            <input type="number" id="id_producto" name="id_producto" required>
+        </div>
+        <div class="form-group">
+            <label for="cantidad_ajustada">Cantidad Ajustada:</label>
+            <input type="number" id="cantidad_ajustada" name="cantidad_ajustada" step="0.01" required>
+        </div>
+        <div class="form-group">
+            <label for="fecha_ajuste">Fecha del Ajuste:</label>
+            <input type="date" id="fecha_ajuste" name="fecha_ajuste" required>
+        </div>
+        <div class="form-group">
+            <label for="motivo_ajuste">Motivo del Ajuste:</label>
+            <textarea id="motivo_ajuste" name="motivo_ajuste" rows="4"></textarea>
+        </div>
+        <div class="form-group">
+            <button type="submit">Registrar Ajuste</button>
+        </div>
+    </form>
+
+     <!-- Tabla de Inventario -->
+     <div class="inventario">
+        <h1>Inventario</h1>
+        <table id="tabla-inventario">
+            <thead>
+                <tr>
+                    <th>ID Producto</th>
+                    <th>Cantidad</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Los datos se llenarán aquí mediante JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Realizar una solicitud para obtener los datos del inventario
+        fetch('consultar_inventario.php')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#tabla-inventario tbody');
+                data.forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${item.id_producto}</td>
+                        <td>${item.cantidad}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(error => console.error('Error al cargar el inventario:', error));
+    });
+</script>
+
+<script>
+    // Función para obtener la fecha actual en formato 'YYYY-MM-DD'
+    function getCurrentDate() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    // Asignar la fecha actual al campo de fecha
+    document.getElementById('fecha_ajuste').value = getCurrentDate();
+</script>
+
+
+</body>
+</html>

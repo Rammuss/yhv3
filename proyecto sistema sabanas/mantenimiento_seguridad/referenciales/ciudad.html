@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <title>Registro de Países</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        h1 {
+            color: #333;
+        }
+
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+
+        button {
+            background-color: #007BFF;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Estilos para la tabla */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #ccc;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        /* Estilos para las celdas de encabezado */
+        th {
+            background-color: #0c49aa;
+            color: #fff;
+        }
+
+        /* Estilos para filas pares/impares */
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        /* Estilos para las celdas de acción (botones) */
+        td button {
+            background-color: #0c49aa;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Registro de Ciudadades</h1>
+    <form id="pais-form" action="procesar_ciudad.php" method="post">
+        <label for="id">Id Ciudad:</label>
+        <input type="text" id="id" name="id" required>
+
+        <label for="nombre">Nombre de la Ciudad:</label>
+        <input type="text" id="nombre" name="nombre" required>
+
+        <button type="submit" name="action" value="insert">Registrar</button>
+        <button type="submit" name="action" value="update">Actualizar</button>
+        <button type="submit" name="action" value="delete">Eliminar</button>
+
+        
+    </form>
+     <!--Para mostrar si funciono o fue error el registro-->
+     <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var params = new URLSearchParams(window.location.search);
+            var respuesta = params.get("respuesta");
+
+            if (respuesta === "true") {
+                alert("Movimiento exitoso");
+            } else if (respuesta === "false") {
+                alert("Error en el registro");
+            }
+        });
+    </script>
+    <!--Tabla y script para mostrar los registros de ciudades-->
+    <table id="ciudad-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+               
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        fetch('tabla_ciudad.php')
+            .then(response => response.json())
+            .then(data => {
+                const table = document.getElementById('ciudad-table').getElementsByTagName('tbody')[0];
+
+                data.forEach(row => {
+                    const newRow = table.insertRow(table.rows.length);
+                    newRow.insertCell(0).textContent = row.id_ciudad;
+                    newRow.insertCell(1).textContent = row.nombre;
+                    
+                    
+                });
+            })
+            .catch(error => {
+                console.error('Error al cargar los datos:', error);
+            });
+    </script>
+</body>
+
+</html>

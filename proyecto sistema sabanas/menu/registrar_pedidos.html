@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Formulario de Registro de Pedido</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="popup.css">
+    <script src="popup.js"></script>
+    <script src="navbar.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background: #f4f4f4;
+        }
+
+        form {
+            max-width: 600px;
+            margin: auto;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .submit-btn,
+        .btn-salir {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .submit-btn:hover,
+        .btn-salir:hover {
+            background-color: #45a049;
+        }
+
+        .btn-salir {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #3149c2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .btn-salir:hover {
+            background-color: #1e2e70;
+        }
+
+        /*modal*/
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0, 0, 0);
+            background-color: rgba(0, 0, 0, 0.4);
+            padding-top: 60px;
+        }
+
+        .modal-content {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .a_atras {
+            display: flex;
+        }
+
+        /* Estilos para el contenedor general */
+        .contenedor {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+
+        /* Estilos para el enlace <a> */
+        .contenedor a {
+            text-decoration: none;
+            color: #007bff;
+            /* Color azul de los enlaces por defecto */
+        }
+
+        /* Estilos para el título <h2> */
+        .contenedor h2 {
+            margin-top: 10px;
+            /* Margen superior pequeño para separarlo del enlace */
+            font-size: 24px;
+            color: #333;
+            /* Color de texto oscuro */
+        }
+    </style>
+    <script>
+        // Función para mostrar alerta cuando se carga la página
+        function mostrarAlertaRegistroExitoso() {
+            // Verificar si hay un parámetro 'registro' en la URL con valor 'exitoso'
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('registro') && urlParams.get('registro') === 'exitoso') {
+                // Mostrar alerta
+                alert('Registro exitoso');
+            }
+        }
+
+        // Llamar a la función al cargar la página
+        window.onload = mostrarAlertaRegistroExitoso;
+    </script>
+</head>
+
+  
+<body>
+
+    <div id="navbar-container"></div>
+
+    <div id="popup" class="popup">
+        <div class="popup-content">
+            <span id="popup-message"></span>
+            <button id="popup-close">Cerrar</button>
+        </div>
+    </div>
+    
+    <div id="na"></div>
+
+    <form form action="procesar_pedido_interno.php" id="form_pedido_interno" method="post">
+
+        <h2>Pedido Interno</h2>
+        <label for="numeroPedido">Número de Pedido:</label>
+        <input type="text" id="numeroPedido" name="numeroPedido" readonly required>
+
+        <label for="departamento">Departamento Solicitante:</label>
+        <input type="text" id="departamento" name="departameto" required>
+
+        <label for="telefono">Teléfono:</label>
+        <input type="tel" id="telefono" name="telefono" required>
+
+        <label for="email">Correo Electrónico:</label>
+        <input type="email" id="email" name="email" required>
+
+        <label for="fechaPedido">Fecha del Pedido:</label>
+        <input type="date" id="fechaPedido" name="fechaPedido" required>
+
+        <label for="fechaEntrega">Fecha de Entrega Solicitada:</label>
+        <input type="date" id="fechaEntrega" name="fechaEntrega" required>
+
+
+
+        <h3>Detalles de Productos</h3>
+        <button type="button" class="btnAgregarProducto" id="btnAgregarProducto">Agregar Producto</button>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Id Producto</th>
+                    <th>Nombre</th>
+                    <th>Cantidad</th>
+                </tr>
+            </thead>
+            <tbody id="productos">
+
+            </tbody>
+        </table>
+
+
+
+
+        <button type="submit" class="submit-btn">Registrar Pedido</button>
+        <button type="button" onclick="salir_tabla_pedido_interno()" class="btn-salir">Salir</button>
+    </form>
+
+    <!-- Modal para seleccionar productos -->
+    <div id="modalProductos" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Seleccionar Producto</h2>
+            <table id="tablaSeleccionarProducto">
+                <thead>
+                    <tr>
+                        <th>ID Producto</th>
+                        <th>Nombre</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Aquí se cargará la lista de productos desde la base de datos -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <script src="funciones_v2.js"></script>
+
+
+</body>
+
+</html>

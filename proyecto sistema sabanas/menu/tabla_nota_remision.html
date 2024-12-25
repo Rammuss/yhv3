@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <title>Notas de Remisión</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .filter-bar {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pagination {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* boton de agregar */
+        .button {
+            position: relative;
+            width: 150px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border: 1px solid #34974d;
+            background-color: #3aa856;
+        }
+
+        .button,
+        .button__icon,
+        .button__text {
+            transition: all 0.3s;
+        }
+
+        .button .button__text {
+            transform: translateX(0px);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .button .button__icon {
+            position: absolute;
+            transform: translateX(109px);
+            height: 100%;
+            width: 39px;
+            background-color: #34974d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button .svg {
+            width: 30px;
+            stroke: #fff;
+            text-decoration: none
+        }
+
+        .button:hover {
+            background: #34974d;
+        }
+
+        .button:hover .button__text {
+            color: transparent;
+            text-decoration: none;
+
+        }
+
+        .button:hover .button__icon {
+            width: 148px;
+            transform: translateX(0);
+        }
+
+        .button:active .button__icon {
+            background-color: #2e8644;
+        }
+
+        .button:active {
+            border: 1px solid #2e8644;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .button {
+            text-decoration: none;
+            /* Elimina el subrayado del enlace */
+            color: inherit;
+            /* Mantiene el color del texto */
+            display: inline-flex;
+            /* Alinea los elementos internos */
+            align-items: center;
+            /* Centra los elementos verticalmente */
+            padding: 10px 20px;
+            /* Agrega relleno al botón */
+            background-color: #207c36;
+            /* Color de fondo del botón */
+            border-radius: 4px;
+            /* Bordes redondeados */
+            border: none;
+            /* Sin borde */
+            cursor: pointer;
+            /* Cambia el cursor al pasar sobre el botón */
+            transition: background-color 0.3s;
+            /* Transición suave para el cambio de color */
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <div id="navbar-container"></div>
+
+
+    <h1>Notas de Remisión</h1>
+
+    <div class="filter-bar">
+        <input type="text" id="search" placeholder="Buscar pedidos...">
+        <a href="registrar_nota_remision.html" class="button" role="button">
+            <span class="button__text">Nota Remision</span>
+            <span class="button__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" viewBox="0 0 24 24" stroke-width="2"
+                    stroke-linejoin="round" stroke-linecap="round" stroke="currentColor" height="24" fill="none"
+                    class="svg">
+                    <line y2="19" y1="5" x2="12" x1="12"></line>
+                    <line y2="12" y1="12" x2="19" x1="5"></line>
+                </svg>
+            </span>
+        </a>
+
+        <select id="filter-status">
+            <option value="">Todos los estados</option>
+            <option value="Activo">Activo</option>
+            <option value="Anulado">Anulado</option>
+        </select>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID Nota Remisión</th>
+                <th>Número de Remisión</th>
+                <th>Fecha de Remisión</th>
+                <th>ID Proveedor</th>
+                <th>ID Compra</th>
+                <th>Estado</th>
+                <th>Accion</th>
+            </tr>
+        </thead>
+        <tbody id="tabla-notas-remision">
+            <!-- Los datos de las notas de remisión se cargarán aquí -->
+        </tbody>
+    </table>
+
+    <script>
+        function cargarNotasRemision() {
+            fetch('obtener_nota_remision.php')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.getElementById('tabla-notas-remision');
+                    tableBody.innerHTML = ''; // Limpiar tabla
+
+                    data.forEach(nota => {
+                        const row = document.createElement('tr');
+
+                        row.innerHTML = `
+                            <td>${nota.id_nota_remision}</td>
+                            <td>${nota.numero_remision}</td>
+                            <td>${nota.fecha_remision}</td>
+                            <td>${nota.id_proveedor}</td>
+                            <td>${nota.id_compra}</td>
+                            <td>${nota.estado}</td>
+                            <td><button onclick="anularNotaRemision(${nota.id_nota_remision})">Anular</button></td>
+                        `;
+
+                        tableBody.appendChild(row);
+                    });
+                })
+                .catch(error => console.error('Error al cargar las notas de remisión:', error));
+        }
+
+        window.onload = cargarNotasRemision;
+    </script>
+
+    <script>
+
+        function anularNotaRemision(idNotaRemision) {
+            if (confirm('¿Estás seguro de que deseas anular esta nota de remisión?')) {
+                fetch('anular_nota_remision.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `id_nota_remision=${idNotaRemision}`
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Nota de remisión anulada exitosamente.');
+                            cargarNotasRemision(); // Recargar la tabla para reflejar el cambio
+                        } else {
+                            alert('Error al anular la nota de remisión: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Ocurrió un error al intentar anular la nota de remisión.');
+                    });
+            }
+        }
+
+    </script>
+
+    <script>
+//para ESTADO
+        document.getElementById('filter-status').addEventListener('change', function () {
+            const selectedStatus = this.value;
+            const rows = document.querySelectorAll('tbody tr');
+            rows.forEach(row => {
+                const statusCell = row.cells[5].textContent; // Índice 5 corresponde a la columna de estado
+
+                if (selectedStatus === '' || statusCell === selectedStatus) {
+                    row.style.display = ''; // Mostrar fila
+                } else {
+                    row.style.display = 'none'; // Ocultar fila
+                }
+            });
+        });
+
+    </script>
+</body>
+
+</html>

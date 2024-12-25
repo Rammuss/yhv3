@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Compra</title>
+    <style>
+        /* Estilos generales */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #0e0438;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        header {
+            background-color: #240a98;
+            color: #fff;
+            text-align: center;
+            padding: 20px;
+        }
+
+        nav {
+            background-color: #0c49aa;
+            color: #fff;
+            text-align: center;
+        }
+
+        nav ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        nav li {
+            display: inline;
+            margin: 10px;
+        }
+
+        nav a {
+            text-decoration: none;
+            color: #fff;
+        }
+
+        /* Estilos de los botones */
+        nav a:hover {
+            text-decoration: underline;
+        }
+
+        #cerrar-sesion-button,#volver-al-menu {
+            background-color: #092e55;
+            color: #eff1f4;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        /* Estilos para el segundo menú */
+        .second-nav {
+            background-color: #0c49aa;
+            text-align: center;
+        }
+
+        .second-nav ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        .second-nav li {
+            display: inline;
+            margin: 10px;
+        }
+
+        .second-nav a {
+            text-decoration: none;
+            color: #fff;
+        }
+
+        /* Estilos de los botones del segundo menú */
+        .second-nav a:hover {
+            text-decoration: underline;
+        }
+
+
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Sistema Compra</h1>
+    </header>
+    <!-- Primer menú de navegación -->
+    <nav>
+        <ul>
+            <li><a href="tabla_pedidos.html">Pedidos Internos</a></li>
+            <li><a href="orden_compra.html">Registrar Orden de Compra</a></li>
+            <li><a href="registrar_compra.html">Registrar Compras</a></li>
+            <li><a href="notas.html">Registrar Nota de Débito y Crédito</a></li>
+            <button id="cerrar-sesion-button">Cerrar Sesión</button>
+            <button id="volver-al-menu">Volver atrás</button>
+            <script>
+                document.getElementById("volver-al-menu").addEventListener("click", function () {
+                    window.location.href = "compra.html";
+                });
+            </script>
+        </ul>
+    </nav>
+
+    <script>
+        document.getElementById("cerrar-sesion-button").addEventListener("click", function () {
+            // Agrega aquí la lógica para cerrar la sesión
+        });
+    </script>
+
+</body>
+
+</html>

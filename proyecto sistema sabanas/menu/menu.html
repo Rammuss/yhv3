@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Menú Principal</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+
+        #container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #0e0438;
+        }
+
+        h2 {
+            color: #eff1f4;
+        }
+
+        ul.menu {
+            list-style: none;
+            padding: 0;
+            text-align: center;
+        }
+
+        ul.menu li {
+            display: inline;
+            margin-right: 20px;
+        }
+
+        ul.menu li a {
+            text-decoration: none;
+            color: #eff1f4;
+            font-weight: bold;
+        }
+
+        ul.menu li a:hover {
+            color: #0056b3;
+        }
+
+        #cerrar-sesion-button {
+            background-color: #0056b3;
+            color: #eff1f4;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h2>Menú Principal</h2>
+        <ul class="menu">
+            <li><a href="compra.html">Compra</a></li>
+            <li><a href="../venta/venta.html">Venta</a></li>
+            <li><a href="../tesoreria/menu_tesoreria.html">Tesorería</a></li>
+        </ul>
+        <button id="cerrar-sesion-button">Cerrar Sesión</button>
+    </div>
+</body>
+</html>

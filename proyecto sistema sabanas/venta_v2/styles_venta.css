@@ -1,0 +1,191 @@
+/* Estilos básicos para la barra de navegación */
+/* <div id="navbar-container"></div> */
+
+@import url('https://fonts.cdnfonts.com/css/minecraft-3');
+
+body {
+  background-color: #f4f4f4;
+  /* Fondo oscuro para contrastar con la nav bar */
+  padding: 20px;
+}
+
+.navbar {
+  font-family: 'Minecraft', sans-serif;
+  background-color: #D2691E;
+  border-bottom: 4px solid #A0522D;
+  /* Naranja oscuro para el borde inferior */
+  padding: 0 20px;
+  display: flex;
+}
+
+.navbar ul {
+  justify-content: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.navbar li {
+  position: relative;
+}
+
+.navbar a {
+  display: flex;
+  padding: 15px;
+  color: #fff;
+  text-decoration: none;
+  transition: background-color 0.3s ease, transform 0.1s ease;
+  border: 2px solid #A0522D;
+  border-radius: 3px;
+  margin: 0 5px;
+}
+
+.navbar a:hover {
+  background-color: #A0522D;
+  transform: scale(1.05);
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: #D2691E;
+  border: 2px solid #A0522D;
+  z-index: 1;
+}
+
+.dropdown-content a {
+  color: #fff;
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+  border-bottom: 1px solid #A0522D;
+}
+
+.dropdown-content a:hover {
+  background-color: #A0522D;
+}
+
+.dropdown:hover .dropdown-content {
+  display: block;
+}
+
+.navbar ul li a.cerrar-sesion {
+  color: rgb(23, 6, 6);
+  /* Cambia el color del texto */
+  font-weight: bold;
+  /* Haz el texto más grueso */
+}
+
+.navbar img {
+  max-width: 50%;
+  /* La imagen no excederá el ancho del li */
+  max-height: 50%;
+  /* La imagen no excederá la altura del li */
+  object-fit: cover;
+}
+
+.perfil_contenedor {
+  display: flex;
+  align-items: center;
+  max-width: 250px; /* Limita el ancho máximo del contenedor */
+}
+
+#imagen-perfil {
+  margin-left: 0%;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#nombre-usuario {
+  font-size: 16px;
+  color: white;
+}
+
+/* Estilo para p_perfil */
+.p_perfil {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Estilo para p2_perfil */
+.p2_perfil {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: auto; /* Permitir que el contenido determine el ancho */
+  height: auto; /* Permitir que el contenido determine la altura */
+  padding: 0 10px; /* Añadir un poco de padding para que no se vea demasiado ajustado */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Media queries para pantallas pequeñas */
+@media (max-width: 768px) {
+  .navbar {
+    flex-direction: column;
+    padding: 10px;
+  }
+
+  .navbar ul {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .navbar li {
+    margin-bottom: 10px;
+  }
+
+  .navbar a {
+    width: 100%; /* Asegura que los enlaces ocupen el ancho completo */
+    text-align: center; /* Centra el texto */
+    padding: 10px;
+    font-size: 14px; /* Reduce el tamaño del texto */
+  }
+
+  .perfil_contenedor {
+    flex-direction: column;
+    align-items: center;
+    max-width: 100%; /* Ajusta el ancho para móviles */
+  }
+
+  .p_perfil {
+    width: 40px; /* Tamaño reducido para imagen de perfil */
+    height: 40px;
+  }
+
+  #nombre-usuario {
+    font-size: 14px;
+    margin-top: 5px;
+    text-align: center;
+  }
+}
+
+/* Media query para pantallas muy pequeñas (por debajo de 480px) */
+@media (max-width: 480px) {
+  .navbar a {
+    font-size: 12px; /* Texto más pequeño */
+    padding: 8px;
+  }
+
+  .p_perfil {
+    width: 35px;
+    height: 35px;
+  }
+
+  #nombre-usuario {
+    font-size: 12px;
+  }
+}
+
+.img_perfil {
+  border-radius: 50%; /* Esto hace que la imagen sea circular */
+  object-fit: cover;
+}

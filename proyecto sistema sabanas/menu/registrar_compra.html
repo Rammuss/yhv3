@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>COMPARAR PRESUPUESTOS</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-T3c6CoIi6uLrA9TneNEoa7RxnatzjcDSCmG1MXxSR1GAsXEV/Dwwykc2MPK8M2HN" crossorigin="anonymous">
+    
+    <style></style>
+</head>
+  <body>
+    
+
+    <div class="container-fluid p-3">
+        <div class="bg-primary p-2 mb-5">
+            <h1 class="text-white text-center">Registrar Compras</h1>
+        </div>
+
+        <div class="container">
+            <form action="registrar_compra.php">
+                <label for="orden_compra" class="form-label" >N° de Orden de Compra</label>
+                <input type="number" class="form-control" name="id_oc" id="OC" placeholder="N° de Orden de Compra">
+
+                <div id="items">
+
+                </div>
+                
+                <a href="###">Lista de Ordenes de Compra</a>
+                
+                <hr class="my-3">
+                
+                <label for="orden_compra" class="form-label">N° de Factura</label>
+                <input type="number" class="form-control" placeholder="N° de Factura">
+                
+                
+                <hr class="my-3">
+                
+                <label for="orden_compra" class="form-label">Fecha de recepcion</label>
+                <input type="date" class="form-control" placeholder="Fecha de recepcion">
+                
+                <hr class="my-3">
+
+                <button type="submit" class="btn btn-primary">Registrar</button>
+
+                
+
+
+            </form>
+        </div>
+        
+    </div>
+    
+    <script>
+
+        // const array= [{producto: 'sabana', cantidad: 2}, {producto: 'toalla', cantidad: 4}]; 
+
+        
+
+        const OC_input = document.querySelector('#OC');
+        let array=[];
+
+        OC_input.addEventListener('change', () => {
+
+
+            const body = {id_oc: OC_input.value};
+
+            fetch('select_oc_detalle.php', {
+                method: "POST",
+                body: JSON.stringify(body)
+            })
+                .then(response => response.json())
+                .then(data => {
+                    
+                    array=data;
+                    console.log(array)
+                    
+                    const div = document.querySelector('#items');
+                    div.innerHTML='';
+                    const table = document.createElement('table');
+                    table.classList.add('table');
+        
+                    let html = '';
+        
+                    array.forEach((item)=>{
+        
+                        console.log(item)
+                        html = html.concat(`
+                        <tr>
+                            <td>${item.nombre}</td>
+                            <td>${item.cantidad}</td>
+        
+                        </tr>
+                        `)
+                        
+                    })
+        
+                    html = `
+                    <thead>
+                            <tr>
+                                <th>Producto</th>
+                                <th>Cantidad</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${html}
+                        </tbody>
+                    `;
+        
+                    console.log(html)
+        
+                    div.appendChild(table)
+        
+                    table.innerHTML = html;
+                    })
+                .catch(error => {
+                    console.error('Error al cargar los datos:', error);
+                });
+
+        })
+
+
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-C6RzsynM9kWDrMNeT87bh95OGNyZPhcTNXj1NW7RuBCsyN/o0jlpcV8Qyq46cDfL" crossorigin="anonymous"></script>
+  </body>
+</html>

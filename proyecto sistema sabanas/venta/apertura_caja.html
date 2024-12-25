@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Apertura de Caja</title>
+    <style>
+        /* Estilos CSS como se mencionan en la respuesta anterior */
+        body {
+            font-family: Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        label {
+            font-weight: bold;
+            padding: 20px;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            padding: 5px;
+            margin-bottom: 10px;
+        }
+
+        input[type="submit"] {
+            background-color: #007bff;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+    </style>
+
+</head>
+
+<body>
+    <div class="container">
+        <h1>Apertura de Caja</h1>
+        <form action="procesar_apertura_cierre.php" method="post">
+
+            <label for="numero_caja">Número de Caja:</label>
+            <select name="numero_caja" id="numero_caja" required>
+                <option value="1">Caja 1</option>
+                <option value="2">Caja 2</option>
+                <option value="3">Caja 3</option>
+                <!-- Agrega más opciones según sea necesario -->
+            </select>
+            <br>
+            <label for="nombre_usuario">Nombre de Usuario:</label>
+            <input type="text" name="nombre_usuario" id="nombre_usuario" required>
+            <br>
+            <label for="fecha_apertura">Fecha de Apertura:</label>
+            <input type="date" name="fecha_apertura" id="fecha_apertura" readonly>
+            <br>
+
+            <label for="hora_apertura">Hora de Apertura:</label>
+            <input type="time" name="hora_apertura" id="hora_apertura" readonly>
+            <br>
+
+            <div class="monto_inicial"><label for="monto_inicial">Monto Inicial en Efectivo:</label>
+                <input style="width: auto;" type="number" step="0.01" name="monto_inicial" id="monto_inicial" required>
+            </div>
+            
+
+
+
+            <input type="submit" value="Abrir">
+        </form>
+    </div>
+
+    <script>
+        // Obtén la fecha y hora actuales
+        const fechaActual = new Date();
+
+        // Formatea la fecha y hora en un formato adecuado para los campos de entrada
+        const fechaFormatted = fechaActual.toISOString().slice(0, 10); // Formato YYYY-MM-DD
+        const horaFormatted = fechaActual.toTimeString().slice(0, 8); // Formato HH:MM:SS
+
+        // Asigna los valores a los campos de entrada
+        document.getElementById('fecha_apertura').value = fechaFormatted;
+        document.getElementById('hora_apertura').value = horaFormatted;
+    </script>
+</body>
+
+</html>

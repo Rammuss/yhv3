@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tabla de Atributos</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Enlace a tu archivo CSS -->
+    <script src="navbar.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .filter-bar {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pagination {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* boton de agregar */
+        .button {
+            position: relative;
+            width: 150px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border: 1px solid #34974d;
+            background-color: #3aa856;
+        }
+
+        .button,
+        .button__icon,
+        .button__text {
+            transition: all 0.3s;
+        }
+
+        .button .button__text {
+            transform: translateX(0px);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .button .button__icon {
+            position: absolute;
+            transform: translateX(109px);
+            height: 100%;
+            width: 39px;
+            background-color: #34974d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button .svg {
+            width: 30px;
+            stroke: #fff;
+            text-decoration: none
+        }
+
+        .button:hover {
+            background: #34974d;
+        }
+
+        .button:hover .button__text {
+            color: transparent;
+            text-decoration: none;
+
+        }
+
+        .button:hover .button__icon {
+            width: 148px;
+            transform: translateX(0);
+        }
+
+        .button:active .button__icon {
+            background-color: #2e8644;
+        }
+
+        .button:active {
+            border: 1px solid #2e8644;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .button {
+            text-decoration: none;
+            /* Elimina el subrayado del enlace */
+            color: inherit;
+            /* Mantiene el color del texto */
+            display: inline-flex;
+            /* Alinea los elementos internos */
+            align-items: center;
+            /* Centra los elementos verticalmente */
+            padding: 10px 20px;
+            /* Agrega relleno al botón */
+            background-color: #207c36;
+            /* Color de fondo del botón */
+            border-radius: 4px;
+            /* Bordes redondeados */
+            border: none;
+            /* Sin borde */
+            cursor: pointer;
+            /* Cambia el cursor al pasar sobre el botón */
+            transition: background-color 0.3s;
+            /* Transición suave para el cambio de color */
+        }
+
+        /*MODAL*/
+        /* Estilos para el modal */
+        #modal {
+            display: none;
+            /* Ocultar el modal por defecto */
+            position: fixed;
+            /* Posición fija para que siempre esté flotante */
+            z-index: 1;
+            /* Asegurarse de que el modal esté por encima de otros elementos */
+            left: 0;
+            top: 0;
+            width: 100%;
+            /* Ancho completo */
+            height: 100%;
+            /* Altura completa */
+            overflow: auto;
+            /* Habilitar scroll si es necesario */
+            background-color: rgb(0, 0, 0);
+            /* Color de fondo negro */
+            background-color: rgba(0, 0, 0, 0.4);
+            /* Fondo con opacidad */
+        }
+
+        /* Contenido del modal */
+        #modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            /* 15% desde la parte superior y centrado horizontalmente */
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            /* Ancho del contenido del modal */
+            max-width: 600px;
+            /* Ancho máximo del contenido del modal */
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            position: relative;
+            /* Para posicionar el botón de cerrar */
+        }
+
+        /* Botón de cierre */
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            position: absolute;
+            right: 10px;
+            top: 10px;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+
+
+    <div id="navbar-container"></div>
+
+    <!-- El modal -->
+    <div id="modal">
+        <div id="modal-content">
+            <!-- Contenido del modal será llenado dinámicamente -->
+            <span class="close" onclick="cerrarModal()">&times;</span>
+        </div>
+    </div>
+
+    <div>
+        <h1>Presupuesto de Proveedores</h1>
+        <div class="filter-bar">
+            <input type="text" id="search" placeholder="Buscar pedidos...">
+            <a href="registrar_presupuesto_proveedor.html" class="button" role="button">
+                <span class="button__text">Nuevo Presupuesto</span>
+                <span class="button__icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" viewBox="0 0 24 24" stroke-width="2"
+                        stroke-linejoin="round" stroke-linecap="round" stroke="currentColor" height="24" fill="none"
+                        class="svg">
+                        <line y2="19" y1="5" x2="12" x1="12"></line>
+                        <line y2="12" y1="12" x2="19" x1="5"></line>
+                    </svg>
+                </span>
+            </a>
+
+            <select id="filter-status">
+                <option value="">Todos los estados</option>
+                <option value="pendiente">Pendiente</option>
+                <option value="Aprobado">Aprobado</option>
+                <option value="Rechazado">Rechazado</option>
+            </select>
+        </div>
+
+        <div class="table-container">
+            <table id="atributos-table">
+                <thead>
+                    <tr>
+                        <th>ID Presupuesto</th>
+                        <th>Proveedor</th>
+                        <th>Fecha Registro</th>
+                        <th>Fecha Vencimiento</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body">
+
+                </tbody>
+            </table>
+        </div>
+        <script src="tabla_presupuestos.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <title>Registrar Nota de Remisión</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background: #f4f4f4;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        form {
+            max-width: 600px;
+            margin: auto;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .submit-btn,
+        .btn-salir {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .submit-btn:hover,
+        .btn-salir:hover {
+            background-color: #45a049;
+        }
+
+        .btn-salir {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #3149c2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .btn-salir:hover {
+            background-color: #1e2e70;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="navbar-container"></div>
+
+    <h1>Registrar Nota de Remisión</h1>
+    <form action="registrar_nota_remision.php" method="post">
+        <fieldset>
+            <legend>Información General</legend>
+            <label for="numero_remision">Número de Remisión:</label>
+            <input type="text" id="numero_remision" name="numero_remision" required>
+            <br>
+            <label for="fecha_remision">Fecha de Remisión:</label>
+            <input type="date" id="fecha_remision" name="fecha_remision" required>
+            <br>
+
+            <div>
+                <label for="id_proveedor">Proveedor:</label>
+                <select id="id_proveedor" name="id_proveedor" required>
+                    <option value="">Seleccione un proveedor</option>
+                    <!-- Opciones se llenarán dinámicamente -->
+                </select>
+            </div>
+
+            <br>
+            <label for="id_compra">ID Compra:</label>
+            <select id="id_compra" name="id_compra" required>
+                <option value="">Seleccione ID Compra</option>
+                <!-- Aquí debes llenar las opciones con los IDs de compra disponibles desde la base de datos -->
+            </select>
+            <br>
+            <label for="estado">Estado:</label>
+            <input type="text" id="estado" name="estado" value="Activo" readonly>
+        </fieldset>
+
+        <fieldset>
+            <legend>Detalles de la Nota de Remisión</legend>
+            <div id="detalles-container">
+                <table class="detalle-table" id="detalles-table">
+                    <thead>
+                        <tr>
+                            <th>ID Producto</th>
+                            <th>Nombre Producto</th>
+                            <th>Cantidad</th>
+                            <th>Precio Unitario</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Los detalles se agregarán aquí dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+            <input type="hidden" id="detalles_json" name="detalles_json">
+        </fieldset>
+
+        <button type="submit">Registrar Nota de Remisión</button>
+    </form>
+
+    <script>
+        //select para el id compra
+        function cargarIdCompra() {
+            fetch('obtener_ids_compras.php')
+                .then(response => response.json())
+                .then(data => {
+                    const selectCompra = document.getElementById('id_compra');
+                    selectCompra.innerHTML = '<option value="">Seleccione ID Compra</option>'; // Limpiar opciones anteriores
+                    data.ids_compra.forEach(id => {
+                        const option = document.createElement('option');
+                        option.value = id;
+                        option.textContent = id;
+                        selectCompra.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error al cargar IDs de compra:', error));
+        }
+
+        // Llamar a la función para cargar los IDs de compra al cargar la página
+        document.addEventListener('DOMContentLoaded', cargarIdCompra);
+    </script>
+
+
+    <script>
+        // Función para cargar proveedores en el select
+        function cargarProveedores() {
+            fetch('select_proveedor_en_oc.php')
+                .then(response => response.json())
+                .then(data => {
+
+                    let proveedorSelect = document.getElementById('id_proveedor');
+                    proveedorSelect.innerHTML = '<option value="">Seleccione un proveedor</option>';
+                    data.forEach(proveedor => {
+                        let option = document.createElement('option');
+                        option.value = proveedor.id_proveedor;
+                        option.textContent = proveedor.nombre;
+                        proveedorSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error al cargar proveedores:', error));
+        }
+
+
+        // Cargar proveedores al cargar la página
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("hola"); // Mensaje de depuración
+            cargarProveedores(); // Llamar a la función para cargar proveedores
+        })
+    </script>
+
+    <script>
+        function cargarDetallesCompra(idCompra) {
+            if (idCompra) {
+                fetch(`obtener_detalles_compra.php?id_compra=${idCompra}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const detallesTable = document.getElementById('detalles-table').getElementsByTagName('tbody')[0];
+                        detallesTable.innerHTML = ''; // Limpiar detalles existentes
+
+                        let detallesJson = [];
+
+                        data.detalles.forEach((detalle, index) => {
+                            // Añadir fila a la tabla
+                            const row = detallesTable.insertRow();
+                            row.insertCell().innerHTML = `<input type="hidden" name="detalles[${index}][id_producto]" value="${detalle.id_producto}">${detalle.id_producto}`;
+                            row.insertCell().innerHTML = `<input type="hidden" name="detalles[${index}][nombre_producto]" value="${detalle.descripcion}">${detalle.descripcion}`;
+                            row.insertCell().innerHTML = `<input type="hidden" name="detalles[${index}][cantidad]" value="${detalle.cantidad}">${detalle.cantidad}`;
+                            row.insertCell().innerHTML = `<input type="hidden" name="detalles[${index}][precio_unitario]" value="${detalle.precio_unitario}">${detalle.precio_unitario}`;
+
+                            // Añadir al JSON
+                            detallesJson.push({
+                                id_producto: detalle.id_producto,
+                                nombre_producto: detalle.descripcion,
+                                cantidad: detalle.cantidad,
+                                precio_unitario: detalle.precio_unitario
+                            });
+                        });
+
+                        // Convertir detalles a JSON para enviar al servidor
+                        document.getElementById('detalles_json').value = JSON.stringify(detallesJson);
+                    })
+                    .catch(error => console.error('Error al obtener detalles:', error));
+            } else {
+                document.getElementById('detalles-table').getElementsByTagName('tbody')[0].innerHTML = ''; // Limpiar detalles si no hay ID de compra seleccionado
+                document.getElementById('detalles_json').value = ''; // Limpiar JSON si no hay detalles
+            }
+        }
+
+        // Agregar evento al seleccionar un ID de compra
+        document.getElementById('id_compra').addEventListener('change', function () {
+            cargarDetallesCompra(this.value);
+        });
+    </script>
+
+</body>
+
+</html>

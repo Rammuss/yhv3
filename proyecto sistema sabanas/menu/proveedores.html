@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <title>Registro de Proveedores</title>
+    <style>
+        /* Estilos generales */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+
+        }
+
+        h2 {
+            color: #333;
+        }
+
+        form {
+            margin-top: 20px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            margin-bottom: 10px;
+            border: 1px solid #ccc;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #0c49aa;
+            color: #fff;
+            border: 1px solid black;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 15px;
+        }
+
+        button:hover {
+            background-color: #003366;
+        }
+
+        /* Estilos para la tabla */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #ccc;
+        }
+
+        th,
+        td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        /* Estilos para las celdas de encabezado */
+        th {
+            background-color: #0c49aa;
+            color: #fff;
+        }
+
+        /* Estilos para filas pares/impares */
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        /* Estilos para las celdas de acción (botones) */
+        td button {
+            background-color: #0c49aa;
+            color: #fff;
+            border: none;
+            padding: 5px 10px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-right: 5px;
+        }
+
+        td button:hover {
+            background-color: #003366;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="navbar-container"></div>
+
+    <div class="container">
+
+        
+
+        <h2>Registro de Proveedor</h2>
+        <button id="volver-al-menu">Volver atrás</button>
+        <script>
+            document.getElementById("volver-al-menu").addEventListener("click", function () {
+                window.location.href = "compra.html";
+            });
+        </script>
+        <form id="proveedor-form" action="procesar_registro_proveedor.php" method="post">
+
+            <label for="nombre">ID:</label>
+            <input type="text" id="id" name="id" required>
+
+            <label for="nombre">Nombre del Proveedor:</label>
+            <input type="text" id="nombre" name="nombre" required>
+
+            <label for="direccion">Dirección:</label>
+            <input type="text" id="direccion" name="direccion" required>
+
+            <label for="telefono">Teléfono:</label>
+            <input type="text" id="telefono" name="telefono" required>
+
+            <label for="email">Correo Electrónico:</label>
+            <input type="text" id="email" name="email" required>
+
+            <label for="ruc">Ruc:</label>
+            <input type="text" id="ruc" name="ruc" required>
+
+            <label for="ciudad">Ciudad:</label>
+            <select id="ciudad" name="id_ciudad" required>
+                <option value="1">Asuncion</option>
+                <option value="2">Villa Elisa</option>
+                <option value="3">Lambare</option>
+            </select><br><br>
+
+
+            <label for="pais">País:</label>
+        <select id="pais" name="id_pais" required>
+            <option value="1">Paraguay</option>
+            <option value="2">Brasil</option>
+            <option value="3">Argentina</option>
+            <option value="4">Bolivia</option>
+
+        </select><br><br>
+
+            <button type="submit" name="action" value="insert">Registrar Proveedor</button>
+            <button type="submit" name="action" value="update">Actualizar Proveedor</button>
+            <button type="submit" name="action" value="delete">Eliminar Proveedor</button>
+            <button style="background-color: #333;"="button" id="limpiar-campos">Limpiar Campos</button>
+        </form>
+
+    </div>
+    <!--Para mostrar si funciono o fue error el registro-->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var params = new URLSearchParams(window.location.search);
+            var respuesta = params.get("respuesta");
+
+            if (respuesta === "true") {
+                alert("Movimiento exitoso");
+            } else if (respuesta === "false") {
+                alert("Error en el registro");
+            }
+        });
+    </script>
+    <!--Tabla y script para mostrar los registros de poveedores-->
+    <table id="proveedores-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Dirección</th>
+                <th>Teléfono</th>
+                <th>Correo Electrónico</th>
+                <th>RUC</th>
+                <th>Ciudad</th>
+                <th>País</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        fetch('tabla_proveedores.php')
+            .then(response => response.json())
+            .then(data => {
+                const table = document.getElementById('proveedores-table').getElementsByTagName('tbody')[0];
+
+                data.forEach(row => {
+                    const newRow = table.insertRow(table.rows.length);
+                    newRow.insertCell(0).textContent = row.id_proveedor;
+                    newRow.insertCell(1).textContent = row.nombre;
+                    newRow.insertCell(2).textContent = row.direccion;
+                    newRow.insertCell(3).textContent = row.telefono;
+                    newRow.insertCell(4).textContent = row.email;
+                    newRow.insertCell(5).textContent = row.ruc;
+                    newRow.insertCell(6).textContent = row.ciudad;
+                    newRow.insertCell(7).textContent = row.pais;
+                });
+            })
+            .catch(error => {
+                console.error('Error al cargar los datos:', error);
+            });
+    </script>
+
+    <!--para que se rellene mi form de acuerdo al id -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Obtenemos una referencia a la tabla
+            var table = document.getElementById("proveedores-table");
+
+            // Obtenemos una referencia al campo de ID
+            var idField = document.getElementById("id");
+
+            // Agregamos un evento de cambio al campo de ID
+            idField.addEventListener("input", function () {
+                var id = idField.value; // Obtenemos el valor del campo de ID
+
+                // Buscamos la fila en la tabla con el ID correspondiente
+                for (var i = 1; i < table.rows.length; i++) {
+                    var row = table.rows[i];
+                    var cell = row.cells[0]; // Suponemos que la primera celda contiene el ID
+
+                    if (cell.textContent === id) {
+                        // Rellenamos los campos del formulario con los valores de la fila encontrada
+                        document.getElementById("nombre").value = row.cells[1].textContent;
+                        document.getElementById("direccion").value = row.cells[2].textContent;
+                        document.getElementById("telefono").value = row.cells[3].textContent;
+                        document.getElementById("email").value = row.cells[4].textContent;
+                        document.getElementById("ruc").value = row.cells[5].textContent;
+                        document.getElementById("ciudad").value = row.cells[6].textContent;
+                        document.getElementById("pais").value = row.cells[7].textContent;
+                        break; // Salimos del bucle una vez que encontramos el ID
+                    }
+                }
+            });
+        });
+    </script>
+    <!--Para limpiar los campos de mi form-->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var formulario = document.getElementById("proveedor-form");
+            var limpiarCamposBoton = document.getElementById("limpiar-campos");
+
+            // Agrega un evento al botón "Limpiar" para limpiar los campos
+            limpiarCamposBoton.addEventListener("click", function () {
+                formulario.reset(); // Esto restablece todos los campos al valor inicial
+            });
+        });
+    </script>
+</body>
+
+</html>

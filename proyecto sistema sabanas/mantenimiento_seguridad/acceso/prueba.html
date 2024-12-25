@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Formulario de Registro de Pedidos de Compra</title>
+</head>
+<body>
+    <h1>Registrar Pedido de Compra</h1>
+    <form action="procesar_pedido.php" method="POST">
+        <label for="proveedor">Proveedor:</label>
+        <input type="text" id="proveedor" name="proveedor" required><br><br>
+
+        <label for="fecha_pedido">Fecha del Pedido:</label>
+        <input type="date" id="fecha_pedido" name="fecha_pedido" required><br><br>
+
+        <label for="numero_pedido">Número de Pedido:</label>
+        <input type="text" id="numero_pedido" name="numero_pedido" required><br><br>
+
+        <label for="descripcion">Descripción de Productos/Servicios:</label>
+        <textarea id="descripcion" name="descripcion" rows="4" required></textarea><br><br>
+
+        <label for="cantidad">Cantidad:</label>
+        <input type="number" id="cantidad" name="cantidad" required><br><br>
+
+        <label for="precio_unitario">Precio Unitario:</label>
+        <input type="number" id="precio_unitario" name="precio_unitario" required><br><br>
+
+        <label for="impuestos">Impuestos y Cargos:</label>
+        <input type="text" id="impuestos" name="impuestos"><br><br>
+
+        <label for="terminos_pago">Términos de Pago:</label>
+        <input type="text" id="terminos_pago" name="terminos_pago" required><br><br>
+
+        <label for="fecha_entrega">Fecha de Entrega Esperada:</label>
+        <input type="date" id="fecha_entrega" name="fecha_entrega" required><br><br>
+
+        <label for="condiciones_entrega">Condiciones de Entrega:</label>
+        <textarea id="condiciones_entrega" name="condiciones_entrega" rows="4" required></textarea><br><br>
+
+        <label for="notas">Notas Adicionales:</label>
+        <textarea id="notas" name="notas" rows="4"></textarea><br><br>
+
+        <input type="submit" value="Registrar Pedido">
+    </form>
+</body>
+</html>

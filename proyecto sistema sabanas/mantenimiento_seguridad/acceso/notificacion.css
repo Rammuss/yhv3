@@ -1,0 +1,18 @@
+#notificacion {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background-color: #4CAF50;
+    color: white;
+    padding: 15px;
+    border-radius: 5px;
+    opacity: 0; /* Oculto inicialmente */
+    transform: translateY(-20px); /* Comienza fuera del área visible */
+    transition: transform 0.3s ease-in-out, opacity 0.3s ease-in-out;
+  }
+  
+  #notificacion.mostrar {
+    opacity: 1; /* Hace visible la notificación */
+    transform: translateY(0); /* Lleva la notificación a su posición final */
+  }
+  

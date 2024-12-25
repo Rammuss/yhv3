@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Registro de Producto</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f2f2f2;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        form {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input[type="text"],
+        select {
+            width: 100%;
+            padding: 10px;
+            margin-top: 5px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        select {
+            height: 40px;
+        }
+
+        button {
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button[type="submit"] {
+            background-color: #28a745;
+        }
+
+        table {
+            margin-top: 20px;
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #ccc;
+        }
+
+        table th,
+        table td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        table th {
+            background-color: #007BFF;
+            color: #fff;
+        }
+
+        table tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+
+        #volver-al-menu {
+            background-color: #007BFF;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="navbar-container"></div>
+
+    <h2>Registro de Producto</h2>
+
+    <form action="procesar_producto.php" method="POST">
+        <label for="id_producto">ID del Producto:</label>
+        <input type="text" name="id_producto" id="id_producto" required><br><br>
+
+        <label for="nombre">Nombre del Producto:</label>
+        <input type="text" name="nombre" id="nombre" required><br><br>
+
+
+        <label for="medida">Medida:</label>
+        <select name="medida" id="medida" required>
+            <option value="queen">Queen</option>
+            <option value="king">King</option>
+            <option value="full;">Full</option>
+            <option value="twin">Twin</option>
+        </select><br><br>
+
+
+        <label for="tipo_iva">Tipo de IVA:</label>
+        <select name="tipo_iva" id="tipo_iva" required>
+            <option value="">Seleccione IVA</option>
+            <option value="10">10%</option>
+            <option value="5">5%</option>
+            <option value="0">Exento</option>
+        </select>
+        <br><br>
+
+
+
+        <label for="color">Color:</label>
+        <select name="color" id="color" required>
+            <option value="blanco">Blanco</option>
+            <option value="negro">Negro</option>
+            <option value="rojo">Rojo</option>
+            <option value="azul">Azul</option>
+            <option value="verde">Verde</option>
+            <option value="amarillo">Amarillo</option>
+            <option value="naranja">Naranja</option>
+            <option value="rosa">Rosa</option>
+            <option value="purpura">Púrpura</option>
+            <option value="gris">Gris</option>
+        </select><br><br>
+
+
+        <label for="material">Material:</label>
+        <select name="material" id="material" required>
+            <option value="algodon">Algodón</option>
+            <option value="seda">Seda</option>
+            <option value="poliester">Poliéster</option>
+            <option value="microfibra">Microfibra</option>
+            <option value="lino">Lino</option>
+            <option value="satén">Satén</option>
+            <option value="otro">Otro</option>
+        </select><br><br>
+
+
+        <label for="hilos">Hilos:</label>
+        <select name="hilos" id="hilos" required>
+            <option value="100">100 hilos</option>
+            <option value="200">200 hilos</option>
+            <option value="300">300 hilos</option>
+            <option value="400">400 hilos</option>
+            <option value="500">500 hilos</option>
+            <option value="600">600 hilos</option>
+            <option value="otro">Otro</option>
+        </select><br><br>
+
+
+        <label for="precio_unitario">Precio Unitario:</label>
+        <input type="text" name="precio_unitario" id="precio_unitario" required><br><br>
+
+        <label for="precio_compra">Precio de Compra:</label>
+        <input type="text" name="precio_compra" id="precio_compra" required><br><br>
+
+        <label for="categoria">Categoría:</label>
+        <select name="categoria" id="categoria" required>
+            <option value="sabanas">Sábanas</option>
+            <option value="edredones">Edredones</option>
+            <option value="funda-almohadas">Funda de Almohadas</option>
+            <option value="otros">Otros</option>
+        </select><br><br>
+
+        <button type="submit" name="action" value="insert">Registrar</button>
+        <button type="submit" name="action" value="update">Actualizar</button>
+        <button type="submit" name="action" value="delete">Eliminar</button>
+    </form>
+    <!--Para mostrar si funciono o fue error el registro-->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var params = new URLSearchParams(window.location.search);
+            var respuesta = params.get("respuesta");
+
+            if (respuesta === "true") {
+                alert("Movimiento exitoso");
+            } else if (respuesta === "false") {
+                alert("Error en el registro");
+            }
+        });
+    </script>
+    <!--Tabla y script para mostrar los registros de poveedores-->
+    <table id="producto-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>Tipo Iva</th>
+                <th>Medida</th>
+                <th>Color</th>
+                <th>Material</th>
+                <th>Hilos</th>
+                <th>Precio Unitario</th>
+                <th>Precio de Compra</th>
+                <th>Categoría</th>
+
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        fetch('tabla_producto.php')
+            .then(response => response.json())
+            .then(data => {
+                const table = document.getElementById('producto-table').getElementsByTagName('tbody')[0];
+
+                data.forEach(row => {
+                    const newRow = table.insertRow(table.rows.length);
+                    newRow.insertCell(0).textContent = row.id_producto;
+                    newRow.insertCell(1).textContent = row.nombre;
+                    newRow.insertCell(2).textContent = row.tipo_iva;
+                    newRow.insertCell(3).textContent = row.medida;
+                    newRow.insertCell(4).textContent = row.color;
+                    newRow.insertCell(5).textContent = row.material;
+                    newRow.insertCell(6).textContent = row.hilos;
+                    newRow.insertCell(7).textContent = row.precio_unitario;
+                    newRow.insertCell(8).textContent = row.precio_compra;
+                    newRow.insertCell(9).textContent = row.categoria;
+
+                });
+            })
+            .catch(error => {
+                console.error('Error al cargar los datos:', error);
+            });
+    </script>
+    <!--para que se rellene mi form de acuerdo al id -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Obtenemos una referencia a la tabla
+            var table = document.getElementById("producto-table");
+
+            // Obtenemos una referencia al campo de ID
+            var idField = document.getElementById("id_producto");
+
+            // Agregamos un evento de cambio al campo de ID
+            idField.addEventListener("input", function () {
+                var id = idField.value; // Obtenemos el valor del campo de ID
+
+                // Buscamos la fila en la tabla con el ID correspondiente
+                for (var i = 1; i < table.rows.length; i++) {
+                    var row = table.rows[i];
+                    var cell = row.cells[0]; // Suponemos que la primera celda contiene el ID
+
+                    if (cell.textContent === id) {
+                        // Rellenamos los campos del formulario con los valores de la fila encontrada
+                        document.getElementById("id_producto").value = row.cells[0].textContent;
+                        document.getElementById("nombre").value = row.cells[1].textContent;
+                        document.getElementById("medida").value = row.cells[2].textContent;
+                        document.getElementById("color").value = row.cells[3].textContent;
+                        document.getElementById("material").value = row.cells[4].textContent;
+                        document.getElementById("hilos").value = row.cells[5].textContent;
+                        document.getElementById("precio_unitario").value = row.cells[6].textContent;
+                        document.getElementById("precio_compra").value = row.cells[7].textContent;
+                        document.getElementById("categoria").value = row.cells[8].textContent;
+
+
+                        break; // Salimos del bucle una vez que encontramos el ID
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

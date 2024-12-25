@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordenes de Compras</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="https://fonts.cdnfonts.com/css/minecraft-4">
+    <style>
+        body {
+            font-family: 'Minecraft', sans-serif;
+            background-color: #101010;
+            color: #FFFFFF;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #3aa856;
+            font-size: 48px;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 8px #000;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background-color: #222;
+            border: 2px solid #3aa856;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #3aa856;
+            text-align: left;
+        }
+
+        th {
+            background-color: #3aa856;
+            color: #fff;
+        }
+
+        tr:nth-child(even) {
+            background-color: #333;
+        }
+
+        tr:hover {
+            background-color: #444;
+        }
+
+        .filter-bar {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            background-color: #333;
+            padding: 10px;
+            border-radius: 8px;
+            border: 2px solid #3aa856;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            padding: 10px;
+            border: 2px solid #3aa856;
+            border-radius: 4px;
+            background-color: #222;
+            color: #fff;
+        }
+
+        .button {
+            position: relative;
+            width: 150px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border: 2px solid #34974d;
+            background-color: #3aa856;
+            text-decoration: none;
+            color: #fff;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+
+        .button:hover {
+            background-color: #34974d;
+        }
+
+        .button .button__text {
+            transform: translateX(0px);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .button .button__icon {
+            position: absolute;
+            transform: translateX(109px);
+            height: 100%;
+            width: 39px;
+            background-color: #34974d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button .svg {
+            width: 30px;
+            stroke: #fff;
+        }
+
+        .button:hover .button__icon {
+            width: 148px;
+            transform: translateX(0);
+        }
+
+        .button:active .button__icon {
+            background-color: #2e8644;
+        }
+
+        .button:active {
+            border: 2px solid #2e8644;
+        }
+
+        .modalModificar,
+        .modalProductos {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0, 0, 0, 0.75);
+            padding-top: 60px;
+        }
+
+        .modal-content1,
+        .modal-content2 {
+            background-color: #333;
+            margin: 5% auto;
+            padding: 20px;
+            border: 2px solid #3aa856;
+            width: 80%;
+            max-width: 1000px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            color: #fff;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: #fff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .btn-primary,
+        .btn-salir {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+            text-transform: uppercase;
+            font-weight: bold;
+            text-decoration: none;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-salir {
+            background-color: #f44336;
+            color: white;
+            border: none;
+        }
+
+        .btn-salir:hover {
+            background-color: #d32f2f;
+        }
+        
+    </style>
+</head>
+
+<body>
+    <div id="popup" class="popup">
+        <div class="popup-content">
+            <span id="popup-message"></span>
+            <button id="popup-close">Cerrar</button>
+        </div>
+    </div>
+
+    <div id="navbar-container"></div>
+    <h1>Ordenes de Compras</h1>
+    <div class="filter-bar">
+        <input type="text" id="search" placeholder="Buscar pedidos...">
+        <a href="registrar_ordenes_de_compras.html" class="button">
+            <span class="button__text">Nueva Orden</span>
+            <span class="button__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" viewBox="0 0 24 24" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke="currentColor" height="24" fill="none" class="svg">
+                    <line y2="19" y1="5" x2="12" x1="12"></line>
+                    <line y2="12" y1="12" x2="19" x1="5"></line>
+                </svg>
+            </span>
+        </a>
+
+        <select id="filter-status">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="Aprobado">Aprobado</option>
+            <option value="Rechazado">Rechazado</option>
+        </select>
+    </div>
+
+    <table id="tablaPedidos">
+        <thead>
+            <tr>
+                <th>Nro Orden</th>
+                <th>Fecha de Emision</th>
+                <th>Fecha de Entrega</th>
+                <th>Condicion de Entrega</th>
+                <th>Método de Pago</th>
+                <th>Cuotas</th>
+                <th>Estado</th>
+                <th>Nro Presupuesto</th>
+                <th>Proveedor</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Aquí se llenarán los pedidos dinámicamente -->
+        </tbody>
+    </table>
+
+    <script src="tabla_ordenes_de_compras.js"></script>
+    <script src="funciones_v2.js"></script>
+</body>
+
+</html>

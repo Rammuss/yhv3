@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js" ></script>
+
+    <title>Registrar Factura</title>
+    <style>
+        /* Estilos generales del formulario */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 20px;
+        }
+
+        /* Contenedor del formulario */
+        #formRegistrarFactura {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Fieldset y legend */
+        fieldset {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+
+        legend {
+            font-weight: bold;
+            padding: 0 10px;
+            background-color: #f2f2f2;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        /* Etiquetas y campos de entrada */
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="date"],
+        input[type="number"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            resize: vertical;
+        }
+
+        /* Tabla de detalles */
+        #tabla_detalles {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        #tabla_detalles th,
+        #tabla_detalles td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        #tabla_detalles th {
+            background-color: #f2f2f2;
+        }
+
+        /* Botones */
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        button[type="button"] {
+            background-color: #f44336;
+        }
+
+        button[type="button"]:hover {
+            background-color: #e53935;
+        }
+    </style>
+</head>
+
+<body>
+    
+    <div id="navbar-container"></div>
+
+    <h1>Registrar Factura</h1>
+
+
+    <div id="formRegistrarFactura">
+        <form action="procesar_factura.php" method="post">
+            <!-- Datos de la Factura -->
+            <fieldset>
+                <legend>Datos de la Factura</legend>
+                <div>
+                    <label for="numero_factura">Número de Factura:</label>
+                    <input type="text" id="numero_factura" name="numero_factura" required>
+                </div>
+                <div>
+                    <label for="fecha_factura">Fecha de Factura:</label>
+                    <input type="date" id="fecha_factura" name="fecha_factura" required>
+                </div>
+                <div>
+                    <label for="id_proveedor">Proveedor:</label>
+                    <select id="id_proveedor" name="id_proveedor" required>
+                        <option value="">Seleccione un proveedor</option>
+                        <!-- Opciones se llenarán dinámicamente -->
+                    </select>
+                </div>
+                <div>
+                    <label for="condiciones_pago">Condiciones de Pago:</label>
+                    <select id="condiciones_pago" name="condiciones_pago" onchange="toggleCuotasField()" required>
+                        <option value="">Seleccione una opción</option>
+                        <option value="Contado">Contado</option>
+                        <option value="Credito">Crédito</option>
+                    </select>
+                </div>
+                <div id="campo_cuotas" style="display: none;">
+                    <label for="cuotas">Cantidad de Cuotas:</label>
+                    <input type="number" id="cuotas" name="cuotas" min="1">
+                </div>
+            </fieldset>
+
+            <!-- Orden de Compra -->
+            <fieldset>
+                <legend>Orden de Compra</legend>
+                <div>
+                    <label for="id_orden_compra">Número de Orden de Compra:</label>
+                    <select id="id_orden_compra" name="id_orden_compra" onchange="cargarDetallesOrdenCompra()" required>
+                        <option value="">Seleccione una orden de compra</option>
+                        <!-- Opciones se llenarán dinámicamente -->
+                    </select>
+                </div>
+            </fieldset>
+            <div id="campos_detalle"></div>
+            <!-- Detalles de la Factura -->
+            <fieldset>
+                <legend>Detalles de la Factura</legend>
+                <table id="tabla_detalles">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Descripción</th>
+                            <th>Cantidad</th>
+                            <th>Precio Unitario</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Detalles se llenarán dinámicamente -->
+                    </tbody>
+                </table>
+            </fieldset>
+
+            <div>
+                <button type="submit">Registrar Factura</button>
+                <button type="button" onclick="cancelarRegistro()">Cancelar</button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        //FUNCION PARA AHBILITAR CUOTAS
+        function toggleCuotasField() {
+            var condicionesPago = document.getElementById('condiciones_pago').value;
+            var campoCuotas = document.getElementById('campo_cuotas');
+
+            if (condicionesPago === 'Credito') {
+                campoCuotas.style.display = 'block';
+            } else {
+                campoCuotas.style.display = 'none';
+            }
+        }
+
+    </script>
+    <script>
+        // Función para cargar proveedores en el select
+        function cargarProveedores() {
+            fetch('select_proveedor_en_oc.php')
+                .then(response => response.json())
+                .then(data => {
+
+                    let proveedorSelect = document.getElementById('id_proveedor');
+                    proveedorSelect.innerHTML = '<option value="">Seleccione un proveedor</option>';
+                    data.forEach(proveedor => {
+                        let option = document.createElement('option');
+                        option.value = proveedor.id_proveedor;
+                        option.textContent = proveedor.nombre;
+                        proveedorSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error al cargar proveedores:', error));
+        }
+
+
+        // Cargar proveedores al cargar la página
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("hola"); // Mensaje de depuración
+            cargarProveedores(); // Llamar a la función para cargar proveedores
+        })
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            cargarOrdenesCompra();
+        });
+
+        function cargarOrdenesCompra() {
+            fetch('obtener_oc_aprobadas.php')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        console.error(data.error);
+                        return;
+                    }
+
+                    let select = document.getElementById('id_orden_compra');
+                    data.forEach(orden => {
+                        let option = document.createElement('option');
+                        option.value = orden.id_orden_compra;
+                        option.textContent = orden.id_orden_compra;
+                        select.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+    </script>
+
+    <script>
+
+        function cargarDetallesOrdenCompra() {
+            var idOrdenCompra = document.getElementById('id_orden_compra').value;
+
+            if (!idOrdenCompra) {
+                return;
+            }
+
+            fetch('obtener_detalles_oc.php?id_orden_compra=' + idOrdenCompra)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    if (data.error) {
+                        console.error(data.error);
+                        return;
+                    }
+
+                    let tbody = document.querySelector('#tabla_detalles tbody');
+                    tbody.innerHTML = ''; // Limpiar la tabla antes de llenarla
+                    let camposDetalle = document.getElementById('campos_detalle');
+                    camposDetalle.innerHTML = ''; // Limpiar campos ocultos
+
+                    if (Array.isArray(data) && data.length > 0) {
+                        // Usar un índice para los campos ocultos
+                        data.forEach((detalle, index) => {
+                            let precioUnitario = parseFloat(detalle.precio_unitario);
+                            let cantidad = parseInt(detalle.cantidad, 10);
+                            let total = (cantidad * precioUnitario).toFixed(2);
+
+                            let row = document.createElement('tr');
+                            row.innerHTML = `
+                        <td>${detalle.id_producto}</td>
+                        <td>${detalle.descripcion}</td>
+                        <td>${cantidad}</td>
+                        <td>${precioUnitario.toFixed(2)}</td>
+                        <td>${total}</td>
+                    `;
+                            tbody.appendChild(row);
+
+                            // Crear campos ocultos para cada detalle
+                            camposDetalle.innerHTML += `
+                        <input type="hidden" name="detalles[${index}][id_producto]" value="${detalle.id_producto}">
+                        <input type="hidden" name="detalles[${index}][descripcion]" value="${detalle.descripcion}">
+                        <input type="hidden" name="detalles[${index}][cantidad]" value="${cantidad}">
+                        <input type="hidden" name="detalles[${index}][precio_unitario]" value="${precioUnitario.toFixed(2)}">
+                    `;
+                        });
+                    } else {
+                        console.warn('No se encontraron detalles para la orden de compra.');
+                    }
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+
+        function mostrarCamposCuotas() {
+            var condicionesPago = document.getElementById('condiciones_pago').value;
+            var cuotasContainer = document.getElementById('cuotas-container');
+
+            if (condicionesPago === 'Credito') {
+                cuotasContainer.style.display = 'block';
+            } else {
+                cuotasContainer.style.display = 'none';
+            }
+        }
+
+    </script>
+</body>
+
+</html>

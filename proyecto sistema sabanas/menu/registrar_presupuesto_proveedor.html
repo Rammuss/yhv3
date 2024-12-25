@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Registro de Presupuesto de Proveedor</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <script defer src="popup.js"></script>
+    <link rel="stylesheet" href="popup.css">
+
+    <style>
+        /* Estilo general del cuerpo de la página */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20PX;
+        }
+
+        /* Estilo del encabezado h1 */
+        h1 {
+            text-align: center;
+            background-color: #f0f0f0;
+            color: #000000;
+            padding: 20px;
+        }
+
+        /* Estilo del formulario */
+        form {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Estilo de las etiquetas y los campos del formulario */
+        label {
+            display: block;
+            margin-top: 0px;
+            font-weight: bold;
+        }
+        .form-label-title {
+            font-size: larger;
+            margin-bottom: 10px;
+            margin-top: 20px;
+            color: #007bff;
+        
+        }
+        /* Estilo del select */
+        select {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        /* Estilo de los campos de entrada de fecha */
+        input[type="date"] {
+            width: 100%;
+            padding: 0px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        /* Estilo del campo de carga de archivo */
+        input[type="file"] {
+            width: 100%;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+
+        /* Estilo del botón de envío */
+        input[type="submit"] {
+            background-color: #007bff;
+            color: #fff;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        /* Estilo del enlace de lista de presupuesto de proveedores */
+        a {
+            display: block;
+            margin-top: 0px;
+            text-align: center;
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        /* Estilo del enlace de lista de presupuesto de proveedores al pasar el mouse por encima */
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="popup" class="popup">
+        <div class="popup-content">
+            <span id="popup-message"></span>
+            <button id="popup-close">Cerrar</button>
+        </div>
+    </div>
+    
+
+    <div id="navbar-container"></div>
+
+    <h1>Registro de Presupuesto de Proveedor</h1>
+    
+    <!--Desplegable de proveedores y sript para mostrar en tiempo real(asincrona) lo que hay en la tabla proveedor y selecionarlo-->
+    <form action="procesar_presupuesto_proveedor.php" method="post" enctype="multipart/form-data" id="form_registrar_presupuesto">
+        <label for="proveedor">Proveedor</label>
+        <select name="proveedor" id="proveedor"></select>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                // Función para cargar las opciones del proveedor en tiempo real
+                function loadProveedorOptions() {
+                    // Realizar una solicitud Ajax al servidor para obtener los datos de los proveedores
+                    fetch('select_proveedores.php') // Reemplaza 'obtener_proveedores.php' con la URL de tu servidor
+                        .then(function (response) {
+                            return response.json();
+                        })
+                        .then(function (data) {
+                            var proveedorSelect = document.getElementById('proveedor');
+                            proveedorSelect.innerHTML = ''; // Vacía el select antes de agregar las nuevas opciones
+
+                            var option = document.createElement('option');
+                            option.value = '';
+                            option.text = 'Selecciona un proveedor';
+                            proveedorSelect.appendChild(option);
+
+                            data.forEach(function (proveedor) {
+                                var option = document.createElement('option');
+                                option.value = proveedor.id_proveedor;
+                                option.text = proveedor.nombre;
+                                proveedorSelect.appendChild(option);
+                            });
+                        })
+                        .catch(function (error) {
+                            console.error('Error al cargar proveedores: ', error);
+                        });
+                }
+
+                // Cargar las opciones de proveedor al cargar la página
+                loadProveedorOptions();
+
+                // Puedes llamar a loadProveedorOptions() cuando agregues un nuevo proveedor en tu sistema para actualizar la lista de proveedores en tiempo real.
+            });
+        </script>
+
+        <label for="fecha_registro">Fecha de Registro:</label>
+        <input type="date" name="fecha_registro" id="fecha_registro" required><br>
+
+        <label for="fecha_vencimiento">Fecha de Vencimiento:</label>
+        <input type="date" name="fecha_vencimiento" id="fecha_vencimiento" required><br>
+
+        <label for="state">Estado:</label>
+        <select style="cursor: not-allowed;" id="state" name="state" >
+            <option value="pendiente">Pendiente</option>
+        </select>
+
+        <!-- <label for="archivo_documento">Archivo del Presupuesto:</label>
+        <input type="file" name="archivo_documento" id="archivo_documento" required><br> -->
+
+        <br>
+
+        <div class="p-2">
+            <div class="rounded-3 bg-light p-4">
+                
+                <!--Desplegable de producto y sript para mostrar en tiempo real lo que hay en la tabla proveedor y selecionarlo-->
+            <label for="producto" class="form-label-title">Detalles de Presupuesto</label>
+            <label for="producto" class="form-label">Producto:</label>
+            <select name="producto" id="producto" class="form-control"></select>
+
+            <script>
+                document.addEventListener('DOMContentLoaded', function () {
+                    var productoSelect = document.getElementById('producto');
+                    var precioUnitarioInput = document.getElementById('precio_unitario');
+
+                    function loadProductoOptions() {
+                        // Realizar una solicitud Ajax al servidor para obtener los datos de los productos
+                        fetch('select_producto.php')
+                            .then(function (response) {
+                                return response.json();
+                            })
+                            .then(function (data) {
+                                productoSelect.innerHTML = ''; // Vacía el select antes de agregar las nuevas opciones
+
+                                var option = document.createElement('option');
+                                option.value = '';
+                                option.text = 'Selecciona un producto';
+                                productoSelect.appendChild(option);
+
+
+
+                                data.forEach(function (producto) {
+                                    var option = document.createElement('option');
+                                    option.value = producto.id_producto;
+                                    option.setAttribute('data-precio-unitario', producto.precio_unitario);
+                                    option.text = producto.nombre;
+                                    productoSelect.appendChild(option);
+                                });
+                            })
+                            .catch(function (error) {
+                                console.error('Error al cargar productos: ', error);
+                            });
+                    }
+
+                    // Cargar las opciones de productos al cargar la página
+                    loadProductoOptions();
+
+                    // Agregar un evento change al campo select para detectar cuando se selecciona un producto
+                    productoSelect.addEventListener('change', function () {
+                        var selectedOption = productoSelect.options[productoSelect.selectedIndex];
+
+                        // precioUnitarioInput.value = precioUnitario;
+                    });
+                });
+
+            </script>
+            <!--Para que se rellene al selecionar en el campo de precio unitario-->
+
+
+
+            <!--mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm-->
+
+            <label for="cantidad" class="form-label">Cantidad:</label>
+            <input type="number" name="cantidad" id="cantidad" class="form-control">
+
+            <label for="precio_unitario" class="form-label">Precio Unitario:</label>
+            <input type="number" step="0.01" name="precio_unitario" id="precio_unitario" class="form-control">
+
+
+
+            <button type="button" id="agregar_producto" class="my-2 btn btn-info mx-auto">Agregar Producto</button>
+
+            </div>
+
+            
+        </div>
+
+
+        <table id="productos_table" class="table">
+            <thead>
+                <tr>
+                    <th>Producto</th>
+                    <th>Cantidad</th>
+                    <th>Precio Unitario</th>
+                    <th>Precio Total</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody class="table-group-divider">
+            </tbody>
+        </table>
+
+        
+        <input type="hidden" name="productos" id="productosInput" value="">
+        <input type="hidden" name="total" id="totalHidden" value="0.00">
+        <div id="total">Total: Gs0.00</div>
+
+        <script>
+            var productosEnTabla = []; // Declara la variable aquí
+    
+            document.getElementById('agregar_producto').addEventListener('click', function () {
+                var productoSelect = document.getElementById('producto');
+                var cantidadInput = document.getElementById('cantidad');
+                var precioUnitarioInput = document.getElementById('precio_unitario');
+                var productosTable = document.getElementById('productos_table').getElementsByTagName('tbody')[0];
+    
+    
+                // Obtén los valores de los campos
+                var productoId = productoSelect.value;
+                var cantidad = cantidadInput.value;
+                var precioUnitario = precioUnitarioInput.value;
+                var nombreProducto = productoSelect.options[productoSelect.selectedIndex].text;
+    
+                // Crea una fila en la tabla con un botón de eliminar
+                var newRow = productosTable.insertRow(-1);
+                newRow.innerHTML = `
+                    <td>${nombreProducto}</td>
+                    <td>${cantidad}</td>
+                    <td>${precioUnitario}</td>
+                    <td>${(cantidad * precioUnitario).toFixed(2)}</td>
+                    <td><button class="eliminar-fila">Eliminar</button></td>
+                `;
+    
+                // Agregar los datos del producto al array
+                productosEnTabla.push({
+                    producto_id: productoId,
+                    cantidad: cantidad,
+                    precioUnitario: precioUnitario,
+                });
+                console.log(productosEnTabla);
+    
+    
+                // Agregar un atributo personalizado con el ID del producto
+                newRow.setAttribute('data-producto-id', productoId);
+    
+                // Limpia los campos para la próxima entrada
+                cantidadInput.value = '';
+                precioUnitarioInput.value = '';
+    
+                // Agregar un manejador de eventos para el botón de eliminar en la nueva fila
+                newRow.querySelector('.eliminar-fila').addEventListener('click', function () {
+                    // Eliminar la fila
+                    newRow.remove();
+                    // Recalcular el total cuando se elimina una fila
+                    recalcularTotal();
+                });
+    
+                // Calcular y actualizar el total
+                recalcularTotal();
+            });
+    
+            // Agregar un campo oculto al formulario para enviar los datos de la tabla
+    
+    
+            function agregarProductosInput(productosEnTabla) {
+                var formulario = document.getElementById('form_registrar_presupuesto');
+                var productosInput = document.createElement('input');
+                productosInput.type = 'hidden';
+                productosInput.name = 'productos';
+                productosInput.value = JSON.stringify(productosEnTabla);
+                formulario.appendChild(productosInput);
+            }
+    
+            // Llamas a la función agregar matriz cuando se envia el from
+    
+            // Mueve la llamada a agregarProductosInput al evento de envío del formulario
+            document.getElementById('form_registrar_presupuesto').addEventListener('submit', function () {
+                agregarProductosInput(productosEnTabla);
+            });
+    
+    
+            // Ahora, cuando el usuario envía el formulario, los datos de la tabla se envían como una cadena JSON en el campo 'productos'
+    
+    
+            function recalcularTotal() {
+                var total = 0;
+                var filas = document.querySelectorAll('#productos_table tbody tr');
+                filas.forEach(function (fila) {
+                    var precioTotal = parseFloat(fila.querySelector('td:nth-child(4)').textContent);
+                    total += precioTotal;
+                });
+    
+                // Actualiza el valor del input oculto
+                var totalInput = document.getElementById('totalHidden');
+                totalInput.value = total.toFixed(2);
+    
+                // Actualiza el contenido del div
+                var totalDiv = document.getElementById('total');
+                totalDiv.textContent = 'Total: $' + total.toFixed(2);
+            }
+        </script>
+        
+
+        <input type="submit" value="Guardar Presupuesto">
+    </form>
+</body>
+
+</html>

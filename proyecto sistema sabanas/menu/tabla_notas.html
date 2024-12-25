@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <title>Notas de Débito/Crédito</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .filter-bar {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pagination {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* boton de agregar */
+        .button {
+            position: relative;
+            width: 150px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border: 1px solid #34974d;
+            background-color: #3aa856;
+        }
+
+        .button,
+        .button__icon,
+        .button__text {
+            transition: all 0.3s;
+        }
+
+        .button .button__text {
+            transform: translateX(0px);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .button .button__icon {
+            position: absolute;
+            transform: translateX(109px);
+            height: 100%;
+            width: 39px;
+            background-color: #34974d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button .svg {
+            width: 30px;
+            stroke: #fff;
+            text-decoration: none
+        }
+
+        .button:hover {
+            background: #34974d;
+        }
+
+        .button:hover .button__text {
+            color: transparent;
+            text-decoration: none;
+
+        }
+
+        .button:hover .button__icon {
+            width: 148px;
+            transform: translateX(0);
+        }
+
+        .button:active .button__icon {
+            background-color: #2e8644;
+        }
+
+        .button:active {
+            border: 1px solid #2e8644;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .button {
+            text-decoration: none;
+            /* Elimina el subrayado del enlace */
+            color: inherit;
+            /* Mantiene el color del texto */
+            display: inline-flex;
+            /* Alinea los elementos internos */
+            align-items: center;
+            /* Centra los elementos verticalmente */
+            padding: 10px 20px;
+            /* Agrega relleno al botón */
+            background-color: #207c36;
+            /* Color de fondo del botón */
+            border-radius: 4px;
+            /* Bordes redondeados */
+            border: none;
+            /* Sin borde */
+            cursor: pointer;
+            /* Cambia el cursor al pasar sobre el botón */
+            transition: background-color 0.3s;
+            /* Transición suave para el cambio de color */
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="navbar-container"></div>
+
+    <h1>Notas de Débito/Crédito</h1>
+
+    <div class="filter-bar">
+        <input type="text" id="search" placeholder="Buscar pedidos...">
+        <a href="registrar_nota.html" class="button" role="button">
+            <span class="button__text">Nueva Nota</span>
+            <span class="button__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" viewBox="0 0 24 24" stroke-width="2"
+                    stroke-linejoin="round" stroke-linecap="round" stroke="currentColor" height="24" fill="none"
+                    class="svg">
+                    <line y2="19" y1="5" x2="12" x1="12"></line>
+                    <line y2="12" y1="12" x2="19" x1="5"></line>
+                </svg>
+            </span>
+        </a>
+
+    <select id="filter-status">
+        <option value="">Todos los estados</option>
+        <option value="Activo">Activo</option>
+        <option value="Anulado">Anulado</option>
+        <!-- Agrega más opciones según sea necesario -->
+    </select>
+    </div>
+
+    <table id="notasTable">
+        <thead>
+            <tr>
+                <th>ID Nota</th>
+                <th>Tipo de Nota</th>
+                <th>Número de Nota</th>
+                <th>Fecha de Nota</th>
+                <th>Proveedor</th>
+                <th>ID Compra</th>
+                <th>Monto</th>
+                <th>Descripción</th>
+                <th>Estado</th>
+                <th>Accion</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Los datos se cargarán aquí mediante JavaScript -->
+        </tbody>
+    </table>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            fetch('obtener_notas.php')
+                .then(response => response.json())
+                .then(data => {
+                    const tableBody = document.querySelector('#notasTable tbody');
+                    data.forEach(nota => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${nota.id_nota}</td>
+                            <td>${nota.tipo_nota}</td>
+                            <td>${nota.numero_nota}</td>
+                            <td>${nota.fecha_nota}</td>
+                            <td>${nota.nombre}</td>
+                            <td>${nota.id_compra}</td>
+                            <td>${nota.monto}</td>
+                            <td>${nota.descripcion}</td>
+                            <td>${nota.estado}</td>
+                            <td>
+                <button class="button-cancel" onclick="anularNota(${nota.id_nota})">Anular</button>
+            </td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                })
+                .catch(error => console.error('Error al obtener las notas:', error));
+        });
+    </script>
+    <script>
+
+        function anularNota(id_nota) {
+            // Llamada a la API para anular el presupuesto
+            fetch(`anular_nota.php?id_nota=${id_nota}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Error en la solicitud de datos.');
+                    }
+                    return response.json(); // Leer la respuesta como JSON
+                })
+                .then(data => {
+                    if (data.success) {
+                        console.log("Presupuesto anulado exitosamente.");
+                        // Actualiza la interfaz de usuario si es necesario
+                        // Ejemplo: eliminar la fila correspondiente de la tabla
+                        // o actualizar el estado en la interfaz
+                        location.reload(); // Recarga la página actual
+                    } else {
+                        console.error('Error al anular el presupuesto.');
+                        alert('No se pudo anular el presupuesto.');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error al procesar la solicitud:', error);
+                    alert('No se pudo anular el presupuesto.');
+                });
+        }
+
+    </script>
+
+    <script>
+        //filtrar estado en tabla
+        document.getElementById('filter-status').addEventListener('change', function () {
+            const statusFilter = this.value.toLowerCase();
+            const rows = document.querySelectorAll('#notasTable tbody tr');
+            rows.forEach(row => {
+
+                const status = row.cells[8].textContent.toLowerCase(); // Índice 7 corresponde a la columna de estado
+                if (statusFilter === '' || status === statusFilter) {
+                    row.style.display = ''; // Mostrar fila
+                } else {
+                    row.style.display = 'none'; // Ocultar fila
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registro de Pedidos</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <link rel="stylesheet" href="popup.css">
+    <script src="popup.js"></script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .filter-bar {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pagination {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* boton de agregar */
+        .button {
+            position: relative;
+            width: 150px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border: 1px solid #34974d;
+            background-color: #3aa856;
+        }
+
+        .button,
+        .button__icon,
+        .button__text {
+            transition: all 0.3s;
+        }
+
+        .button .button__text {
+            transform: translateX(0px);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .button .button__icon {
+            position: absolute;
+            transform: translateX(109px);
+            height: 100%;
+            width: 39px;
+            background-color: #34974d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button .svg {
+            width: 30px;
+            stroke: #fff;
+            text-decoration: none
+        }
+
+        .button:hover {
+            background: #34974d;
+        }
+
+        .button:hover .button__text {
+            color: transparent;
+            text-decoration: none;
+
+        }
+
+        .button:hover .button__icon {
+            width: 148px;
+            transform: translateX(0);
+        }
+
+        .button:active .button__icon {
+            background-color: #2e8644;
+        }
+
+        .button:active {
+            border: 1px solid #2e8644;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .button {
+            text-decoration: none;
+            /* Elimina el subrayado del enlace */
+            color: inherit;
+            /* Mantiene el color del texto */
+            display: inline-flex;
+            /* Alinea los elementos internos */
+            align-items: center;
+            /* Centra los elementos verticalmente */
+            padding: 10px 20px;
+            /* Agrega relleno al botón */
+            background-color: #207c36;
+            /* Color de fondo del botón */
+            border-radius: 4px;
+            /* Bordes redondeados */
+            border: none;
+            /* Sin borde */
+            cursor: pointer;
+            /* Cambia el cursor al pasar sobre el botón */
+            transition: background-color 0.3s;
+            /* Transición suave para el cambio de color */
+        }
+
+        /* Estilos para el modal */
+        .modalModificar,
+        .modalProductos {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0, 0, 0);
+            background-color: rgba(0, 0, 0, 0.4);
+            padding-top: 60px;
+        }
+
+        .modal-content1,
+        .modal-content2 {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 1000px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-salir {
+            background-color: #f44336;
+            color: white;
+            border: none;
+        }
+
+        .btn-salir:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+    
+
+</head>
+
+<body>
+    <div id="popup" class="popup">
+        <div class="popup-content">
+            <span id="popup-message"></span>
+            <button id="popup-close">Cerrar</button>
+        </div>
+    </div>
+
+    <div id="navbar-container"></div>
+    <h1>Pedidos Internos</h1>
+    <div class="filter-bar">
+        <input type="text" id="search" placeholder="Buscar pedidos...">
+
+        <a href="registrar_pedidos.html" class="button" role="button">
+            <span class="button__text">Nuevo Pedido</span>
+            <span class="button__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" viewBox="0 0 24 24" stroke-width="2"
+                    stroke-linejoin="round" stroke-linecap="round" stroke="currentColor" height="24" fill="none"
+                    class="svg">
+                    <line y2="19" y1="5" x2="12" x1="12"></line>
+                    <line y2="12" y1="12" x2="19" x1="5"></line>
+                </svg>
+            </span>
+        </a>
+
+
+        <select id="filter-status">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="enviado">Enviado</option>
+            <option value="entregado">Entregado</option>
+        </select>
+    </div>
+    <table id="tablaPedidos">
+        <thead>
+            <tr>
+                <th>Nro Pedido</th>
+                <th>Departamento</th>
+                <th>Telefono</th>
+                <th>Correo</th>
+                <th>Fecha pedido</th>
+                <th>Fecha Entrega Solicitado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Aquí se llenarán los pedidos dinámicamente -->
+        </tbody>
+    </table>
+    <div class="pagination">
+        <button class="prev disabled">Anterior</button>
+        <button class="next">Siguiente</button>
+    </div>
+
+    <!-- Modal de Modificacion -->
+    <div id="editModal" class="modalModificar">
+        <div class="modal-content1">
+            <span class="close" onclick=" cerrarModal('editModal')">&times;</span>
+            <form action="modificar_pedido_interno.php" id="form_pedido_interno" method="post">
+                <h2>Modificar Pedido Interno</h2>
+                <label for="numeroPedido">Número de Pedido:</label>
+                <input type="text" id="numeroPedido" name="numeroPedido" readonly required>
+
+                <label for="departamento">Departamento Solicitante:</label>
+                <input type="text" id="departamento" name="departamento" required>
+
+                <label for="telefono">Teléfono:</label>
+                <input type="tel" id="telefono" name="telefono" required>
+
+                <label for="email">Correo Electrónico:</label>
+                <input type="email" id="email" name="email" required>
+
+                <label for="fechaPedido">Fecha del Pedido:</label>
+                <input type="date" id="fechaPedido" name="fechaPedido" required>
+
+                <label for="fechaEntrega">Fecha de Entrega Solicitada:</label>
+                <input type="date" id="fechaEntrega" name="fechaEntrega" required>
+
+                <h3>Detalles de Productos</h3>
+                <button type="button" class="btn btn-primary btnAgregarProducto" id="btnAgregarProducto">Agregar
+                    Producto</button>
+
+                <table id="tablaModificar">
+                    <thead>
+                        <tr>
+                            <th>Id Producto</th>
+                            <th>Nombre</th>
+                            <th>Cantidad</th>
+                            <th>Accion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyModificar">
+                        <!-- Aquí se agregarán las filas de productos -->
+                    </tbody>
+                </table>
+
+                <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                <button type="button" onclick="cerrarModal('editModal')" class="btn btn-salir">Salir</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para seleccionar productos -->
+    <div id="modalProductos" class="modalProductos">
+        <div class="modal-content2">
+            <span class="close" onclick="cerrarModal('modalProductos')">&times;</span>
+            <h2>Seleccionar Producto</h2>
+            <table id="tablaSeleccionarProducto">
+                <thead>
+                    <tr>
+                        <th>ID Producto</th>
+                        <th>Nombre</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Aquí se cargará la lista de productos desde la base de datos -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        //Funciones para el modal
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var modal = document.getElementById('editModal');
+
+            // Función para abrir el modal
+            window.modificarPedido = function (numero_pedido) {
+                // Obtén el elemento del campo en el modal donde se mostrará el número de pedido
+                var numeroPedidoField = document.getElementById('numeroPedido');
+
+
+                // Asigna el valor del número de pedido al campo del modal
+                numeroPedidoField.value = numero_pedido;
+
+                // Muestra el modal (asegúrate de que tienes el código para abrir el modal)
+                modal.style.display = 'block';
+                cargarDatosPedido();
+            };
+
+
+            // Función para enviar los datos modificados
+            window.enviarDatos = function () {
+                var formData = new FormData(document.getElementById('form_pedido_interno'));
+
+                fetch('procesar_pedido_interno.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Pedido actualizado exitosamente.');
+                            cerrarModal();
+                            // Aquí puedes actualizar la tabla con los nuevos datos si es necesario
+                        } else {
+                            alert('Hubo un error al actualizar el pedido.');
+                        }
+                    })
+                    .catch(error => console.error('Error:', error));
+            }
+        });
+        // Función para cerrar el modal
+        function cerrarModal(modalId) {
+            console.log('Intentando cerrar modal con ID:', modalId);
+            var modal = document.getElementById(modalId);
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+
+    </script>
+
+    <script>
+        //funcio para mandar el numero pedido al php y pedir el select a la bd
+        function cargarDatosPedido() {
+            var numero_pedido = document.getElementById('numeroPedido').value;
+
+            fetch('obtener_datos_pedido.php?numero_pedido=' + numero_pedido)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Error al obtener datos del pedido');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+
+                    console.log('Datos recibidos:', data);
+                    const primerRegistro = data[0];
+
+
+                    // Asigna valores a los campos en el modal
+                    document.getElementById('departamento').value = primerRegistro.departamento_solicitante || '';
+                    document.getElementById('telefono').value = primerRegistro.telefono || '';
+                    document.getElementById('email').value = primerRegistro.correo || '';
+                    document.getElementById('fechaPedido').value = primerRegistro.fecha_pedido || '';
+                    document.getElementById('fechaEntrega').value = primerRegistro.fecha_entrega_solicitada || '';
+
+
+                    var tablaModificar = document.getElementById('tablaModificar').getElementsByTagName('tbody')[0];
+                    tablaModificar.innerHTML = ''; // Limpiar el contenido actual
+
+                    data.forEach(function (detalle) {
+                        var row = tablaModificar.insertRow();
+                        var cell1 = row.insertCell(0);
+                        var cell2 = row.insertCell(1);
+                        var cell3 = row.insertCell(2);
+                        var cell4 = row.insertCell(3);
+
+                        cell1.textContent = detalle.id_producto;
+                        cell2.textContent = detalle.nombre_producto;
+                        cell3.innerHTML = '<input type="number" name="cantidad[]" value="' + detalle.cantidad + '" class="editable-cantidad">'; // Campo editable
+                        cell4.innerHTML = '<button type="button" onclick="eliminarFila(this)">Eliminar</button>'; // Botón eliminar fila
+
+
+
+                        // Agregar campos ocultos para id_producto y nombre
+                        var inputIdProducto = document.createElement('input');
+                        inputIdProducto.type = 'hidden';
+                        inputIdProducto.name = 'id_producto[]';
+                        inputIdProducto.value = detalle.id_producto;
+                        row.appendChild(inputIdProducto); // Agregar input oculto a la fila
+
+                        var inputNombre = document.createElement('input');
+                        inputNombre.type = 'hidden';
+                        inputNombre.name = 'nombre_producto[]';
+                        inputNombre.value = detalle.nombre_producto;
+                        row.appendChild(inputNombre); // Agregar input oculto a la fila
+
+                    });
+
+                })
+                .catch(error => {
+                    console.error('Error de red al intentar obtener datos del pedido:', error);
+                });
+        }
+
+    </script>
+
+    <script src="tabla_pedidos_interno.js"></script>
+    <script src="funciones_v2.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrar Nota de Débito/Crédito</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 0;
+            background: #f4f4f4;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        form {
+            max-width: 600px;
+            margin: auto;
+            margin-top: 20px;
+            margin-bottom: 20px;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+        }
+
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 8px;
+            margin-top: 5px;
+            box-sizing: border-box;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        .submit-btn,
+        .btn-salir {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .submit-btn:hover,
+        .btn-salir:hover {
+            background-color: #45a049;
+        }
+
+        .btn-salir {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #3149c2;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .btn-salir:hover {
+            background-color: #1e2e70;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="navbar-container"></div>
+
+    <div>
+        <h1>Registrar Nota de Débito/Crédito</h1>
+    </div>
+    <form action="procesar_nota.php" method="POST">
+        <label for="tipo_nota">Tipo de Nota:</label>
+        <select id="tipo_nota" name="tipo_nota" required>
+            <option value="debito">Débito</option>
+            <option value="credito">Crédito</option>
+        </select><br><br>
+
+        <label for="numero_nota">Número de Nota:</label>
+        <input type="text" id="numero_nota" name="numero_nota" required><br><br>
+
+        <label for="fecha_nota">Fecha de Nota:</label>
+        <input type="date" id="fecha_nota" name="fecha_nota" required><br><br>
+
+        <label for="id_proveedor">Nombre del Proveedor:</label>
+        <select id="id_proveedor" name="id_proveedor" onchange="cargarDatosProveedor()" required>
+            <!-- Esta opción es la predeterminada y se mostrará primero -->
+            <option value="">Seleccione un proveedor</option>
+        </select>
+
+        <label for="estado">Estado:</label>
+        <select id="estado" name="estado" disabled>
+            <option value="Activo" selected>Activo</option>
+        </select>
+
+        <label for="id_compra">ID de la Compra:</label>
+        <input type="number" id="id_compra" name="id_compra" required><br><br>
+
+        <label for="monto">Monto:</label>
+        <input type="number" step="0.01" id="monto" name="monto" required><br><br>
+
+        <label for="descripcion">Descripción:</label>
+        <textarea id="descripcion" name="descripcion" rows="4" cols="50"></textarea><br><br>
+
+        <input type="submit" value="Registrar Nota">
+    </form>
+
+    <script>
+
+        // Función para cargar proveedores en el select
+        function cargarProveedores() {
+            fetch('select_proveedor_en_oc.php')
+                .then(response => response.json())
+                .then(data => {
+
+                    let proveedorSelect = document.getElementById('id_proveedor');
+                    proveedorSelect.innerHTML = '<option value="">Seleccione un proveedor</option>';
+                    data.forEach(proveedor => {
+                        let option = document.createElement('option');
+                        option.value = proveedor.id_proveedor;
+                        option.textContent = proveedor.nombre;
+                        proveedorSelect.appendChild(option);
+                    });
+                })
+                .catch(error => console.error('Error al cargar proveedores:', error));
+        }
+
+
+        // Cargar proveedores al cargar la página
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("hola"); // Mensaje de depuración
+            cargarProveedores(); // Llamar a la función para cargar proveedores
+        })
+    </script>
+
+</body>
+
+</html>

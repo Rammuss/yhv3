@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="styles.css">
+    <script src="navbar.js"></script>
+    <title>Registro de Ajustes de Inventario</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+
+        th,
+        td {
+            padding: 12px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        .filter-bar {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .filter-bar input,
+        .filter-bar select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+
+        .pagination {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .pagination button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* boton de agregar */
+        .button {
+            position: relative;
+            width: 150px;
+            height: 40px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            border: 1px solid #34974d;
+            background-color: #3aa856;
+        }
+
+        .button,
+        .button__icon,
+        .button__text {
+            transition: all 0.3s;
+        }
+
+        .button .button__text {
+            transform: translateX(0px);
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .button .button__icon {
+            position: absolute;
+            transform: translateX(109px);
+            height: 100%;
+            width: 39px;
+            background-color: #34974d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button .svg {
+            width: 30px;
+            stroke: #fff;
+            text-decoration: none
+        }
+
+        .button:hover {
+            background: #34974d;
+        }
+
+        .button:hover .button__text {
+            color: transparent;
+            text-decoration: none;
+
+        }
+
+        .button:hover .button__icon {
+            width: 148px;
+            transform: translateX(0);
+        }
+
+        .button:active .button__icon {
+            background-color: #2e8644;
+        }
+
+        .button:active {
+            border: 1px solid #2e8644;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .button {
+            text-decoration: none;
+            /* Elimina el subrayado del enlace */
+            color: inherit;
+            /* Mantiene el color del texto */
+            display: inline-flex;
+            /* Alinea los elementos internos */
+            align-items: center;
+            /* Centra los elementos verticalmente */
+            padding: 10px 20px;
+            /* Agrega relleno al botón */
+            background-color: #207c36;
+            /* Color de fondo del botón */
+            border-radius: 4px;
+            /* Bordes redondeados */
+            border: none;
+            /* Sin borde */
+            cursor: pointer;
+            /* Cambia el cursor al pasar sobre el botón */
+            transition: background-color 0.3s;
+            /* Transición suave para el cambio de color */
+        }
+
+        /* Estilos para el modal */
+        .modalModificar,
+        .modalProductos {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgb(0, 0, 0);
+            background-color: rgba(0, 0, 0, 0.4);
+            padding-top: 60px;
+        }
+
+        .modal-content1,
+        .modal-content2 {
+            background-color: #fefefe;
+            margin: 5% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%;
+            max-width: 1000px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+        }
+
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+            border: none;
+        }
+
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+
+        .btn-salir {
+            background-color: #f44336;
+            color: white;
+            border: none;
+        }
+
+        .btn-salir:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="navbar-container"></div>
+    <h1>Ajustes de Inventario</h1>
+    <div class="filter-bar">
+        <input type="text" id="search" placeholder="Buscar pedidos...">
+
+        <a href="ajuste_inventario.html" class="button" role="button">
+            <span class="button__text">Nuevo Ajuste</span>
+            <span class="button__icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" viewBox="0 0 24 24" stroke-width="2"
+                    stroke-linejoin="round" stroke-linecap="round" stroke="currentColor" height="24" fill="none"
+                    class="svg">
+                    <line y2="19" y1="5" x2="12" x1="12"></line>
+                    <line y2="12" y1="12" x2="19" x1="5"></line>
+                </svg>
+            </span>
+        </a>
+
+
+        <select id="filter-status">
+            <option value="">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="enviado">Enviado</option>
+            <option value="entregado">Entregado</option>
+        </select>
+    </div>
+<div class="container">
+    
+    <table id="tabla-ajustes">
+        <thead>
+            <tr>
+                <th>ID Ajuste</th>
+                <th>ID Producto</th>
+                <th>Cantidad Ajustada</th>
+                <th>Fecha del Ajuste</th>
+                <th>Motivo del Ajuste</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Los datos se llenarán aquí mediante JavaScript -->
+        </tbody>
+    </table>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        // Realizar una solicitud para obtener los datos de ajustes
+        fetch('consultar_ajustes.php')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#tabla-ajustes tbody');
+                data.forEach(ajuste => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${ajuste.id_ajuste}</td>
+                        <td>${ajuste.id_producto}</td>
+                        <td>${ajuste.cantidad_ajustada}</td>
+                        <td>${ajuste.fecha_ajuste}</td>
+                        <td>${ajuste.motivo_ajuste}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(error => console.error('Error al cargar los ajustes:', error));
+    });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,53 @@
+/* Estilo para la ventana emergente */
+/* <div id="popup" class="popup">
+        <div class="popup-content">
+            <span id="popup-message"></span>
+            <button id="popup-close">Cerrar</button>
+        </div>
+    </div>
+    */
+.popup {
+    display: none;
+    position: fixed;
+    top: 20%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 300px;
+    background-color: #fff;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+}
+
+.popup-content {
+    padding: 20px;
+    text-align: center;
+}
+
+#popup-message {
+    display: block;
+    margin-bottom: 20px;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+#popup-close {
+    padding: 10px 20px;
+    border: none;
+    background-color: #28a745; /* Verde brillante */
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+#popup-close:hover {
+    background-color: #218838; /* Verde más oscuro al pasar el ratón */
+}
+
+/* Clase para ocultar la ventana emergente */
+.popup-hide {
+    opacity: 0;
+}

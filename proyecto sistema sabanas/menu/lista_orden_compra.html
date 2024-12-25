@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Lista de Órdenes de Compra</title>
+    <style>
+        /* Estilo del cuerpo de la página */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Estilo del encabezado h1 */
+        h1 {
+            background-color: #333;
+            color: #fff;
+            text-align: center;
+            padding: 10px;
+        }
+
+        /* Estilo del enlace "Volver atrás" */
+        a {
+            display: block;
+            margin: 10px;
+            text-align: center;
+            text-decoration: none;
+            background-color: #333;
+            color: #fff;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+
+        a:hover {
+            background-color: #555;
+        }
+
+        /* Estilo de la tabla */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px;
+            background-color: #fff;
+        }
+
+        table,
+        th,
+        td {
+            border: 1px solid #333;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+        }
+
+        /* Estilo de las filas impares */
+        tr:nth-child(odd) {
+            background-color: #f2f2f2;
+        }
+
+        /* Estilo de las filas pares */
+        tr:nth-child(even) {
+            background-color: #fff;
+        }
+
+        /* Estilo de los encabezados de columna */
+        th {
+            background-color: #333;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Lista de Órdenes de Compra</h1>
+    <!--Boton atras-->
+    <a href="orden_compra.html">Volver atrás</a>
+    <!--tabla-->
+    <table border="1" id="orden-compra-table">
+        <tr>
+            <th>Número de Orden</th>
+            <th>Proveedor</th>
+            <th>Fecha</th>
+            <th>Acción</th>
+        </tr>
+    </table>
+
+
+    <script>
+        // Hacer una solicitud al servidor para obtener datos de órdenes de compra
+        fetch('obtener_lista_orden_compra.php')
+            .then(response => response.json())
+            .then(data => {
+                const ordenCompraTable = document.getElementById('orden-compra-table');
+
+                data.forEach(orden => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${orden.id_orden_compra}</td>
+                        <td>${orden.nombre_proveedor}</td>
+                        <td>${orden.fecha}</td>
+                        <td><a href="generar_pdf_orden_compra.php?id=${orden.id_orden_compra}">Generar PDF</a></td>
+                    `;
+
+                    ordenCompraTable.appendChild(row);
+                });
+            })
+            .catch(error => {
+                console.error('Error al recuperar datos de órdenes de compra', error);
+            });
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Registro de Entrega de Cheques a Proveedores</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        form {
+            background-color: #fff;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.2);
+            max-width: 400px;
+            text-align: left;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        label {
+            display: block;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="date"],
+        input[type="submit"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            font-size: 16px;
+        }
+
+        input[type="submit"] {
+            background-color: #333;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        input[type="submit"]:hover {
+            background-color: #555;
+        }
+
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+
+        /* Estilos para los campos requeridos */
+        input:required,
+        textarea:required {
+            border-color: #f44336;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Registro de Entrega de Cheques a Proveedores</h1>
+    <form action="procesar_cheques.php" method="post">
+        
+        <!--Desplegable de proveedores y sript para mostrar en tiempo real(asincrona) lo que hay en la tabla proveedor y selecionarlo-->
+       
+        <label for="proveedor">Proveedor</label>
+        <select name="proveedor" id="proveedor"></select>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function () {
+                // Función para cargar las opciones del proveedor en tiempo real
+                function loadProveedorOptions() {
+                    // Realizar una solicitud Ajax al servidor para obtener los datos de los proveedores
+                    fetch('../menu/select_proveedores.php') // Reemplaza 'obtener_proveedores.php' con la URL de tu servidor
+                        .then(function (response) {
+                            return response.json();
+                        })
+                        .then(function (data) {
+                            var proveedorSelect = document.getElementById('proveedor');
+                            proveedorSelect.innerHTML = ''; // Vacía el select antes de agregar las nuevas opciones
+
+                            var option = document.createElement('option');
+                            option.value = '';
+                            option.text = 'Selecciona un proveedor';
+                            proveedorSelect.appendChild(option);
+
+                            data.forEach(function (proveedor) {
+                                var option = document.createElement('option');
+                                option.value = proveedor.id_proveedor;
+                                option.text = proveedor.nombre;
+                                proveedorSelect.appendChild(option);
+                            });
+                        })
+                        .catch(function (error) {
+                            console.error('Error al cargar proveedores: ', error);
+                        });
+                }
+
+                // Cargar las opciones de proveedor al cargar la página
+                loadProveedorOptions();
+
+                // Puedes llamar a loadProveedorOptions() cuando agregues un nuevo proveedor en tu sistema para actualizar la lista de proveedores en tiempo real.
+            });
+        </script>
+
+        <label for="monto">Monto del Cheque:</label>
+        <input type="number" name="monto" id="monto" required>
+
+        <label for="fecha_entrega">Fecha de Entrega:</label>
+        <input type="date" name="fecha_entrega" id="fecha_entrega" readonly>
+
+        <label for="numero_cheque">Número de Cheque:</label>
+        <input type="text" name="numero_cheque" id="numero_cheque" required>
+
+        <label for="descripcion">Descripción:</label>
+        <textarea name="descripcion" id="descripcion" rows="4" required></textarea>
+
+        <input type="submit" value="Registrar Entrega">
+    </form>
+</body>
+<script>
+    // Obtener el campo de fecha por su ID
+    const fechaEntregaInput = document.getElementById('fecha_entrega');
+
+    // Obtener la fecha actual
+    const fechaActual = new Date();
+
+    // Formatear la fecha en el formato YYYY-MM-DD
+    const formattedFechaActual = fechaActual.toISOString().split('T')[0];
+
+    // Establecer la fecha actual como valor predeterminado del campo de fecha
+    fechaEntregaInput.value = formattedFechaActual;
+</script>
+
+</html>
