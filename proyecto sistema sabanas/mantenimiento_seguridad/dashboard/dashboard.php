@@ -13,7 +13,7 @@ $rol = $_SESSION['rol']; // Acceder al rol del usuario
 <html>
 
 <head>
-    <title>Dashboard</title>
+    <title>Dashboard Global</title>
     <link rel="stylesheet" href="styles.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
