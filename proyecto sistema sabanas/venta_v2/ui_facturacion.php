@@ -10,7 +10,7 @@
             body {
                 font-family: Arial, sans-serif;
                 background-color: #f9f9f9;
-              
+
             }
 
             .container {
@@ -91,12 +91,12 @@
                 cursor: pointer;
             }
         </style>
-        
+
         <script src="navbar.js"></script>
     </head>
 
     <body>
-    <div id="navbar-container"></div>
+        <div id="navbar-container"></div>
 
         <div id="modalNuevoCliente" class="modal" style="display: none;">
             <div class="modal-content">
@@ -130,25 +130,29 @@
             <div class="venta-cabecera">
                 <h2>Información de la Venta</h2>
                 <form id="formVentaCabecera">
+                    <!-- Cliente -->
                     <div>
                         <label for="cliente">Cliente:</label>
-
                         <div class="autocomplete">
                             <input type="text" id="buscarCliente" placeholder="Buscar por nombre, apellido o RUC/CI...">
                             <ul id="listaSugerencias"></ul>
-
                         </div>
-
-
                         <button type="button" id="btnNuevoCliente">+ Nuevo Cliente</button>
-
                     </div>
 
+                    <!-- Nota de crédito -->
+                    <div>
+                        <label for="nota_credito_id">Número de Nota de Crédito:</label>
+                        <input type="text" id="nota_credito_id" name="nota_credito_id" placeholder="Ingrese el número de la nota de crédito">
+                    </div>
+
+                    <!-- Fecha de venta -->
                     <div>
                         <label for="fecha_venta">Fecha de Venta:</label>
                         <input type="date" id="fecha_venta" name="fecha_venta" value="<?= date('Y-m-d') ?>" required>
                     </div>
 
+                    <!-- Forma de pago -->
                     <div>
                         <label for="forma_pago">Forma de Pago:</label>
                         <select id="forma_pago" name="forma_pago" required>
@@ -159,13 +163,14 @@
                         </select>
                     </div>
 
-                    <!-- Si se elige 'Cuotas', se habilita este campo -->
+                    <!-- Campo de cuotas -->
                     <div id="campoCuotas" style="display: none;">
                         <label for="cantidad_cuotas">Cantidad de Cuotas:</label>
                         <input type="number" id="cantidad_cuotas" name="cantidad_cuotas" min="1" value="1">
                     </div>
                 </form>
             </div>
+
 
             <!-- Detalle de la Venta -->
             <div>
@@ -453,7 +458,9 @@
                         fecha_venta: document.getElementById('fecha_venta')?.value || "",
                         forma_pago: document.getElementById('forma_pago')?.value || "",
                         cantidad_cuotas: document.getElementById('cantidad_cuotas')?.value || null,
+                        nota_credito_id: document.getElementById('nota_credito_id')?.value || null, // Capturar el valor del campo nota de crédito
                     };
+
 
                     // Obtener los datos del detalle desde el campo oculto
                     const detalle = JSON.parse(document.getElementById('idsProductosSeleccionados').value || "[]");

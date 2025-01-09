@@ -37,6 +37,7 @@ $cliente_id = (int) $data['cabecera']['id_cliente'];
 $forma_pago = $data['cabecera']['forma_pago'];
 $cuotas = (int) $data['cabecera']['cantidad_cuotas'];
 $fecha = $data['cabecera']['fecha_venta'];
+$nota_credito_id = isset($data['cabecera']['nota_credito_id']) ? (int) $data['cabecera']['nota_credito_id'] : null;
 
 // Validar el formato de la fecha
 if (!strtotime($fecha)) {
@@ -62,7 +63,7 @@ if ($detalles_pg === false) {
 // Preparar la llamada al SP
 $query = "
     SELECT public.generar_venta(
-        $1, $2, $3, $4::jsonb, $5::timestamp
+        $1, $2, $3, $4::jsonb, $5::timestamp, $6
     ) AS venta_id
 ";
 
@@ -71,7 +72,8 @@ $params = [
     $forma_pago,
     $cuotas,
     $detalles_pg,
-    $fecha
+    $fecha,
+    $nota_credito_id
 ];
 
 // Ejecutar la consulta

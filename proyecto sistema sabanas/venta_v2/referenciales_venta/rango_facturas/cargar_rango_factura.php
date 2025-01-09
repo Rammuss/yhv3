@@ -1,7 +1,6 @@
 <?php
 session_start();
-include '../../conexion/configv2.php'; // Configuración de conexión a PostgreSQL
-
+include '../../../conexion/configv2.php';
 // Configurar el encabezado para JSON
 header('Content-Type: application/json');
 

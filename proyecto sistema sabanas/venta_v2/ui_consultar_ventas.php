@@ -5,8 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buscar Ventas</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
+    <script src="../venta_v2/navbar.js"></script>
+    <link rel="stylesheet" href="../venta_v2/styles_venta.css">
 </head>
 <body>
+<div id="navbar-container"></div>
     <section class="section">
         <div class="container">
             <h1 class="title">Buscar Ventas</h1>
