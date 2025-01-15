@@ -18,7 +18,7 @@ session_start();
         /* General */
         body {
             font-family: Arial, sans-serif;
-            
+
             background-color: #f4f4f9;
         }
 
@@ -160,19 +160,24 @@ session_start();
             <span class="close" id="closeModal">&times;</span>
             <h2>Pre-Arqueo de Caja</h2>
             <p>Monto Inicial: <span id="montoInicial"></span></p>
-            <p>Ventas en Efectivo del Día: <span id="ventasEfectivo"></span></p>
+            <p>Total Ventas: <span id="ventasEfectivo"></span></p>
             <p>Monto Esperado: <span id="montoEsperado"></span></p>
+            <h3>Detalle de Métodos de Pago</h3>
+            <ul id="metodosPagoList"></ul>
+            <h3>Notas de Crédito</h3>
+            <p>Total Notas de Crédito: <span id="totalNotasCredito"></span></p>
         </div>
     </div>
+
+
+
     <script>
         document.addEventListener("DOMContentLoaded", function() {
-            // Manejar clic en el botón de Pre-Arqueo
             const btnPreArqueo = document.getElementById("btnPreArqueo");
             const modalPreArqueo = document.getElementById("modalPreArqueo");
             const closeModal = document.getElementById("closeModal");
 
             btnPreArqueo.addEventListener("click", function() {
-                // Crear la solicitud AJAX
                 fetch("../venta_v2/calcular_pre_arqueo.php", {
                         method: "POST",
                         headers: {
@@ -184,19 +189,40 @@ session_start();
                         if (data.error) {
                             alert(data.error);
                         } else {
-                            // Mostrar los datos en el modal
+                            // Mostrar los datos principales
                             document.getElementById("montoInicial").textContent =
                                 data.monto_inicial.toLocaleString('es-ES', {
                                     style: 'currency',
                                     currency: 'PYG'
                                 });
+
                             document.getElementById("ventasEfectivo").textContent =
-                                data.total_ventas_efectivo.toLocaleString('es-ES', {
+                                data.total_ventas.toLocaleString('es-ES', {
                                     style: 'currency',
                                     currency: 'PYG'
                                 });
+
                             document.getElementById("montoEsperado").textContent =
                                 data.monto_esperado.toLocaleString('es-ES', {
+                                    style: 'currency',
+                                    currency: 'PYG'
+                                });
+
+                            // Construir la lista de métodos de pago
+                            const metodosPagoList = document.getElementById("metodosPagoList");
+                            metodosPagoList.innerHTML = ""; // Limpiar contenido previo
+                            for (const [metodo, total] of Object.entries(data.metodos_pago)) {
+                                const li = document.createElement("li");
+                                li.textContent = `${metodo.charAt(0).toUpperCase() + metodo.slice(1)}: ${total.toLocaleString('es-ES', {
+                        style: 'currency',
+                        currency: 'PYG'
+                    })}`;
+                                metodosPagoList.appendChild(li);
+                            }
+
+                            // Mostrar total de notas de crédito
+                            document.getElementById("totalNotasCredito").textContent =
+                                data.total_notas_credito.toLocaleString('es-ES', {
                                     style: 'currency',
                                     currency: 'PYG'
                                 });
@@ -211,7 +237,6 @@ session_start();
                     });
             });
 
-            // Manejar el cierre del modal
             closeModal.addEventListener("click", function() {
                 modalPreArqueo.style.display = "none";
             });

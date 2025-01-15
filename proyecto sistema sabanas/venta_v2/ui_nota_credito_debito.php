@@ -7,6 +7,8 @@
     <title>Gestión de Notas</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma/css/bulma.min.css">
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <script src="../venta_v2/navbar.js"></script>
+    <link rel="stylesheet" href="../venta_v2/styles_venta.css">
     <style>
         .tab-content {
             display: none;
@@ -19,6 +21,7 @@
 </head>
 
 <body>
+    <div id="navbar-container"></div>
     <section class="section">
         <div class="container">
             <h1 class="title">Gestión de Notas de Crédito y Débito</h1>
@@ -478,51 +481,51 @@
 
 
         function buscarNotas() {
-    const numeroNota = document.getElementById('numero-nota').value.trim();
-    const numeroFactura = document.getElementById('numero-factura-nota').value.trim();
-    const fechaNota = document.getElementById('fecha-nota').value.trim();
-    const ciRucNota = document.getElementById('ci-ruc-nota').value.trim();
-    const tipo = document.getElementById('tipo-nota').value.trim(); // Nuevo campo tipo
+            const numeroNota = document.getElementById('numero-nota').value.trim();
+            const numeroFactura = document.getElementById('numero-factura-nota').value.trim();
+            const fechaNota = document.getElementById('fecha-nota').value.trim();
+            const ciRucNota = document.getElementById('ci-ruc-nota').value.trim();
+            const tipo = document.getElementById('tipo-nota').value.trim(); // Nuevo campo tipo
 
-    // Validar que al menos un campo tenga un valor
-    if (!numeroNota && !numeroFactura && !fechaNota && !ciRucNota && !tipo) {
-        alert('Por favor, ingrese al menos un criterio de búsqueda.');
-        return;
-    }
-
-    // Mostrar un indicador de carga (opcional)
-    const tableBody = document.getElementById('notas-table-body');
-    tableBody.innerHTML = '<tr><td colspan="8">Cargando...</td></tr>';
-
-    // Realizar la solicitud al servidor
-    fetch('../venta_v2/buscar_nota_deb_cred_venta.php', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                numeroNota,
-                numeroFactura,
-                fechaNota,
-                ciRucNota,
-                tipo // Incluir tipo en la solicitud
-            }),
-        })
-        .then((response) => {
-            if (!response.ok) {
-                throw new Error('Error en la solicitud al servidor.');
+            // Validar que al menos un campo tenga un valor
+            if (!numeroNota && !numeroFactura && !fechaNota && !ciRucNota && !tipo) {
+                alert('Por favor, ingrese al menos un criterio de búsqueda.');
+                return;
             }
-            return response.json();
-        })
-        .then((data) => {
-            tableBody.innerHTML = '';
 
-            if (data.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="8">No se encontraron resultados.</td></tr>';
-            } else {
-                data.forEach((nota) => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
+            // Mostrar un indicador de carga (opcional)
+            const tableBody = document.getElementById('notas-table-body');
+            tableBody.innerHTML = '<tr><td colspan="8">Cargando...</td></tr>';
+
+            // Realizar la solicitud al servidor
+            fetch('../venta_v2/buscar_nota_deb_cred_venta.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        numeroNota,
+                        numeroFactura,
+                        fechaNota,
+                        ciRucNota,
+                        tipo // Incluir tipo en la solicitud
+                    }),
+                })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error('Error en la solicitud al servidor.');
+                    }
+                    return response.json();
+                })
+                .then((data) => {
+                    tableBody.innerHTML = '';
+
+                    if (data.length === 0) {
+                        tableBody.innerHTML = '<tr><td colspan="8">No se encontraron resultados.</td></tr>';
+                    } else {
+                        data.forEach((nota) => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
                         <td>${nota.id_nota}</td>
                         <td>${nota.numero_factura}</td>
                         <td>${nota.cliente_nombre}</td>
@@ -533,21 +536,20 @@
                         <td>${nota.tipo}</td>
                         <td><button class="button is-info" onclick="enviarNota(${nota.id_nota})">Ver nota</button></td> <!-- Botón para enviar nota -->
                     `;
-                    tableBody.appendChild(row);
+                            tableBody.appendChild(row);
+                        });
+                    }
+                })
+                .catch((error) => {
+                    tableBody.innerHTML = '<tr><td colspan="8">Error al cargar datos.</td></tr>';
+                    console.error('Error:', error);
                 });
-            }
-        })
-        .catch((error) => {
-            tableBody.innerHTML = '<tr><td colspan="8">Error al cargar datos.</td></tr>';
-            console.error('Error:', error);
-        });
-}
+        }
 
-// Función para enviar la nota
-function enviarNota(id_nota) {
-    window.location.href = `../venta_v2/genera_pdf_notadebcred.php?nota_id=${id_nota}`;
-}
-
+        // Función para enviar la nota
+        function enviarNota(id_nota) {
+            window.location.href = `../venta_v2/genera_pdf_notadebcred.php?nota_id=${id_nota}`;
+        }
     </script>
 
 

@@ -10,6 +10,7 @@ $data = json_decode(file_get_contents('php://input'), true);
 $fecha = $data['fecha'] ?? null;
 $numero_factura = $data['numero_factura'] ?? null;
 $ruc_ci = $data['ruc_ci'] ?? null;
+$estado = $data['estado'] ?? null; // Obtener el estado desde el frontend (pendiente, pagado, anulado)
 
 // Construir la consulta SQL base
 $query = "SELECT 
@@ -35,8 +36,15 @@ if (!empty($numero_factura)) {
     $query .= " AND v.numero_factura = '$numero_factura'";
 }
 if (!empty($ruc_ci)) {
-    $query .= " AND c.ruc_ci = '$ruc_ci' ORDER BY v.fecha DESC"; // Ordenar por fecha más reciente
+    $query .= " AND c.ruc_ci = '$ruc_ci'";
 }
+if (!empty($estado)) {
+    // Filtrar por estado si se ha recibido un valor
+    $query .= " AND v.estado = '$estado'";
+}
+
+// Ordenar por fecha descendente
+$query .= " ORDER BY v.fecha DESC";
 
 // Ejecutar la consulta
 $result = pg_query($conn, $query);
