@@ -12,7 +12,7 @@
             <h1 class="title">Generar Órdenes de Pago</h1>
             <h2 class="subtitle">Selecciona las facturas pendientes de pago y genera una orden de pago.</h2>
 
-            <!-- Formulario para seleccionar facturas -->
+            <!-- Formulario para seleccionar facturas y método de pago -->
             <form id="formulario-orden-pago">
                 <!-- Lista de facturas pendientes -->
                 <div class="field">
@@ -22,6 +22,44 @@
                             <select id="facturas-pendientes" multiple>
                                 <!-- Las facturas se cargarán dinámicamente desde JavaScript -->
                             </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selección de método de pago -->
+                <div class="field">
+                    <label class="label">Método de Pago</label>
+                    <div class="control">
+                        <div class="select">
+                            <select id="metodo-pago" required onchange="mostrarCamposCheque()">
+                                <option value="transferencia">Transferencia Bancaria</option>
+                                <option value="cheque">Cheque</option>
+                                <option value="efectivo">Efectivo</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Campos adicionales para cheques (ocultos por defecto) -->
+                <div id="campos-cheque" style="display: none;">
+                    <div class="field">
+                        <label class="label">Fecha del Cheque</label>
+                        <div class="control">
+                            <input class="input" type="date" id="fecha-cheque">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="label">Monto del Cheque</label>
+                        <div class="control">
+                            <input class="input" type="number" id="monto-cheque" placeholder="Monto del cheque">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="label">Número del Cheque</label>
+                        <div class="control">
+                            <input class="input" type="text" id="numero-cheque" placeholder="Número del cheque">
                         </div>
                     </div>
                 </div>

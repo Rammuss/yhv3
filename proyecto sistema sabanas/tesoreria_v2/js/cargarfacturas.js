@@ -1,208 +1,240 @@
-// Función para calcular el IVA según la categoría del proveedor
-function calcularIVA(monto, iva, categoriaProveedor) {
-    switch (categoriaProveedor) {
-        case 'general':
-            return monto * (iva / 100);
-        case 'reducido':
-            return monto * (10.5 / 100); // IVA reducido del 10.5%
-        case 'exento':
-            return 0; // Exento de IVA
-        default:
-            return 0; // Por defecto, no se aplica IVA
-    }
-}
-
-// Función para validar los datos del formulario
-function validarDatos(proveedor, monto, fecha, iva, categoriaProveedor) {
-    if (!proveedor || !monto || !fecha || !iva || !categoriaProveedor) {
-        alert("Todos los campos son obligatorios.");
-        return false;
-    }
-    if (isNaN(monto) || monto <= 0) {
-        alert("El monto debe ser un número positivo.");
-        return false;
-    }
-    return true;
-}
-
-// Función para manejar el envío del formulario
-function manejarEnvioFormulario(event) {
-    event.preventDefault();
-
-    // Obtener los valores del formulario
-    const proveedor = document.getElementById('proveedor').value;
-    const monto = parseFloat(document.getElementById('monto').value);
-    const fecha = document.getElementById('fecha').value;
-    const iva = parseFloat(document.getElementById('iva').value);
-    const categoriaProveedor = document.getElementById('categoria-proveedor').value;
-
-    // Validar los datos
-    if (!validarDatos(proveedor, monto, fecha, iva, categoriaProveedor)) {
-        return;
-    }
-
-    // Calcular el IVA
-    const ivaCalculado = calcularIVA(monto, iva, categoriaProveedor);
-
-    // Mostrar los resultados (simulación de guardado en base de datos)
-    alert(`Factura guardada:\n
-           Proveedor: ${proveedor}\n
-           Monto: ${monto}\n
-           Fecha: ${fecha}\n
-           IVA Calculado: ${ivaCalculado}\n
-           Categoría: ${categoriaProveedor}`);
-
-    // Aquí podrías enviar los datos a un backend para guardarlos en la base de datos
-    // enviarDatosAlBackend({ proveedor, monto, fecha, ivaCalculado, categoriaProveedor });
-}
-
-// Función para inicializar el formulario
-function inicializarFormulario() {
-    const formulario = document.getElementById('formulario-factura');
-    if (formulario) {
-        formulario.addEventListener('submit', manejarEnvioFormulario);
-    }
-}
-
-// Datos simulados de productos (podrían venir de una base de datos)
-const productos = [
-    { id: 1, nombre: "Producto A", precio: 1000, iva: 21 },
-    { id: 2, nombre: "Producto B", precio: 2000, iva: 10.5 },
-    { id: 3, nombre: "Producto C", precio: 1500, iva: 0 },
-];
-
-// Variables globales
-let productosAgregados = [];
-
-// Función para cargar los detalles del producto seleccionado
-function cargarProducto() {
-    const productoSelect = document.getElementById('producto');
-    const producto = productoSelect.options[productoSelect.selectedIndex];
-    const precio = producto.getAttribute('data-precio');
-    const iva = producto.getAttribute('data-iva');
-
-    // Autocompletar campos en el formulario
-    document.getElementById('precio').value = precio;
-    document.getElementById('iva').value = iva;
-}
-
 // Función para agregar un producto a la tabla
 function agregarProducto() {
-    const productoSelect = document.getElementById('producto');
-    const cantidadInput = document.getElementById('cantidad');
-    const descuentoInput = document.getElementById('descuento');
+    const nombre = document.getElementById('nombre-producto').value;
+    const precio = parseFloat(document.getElementById('precio-unitario').value);
+    const cantidad = parseInt(document.getElementById('cantidad').value);
+    const tipoIva = parseInt(document.getElementById('tipo-iva').value);
+    const descuento = parseFloat(document.getElementById('descuento').value) || 0;
 
-    const productoId = productoSelect.value;
-    const cantidad = parseInt(cantidadInput.value);
-    const descuento = parseFloat(descuentoInput.value) || 0;
-
-    if (!productoId || cantidad <= 0) {
-        alert("Selecciona un producto y una cantidad válida.");
+    // Validar campos
+    if (!nombre || !precio || !cantidad) {
+        alert("Por favor, complete todos los campos obligatorios.");
         return;
     }
 
-    // Buscar el producto en la lista de productos
-    const producto = productos.find(p => p.id == productoId);
+    // Calcular subtotal y total por ítem
+    const subtotal = (precio * cantidad) - descuento;
+    const iva = (tipoIva === 5) ? subtotal * 0.05 : subtotal * 0.10;
+    const totalItem = subtotal + iva;
 
-    // Calcular subtotal, IVA y total por ítem
-    const subtotal = producto.precio * cantidad;
-    const iva = (subtotal * producto.iva) / 100;
-    const totalItem = subtotal - descuento + iva;
-
-    // Agregar el producto a la lista
-    productosAgregados.push({
-        ...producto,
-        cantidad,
-        descuento,
-        subtotal,
-        iva,
-        totalItem,
-    });
-
-    // Actualizar la tabla y los totales
-    actualizarTablaProductos();
-    calcularTotales();
-
-    // Limpiar campos
-    productoSelect.selectedIndex = 0;
-    cantidadInput.value = "";
-    descuentoInput.value = "";
-}
-
-// Función para actualizar la tabla de productos
-function actualizarTablaProductos() {
+    // Agregar fila a la tabla
     const tabla = document.getElementById('tabla-productos');
-    tabla.innerHTML = "";
+    const fila = tabla.insertRow();
 
-    productosAgregados.forEach((producto, index) => {
-        const fila = document.createElement('tr');
-        fila.innerHTML = `
-            <td>${producto.nombre}</td>
-            <td>${producto.precio}</td>
-            <td>${producto.cantidad}</td>
-            <td>${producto.iva}%</td>
-            <td>${producto.descuento}</td>
-            <td>${producto.subtotal}</td>
-            <td>${producto.totalItem}</td>
-            <td><button class="button is-danger" onclick="eliminarProducto(${index})">Eliminar</button></td>
-        `;
-        tabla.appendChild(fila);
+    fila.innerHTML = `
+        <td>${nombre}</td>
+        <td>${precio.toFixed(2)}</td>
+        <td>${cantidad}</td>
+        <td>${tipoIva === 5 ? iva.toFixed(2) : '0.00'}</td>
+        <td>${tipoIva === 10 ? iva.toFixed(2) : '0.00'}</td>
+        <td>${descuento.toFixed(2)}</td>
+        <td>${subtotal.toFixed(2)}</td>
+        <td>${totalItem.toFixed(2)}</td>
+        <td><button class="button is-danger" onclick="eliminarProducto(this)">Eliminar</button></td>
+    `;
+
+    // Calcular montos totales
+    calcularMontos();
+
+    // Limpiar campos del formulario
+    document.getElementById('nombre-producto').value = '';
+    document.getElementById('precio-unitario').value = '';
+    document.getElementById('cantidad').value = '';
+    document.getElementById('descuento').value = '';
+}
+
+// Función para eliminar un producto de la tabla
+function eliminarProducto(boton) {
+    const fila = boton.closest('tr');
+    fila.remove();
+    calcularMontos(); // Recalcular montos después de eliminar
+}
+
+// Función para calcular los montos totales
+function calcularMontos() {
+    const filas = document.querySelectorAll('#tabla-productos tr');
+    let iva5 = 0;
+    let iva10 = 0;
+    let montoTotal = 0;
+
+    filas.forEach(fila => {
+        const iva5Valor = parseFloat(fila.cells[3].textContent) || 0;
+        const iva10Valor = parseFloat(fila.cells[4].textContent) || 0;
+        const totalItem = parseFloat(fila.cells[7].textContent) || 0;
+
+        iva5 += iva5Valor;
+        iva10 += iva10Valor;
+        montoTotal += totalItem;
     });
+
+    // Actualizar los campos de totales
+    document.getElementById('iva-5').value = iva5.toFixed(2);
+    document.getElementById('iva-10').value = iva10.toFixed(2);
+    document.getElementById('monto-total').value = montoTotal.toFixed(2);
 }
 
-// Función para eliminar un producto de la lista
-function eliminarProducto(index) {
-    productosAgregados.splice(index, 1);
-    actualizarTablaProductos();
-    calcularTotales();
+
+// Para buscar proveedor 
+
+
+// Función para buscar proveedores en el backend
+async function buscarProveedor() {
+    const input = document.getElementById("buscar-proveedor").value.trim(); // Obtener el valor del campo de búsqueda
+    const lista = document.getElementById("lista-proveedores");
+    lista.innerHTML = ""; // Limpiar la lista de resultados
+
+    if (input.length === 0) {
+        lista.style.display = "none"; // Ocultar la lista si no hay texto en la búsqueda
+        return;
+    }
+
+    try {
+        // Hacer una solicitud GET al backend para buscar proveedores
+        const response = await fetch(`../controlador/buscar_proveedores.php?q=${encodeURIComponent(input)}`);
+        if (!response.ok) {
+            throw new Error("Error al buscar proveedores");
+        }
+
+        const proveedores = await response.json(); // Obtener los resultados en formato JSON
+
+        // Mostrar los resultados en la lista
+        if (proveedores.length > 0) {
+            proveedores.forEach(proveedor => {
+                const item = document.createElement("div");
+                item.textContent = `${proveedor.nombre} (${proveedor.ruc})`;
+                item.onclick = () => seleccionarProveedor(proveedor); // Seleccionar proveedor al hacer clic
+                lista.appendChild(item);
+            });
+            lista.style.display = "block"; // Mostrar la lista
+        } else {
+            lista.style.display = "none"; // Ocultar la lista si no hay resultados
+        }
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Hubo un error al buscar proveedores. Inténtalo de nuevo.");
+    }
 }
 
-// Función para calcular los totales
-function calcularTotales() {
-    const montoNeto = productosAgregados.reduce((sum, p) => sum + p.subtotal, 0);
-    const ivaTotal = productosAgregados.reduce((sum, p) => sum + p.iva, 0);
-    const montoTotal = productosAgregados.reduce((sum, p) => sum + p.totalItem, 0);
-
-    document.getElementById('monto-neto').value = montoNeto;
-    document.getElementById('iva-total').value = ivaTotal;
-    document.getElementById('monto-total').value = montoTotal;
+// Función para seleccionar un proveedor y autocompletar los campos
+function seleccionarProveedor(proveedor) {
+    document.getElementById("proveedor").value = proveedor.nombre; // Autocompletar nombre
+    document.getElementById("ruc-proveedor").value = proveedor.ruc; // Autocompletar RUC
+    document.getElementById("id_proveedor").value = proveedor.id_proveedor; // asignar el id 
+    document.getElementById("lista-proveedores").style.display = "none"; // Ocultar la lista
 }
 
-// Función para manejar el envío del formulario
-document.getElementById('formulario-factura').addEventListener('submit', function (event) {
-    event.preventDefault();
-
-    // Obtener datos del formulario
-    const proveedor = document.getElementById('proveedor').value;
-    const numeroFactura = document.getElementById('numero-factura').value;
-    const fechaEmision = document.getElementById('fecha-emision').value;
-    const tipoFactura = document.getElementById('tipo-factura').value;
-    const moneda = document.getElementById('moneda').value;
-    const condicionPago = document.getElementById('condicion-pago').value;
-    const ordenCompra = document.getElementById('orden-compra').value;
-    const referencia = document.getElementById('referencia').value;
-    const formaPago = document.getElementById('forma-pago').value;
-    const cuentaContable = document.getElementById('cuenta-contable').value;
-    const centroCostos = document.getElementById('centro-costos').value;
-
-    // Mostrar resumen (simulación de guardado)
-    alert(`Factura guardada:\n
-           Proveedor: ${proveedor}\n
-           Número de Factura: ${numeroFactura}\n
-           Fecha de Emisión: ${fechaEmision}\n
-           Tipo de Factura: ${tipoFactura}\n
-           Moneda: ${moneda}\n
-           Condición de Pago: ${condicionPago}\n
-           Orden de Compra: ${ordenCompra}\n
-           Referencia: ${referencia}\n
-           Forma de Pago: ${formaPago}\n
-           Cuenta Contable: ${cuentaContable}\n
-           Centro de Costos: ${centroCostos}\n
-           Monto Neto: ${document.getElementById('monto-neto').value}\n
-           IVA: ${document.getElementById('iva-total').value}\n
-           Monto Total: ${document.getElementById('monto-total').value}`);
+// Ocultar la lista de resultados al hacer clic fuera de ella
+document.addEventListener("click", (event) => {
+    const lista = document.getElementById("lista-proveedores");
+    if (event.target.id !== "buscar-proveedor") {
+        lista.style.display = "none";
+    }
 });
 
-// Inicializar el formulario cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', inicializarFormulario);
 
+// ENVIAR FORM
+
+
+
+// Función para enviar los datos al backend
+async function enviarFactura() {
+    // Obtener los datos de la cabecera de la factura
+    const cabecera = {
+        numero_factura: document.getElementById("numero-factura").value,
+        id_proveedor: document.getElementById("id_proveedor").value, // Asumo que el RUC es el ID del proveedor
+        fecha_emision: document.getElementById("fecha-emision").value,
+        iva_5: parseFloat(document.getElementById("iva-5").value || 0),
+        iva_10: parseFloat(document.getElementById("iva-10").value || 0),
+        descuento: parseFloat(document.getElementById("descuento").value || 0),
+        total: parseFloat(document.getElementById("monto-total").value || 0),
+        estado_pago: "Pendiente", // Estado por defecto
+        id_usuario_creacion: 1, // Aquí debes obtener el ID del usuario logueado
+    };
+
+    // Obtener los detalles de los productos agregados
+    const detalles = [];
+    const filas = document.querySelectorAll("#tabla-productos tr");
+    filas.forEach(fila => {
+        const celdas = fila.querySelectorAll("td");
+        if (celdas.length > 0) {
+            detalles.push({
+                descripcion: celdas[0].textContent, // Nombre del producto
+                cantidad: parseFloat(celdas[2].textContent), // Cantidad
+                precio_unitario: parseFloat(celdas[1].textContent), // Precio unitario
+            });
+        }
+    });
+
+    // Crear el objeto final para enviar al backend
+    const factura = {
+        ...cabecera,
+        detalles: detalles,
+    };
+
+    try {
+        // Enviar los datos al backend usando fetch
+        const response = await fetch("../controlador/registrar_factura.php", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(factura),
+        });
+
+        if (!response.ok) {
+            throw new Error("Error al enviar la factura");
+        }
+
+        const data = await response.json();
+        if (data.success) {
+            mostrarToast("Factura guardada correctamente", true); // Toast de éxito
+            // Limpiar el formulario después de guardar
+            document.getElementById("formulario-factura").reset();
+            document.getElementById("tabla-productos").innerHTML = "";
+        } else {
+            mostrarToast("Error: " + data.error, false); // Toast de error
+        }
+    } catch (error) {
+        console.error("Error:", error);
+        alert("Hubo un error al guardar la factura. Inténtalo de nuevo.");
+    }
+}
+
+// Asignar la función al evento submit del formulario
+document.getElementById("formulario-factura").addEventListener("submit", function (event) {
+    event.preventDefault(); // Evitar que el formulario se envíe de forma tradicional
+    enviarFactura(); // Llamar a la función para enviar los datos
+});
+
+
+
+// PARA EL TOAST MENSAJITO 
+// Función para mostrar el toast
+function mostrarToast(mensaje, esExito = true) {
+    const toast = document.getElementById("toast");
+    const mensajeToast = document.getElementById("mensaje-toast");
+    const notificacion = toast.querySelector(".notification");
+
+    // Configurar el mensaje y el estilo del toast
+    mensajeToast.textContent = mensaje;
+    toast.classList.remove("is-hidden");
+
+    if (esExito) {
+        notificacion.classList.remove("is-danger");
+        notificacion.classList.add("is-success");
+    } else {
+        notificacion.classList.remove("is-success");
+        notificacion.classList.add("is-danger");
+    }
+
+    // Ocultar el toast después de 5 segundos
+    setTimeout(() => {
+        toast.classList.add("is-hidden");
+    }, 5000);
+}
+
+// Función para cerrar el toast manualmente
+function cerrarToast() {
+    const toast = document.getElementById("toast");
+    toast.classList.add("is-hidden");
+}

@@ -80,6 +80,8 @@
                         <th>Fecha</th>
                         <th>Monto Total</th>
                         <th>Estado</th>
+                        <th>Provisionada</th>
+                        <th>Iva generado</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
@@ -90,6 +92,6 @@
         </div>
     </section>
 
-    <script src="listaFacturas.js"></script>
+    <script src="../js/listaFacturas.js"></script>
 </body>
 </html>
