@@ -3,84 +3,126 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generar Órdenes de Pago</title>
+    <title>Generar Orden de Pago</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <style>
+        #campos_cheque {
+            display: none; /* Oculto por defecto */
+        }
+        #factura_seleccionada {
+            display: none; /* Oculto hasta que se seleccione una factura */
+        }
+    </style>
 </head>
 <body>
     <section class="section">
         <div class="container">
-            <h1 class="title">Generar Órdenes de Pago</h1>
-            <h2 class="subtitle">Selecciona las facturas pendientes de pago y genera una orden de pago.</h2>
-
-            <!-- Formulario para seleccionar facturas y método de pago -->
-            <form id="formulario-orden-pago">
-                <!-- Lista de facturas pendientes -->
+            <h1 class="title">Generar Orden de Pago</h1>
+            <form id="ordenPagoForm" class="box">
+                <!-- Campos de búsqueda -->
                 <div class="field">
-                    <label class="label">Facturas Pendientes</label>
+                    <label class="label" for="numero_factura">Número de Factura</label>
                     <div class="control">
-                        <div class="select is-multiple">
-                            <select id="facturas-pendientes" multiple>
-                                <!-- Las facturas se cargarán dinámicamente desde JavaScript -->
-                            </select>
-                        </div>
+                        <input class="input" type="text" id="numero_factura" name="numero_factura" placeholder="Número de factura">
                     </div>
                 </div>
 
-                <!-- Selección de método de pago -->
                 <div class="field">
-                    <label class="label">Método de Pago</label>
+                    <label class="label" for="ruc">RUC</label>
+                    <div class="control">
+                        <input class="input" type="text" id="ruc" name="ruc" placeholder="RUC de la empresa">
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="fecha">Fecha de Factura</label>
+                    <div class="control">
+                        <input class="input" type="date" id="fecha" name="fecha">
+                    </div>
+                </div>
+
+                <div class="field">
+                    <label class="label" for="estado">Estado</label>
                     <div class="control">
                         <div class="select">
-                            <select id="metodo-pago" required onchange="mostrarCamposCheque()">
-                                <option value="transferencia">Transferencia Bancaria</option>
-                                <option value="cheque">Cheque</option>
-                                <option value="efectivo">Efectivo</option>
+                            <select id="estado" name="estado">
+                                <option value="">Todos</option>
+                                <option value="pendiente">Pendiente</option>
+                                <option value="generado">Generado</option>
                             </select>
                         </div>
                     </div>
                 </div>
 
-                <!-- Campos adicionales para cheques (ocultos por defecto) -->
-                <div id="campos-cheque" style="display: none;">
-                    <div class="field">
-                        <label class="label">Fecha del Cheque</label>
-                        <div class="control">
-                            <input class="input" type="date" id="fecha-cheque">
-                        </div>
+                <div class="field">
+                    <div class="control">
+                        <button type="button" id="buscar" class="button is-primary">Buscar Facturas</button>
                     </div>
+                </div>
 
-                    <div class="field">
-                        <label class="label">Monto del Cheque</label>
-                        <div class="control">
-                            <input class="input" type="number" id="monto-cheque" placeholder="Monto del cheque">
-                        </div>
-                    </div>
+                <!-- Resultados de las facturas -->
+                <div id="resultados_facturas" class="box">
+                    <p class="has-text-centered">Aquí se mostrarán las facturas encontradas.</p>
+                </div>
 
-                    <div class="field">
-                        <label class="label">Número del Cheque</label>
-                        <div class="control">
-                            <input class="input" type="text" id="numero-cheque" placeholder="Número del cheque">
+                <!-- Factura seleccionada -->
+                <div id="factura_seleccionada" class="box">
+                    <h2 class="subtitle">Factura Seleccionada</h2>
+                    <p><strong>Número de Factura:</strong> <span id="factura_numero"></span></p>
+                    <p><strong>RUC:</strong> <span id="factura_ruc"></span></p>
+                    <p><strong>Fecha:</strong> <span id="factura_fecha"></span></p>
+                    <p><strong>Estado:</strong> <span id="factura_estado"></span></p>
+                    <p><strong>Total:</strong> <span id="factura_total"></span></p>
+                </div>
+
+                <hr>
+
+                <!-- Método de pago -->
+                <div class="field">
+                    <label class="label" for="metodo_pago">Método de Pago</label>
+                    <div class="control">
+                        <div class="select">
+                            <select id="metodo_pago" name="metodo_pago">
+                                <option value="cheque">Cheque</option>
+                                <option value="transferencia">Transferencia</option>
+                            </select>
                         </div>
                     </div>
                 </div>
 
-                <!-- Botón para generar la orden de pago -->
+                <!-- Campos de cheque -->
+                <div id="campos_cheque" class="box">
+                    <div class="field">
+                        <label class="label" for="numero_cheque">Número de Cheque</label>
+                        <div class="control">
+                            <input class="input" type="text" id="numero_cheque" name="numero_cheque" placeholder="Número de cheque">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="label" for="monto_cheque">Monto del Cheque</label>
+                        <div class="control">
+                            <input class="input" type="number" id="monto_cheque" name="monto_cheque" placeholder="Monto del cheque" step="0.01">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label class="label" for="fecha_cheque">Fecha del Cheque</label>
+                        <div class="control">
+                            <input class="input" type="date" id="fecha_cheque" name="fecha_cheque">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="field">
                     <div class="control">
-                        <button type="button" class="button is-primary" onclick="generarOrdenPago()">Generar Orden de Pago</button>
+                        <button type="submit" class="button is-success">Generar Orden de Pago</button>
                     </div>
                 </div>
             </form>
-
-            <!-- Botón para generar cheque en PDF (simulado) -->
-            <div class="field">
-                <div class="control">
-                    <button type="button" class="button is-success" onclick="generarChequePDF()">Generar Cheque en PDF</button>
-                </div>
-            </div>
         </div>
     </section>
 
-    <script src="../js/generarOrdenPago.js"></script>
+    <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/js/generarOrdenPago.js"></script>
 </body>
 </html>

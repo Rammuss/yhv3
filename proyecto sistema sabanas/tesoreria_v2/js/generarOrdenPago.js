@@ -1,98 +1,115 @@
-// Datos simulados de facturas pendientes de pago
-const facturasPendientes = [
-    { id: 1, numero: "F-0001", proveedor: "Proveedor A", monto: 1000, fecha: "2023-10-01" },
-    { id: 2, numero: "F-0002", proveedor: "Proveedor B", monto: 2000, fecha: "2023-10-05" },
-    { id: 3, numero: "F-0003", proveedor: "Proveedor C", monto: 1500, fecha: "2023-10-10" },
-];
-
-// Datos simulados de órdenes de pago
-let ordenesPago = [];
-
-// Función para cargar las facturas pendientes en el formulario
-function cargarFacturasPendientes() {
-    const select = document.getElementById('facturas-pendientes');
-    facturasPendientes.forEach(factura => {
-        const option = document.createElement('option');
-        option.value = factura.id;
-        option.textContent = `Factura #${factura.numero} - ${factura.proveedor} - $${factura.monto}`;
-        select.appendChild(option);
-    });
-}
-
-// Función para mostrar u ocultar los campos de cheque
-function mostrarCamposCheque() {
-    const metodoPago = document.getElementById('metodo-pago').value;
-    const camposCheque = document.getElementById('campos-cheque');
+// Mostrar u ocultar campos de cheque según el método de pago
+document.getElementById("metodo_pago").addEventListener("change", (event) => {
+    const metodoPago = event.target.value;
+    const camposCheque = document.getElementById("campos_cheque");
 
     if (metodoPago === "cheque") {
         camposCheque.style.display = "block";
     } else {
         camposCheque.style.display = "none";
     }
-}
+});
 
-// Función para generar la orden de pago
-function generarOrdenPago() {
-    const select = document.getElementById('facturas-pendientes');
-    const metodoPago = document.getElementById('metodo-pago').value;
+// Buscar facturas al presionar el botón de búsqueda
+document.getElementById("buscar").addEventListener("click", async () => {
+    const numeroFactura = document.getElementById("numero_factura").value.trim();
+    const ruc = document.getElementById("ruc").value.trim();
+    const fecha = document.getElementById("fecha").value.trim();
+    const estado = document.getElementById("estado").value.trim();
 
-    const facturasSeleccionadas = Array.from(select.selectedOptions).map(option => option.value);
+    const resultados = document.getElementById("resultados_facturas");
+    resultados.innerHTML = ""; // Limpiar resultados previos
 
-    if (facturasSeleccionadas.length === 0) {
-        alert("Selecciona al menos una factura para generar la orden de pago.");
-        return;
-    }
+    if (numeroFactura || ruc || fecha || estado) {
+        try {
+            // Crear el payload para enviar como cuerpo de la solicitud POST
+            const payload = {
+                numero_factura: numeroFactura,
+                ruc: ruc,
+                fecha_emision: fecha,
+                estado_pago: estado
+            };
 
-    // Datos adicionales para cheques
-    let datosCheque = {};
-    if (metodoPago === "cheque") {
-        const fechaCheque = document.getElementById('fecha-cheque').value;
-        const montoCheque = document.getElementById('monto-cheque').value;
-        const numeroCheque = document.getElementById('numero-cheque').value;
+            // Realizar la solicitud POST con el payload
+            const response = await fetch("/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/controlador/buscar_factura.php", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
 
-        if (!fechaCheque || !montoCheque || !numeroCheque) {
-            alert("Completa todos los campos del cheque.");
-            return;
+            if (!response.ok) {
+                throw new Error("Error al buscar las facturas");
+            }
+
+            const data = await response.json();
+
+            if (data.length > 0) {
+                // Construir la tabla con los resultados
+                resultados.innerHTML = `
+                    <table class="table is-fullwidth is-striped">
+                        <thead>
+                            <tr>
+                                <th>Número de Factura</th>
+                                <th>RUC</th>
+                                <th>Fecha</th>
+                                <th>Estado</th>
+                                <th>Total</th>
+                                <th>Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data
+                                .map(
+                                    (factura) => `
+                                <tr>
+                                    <td>${factura.numero_factura}</td>
+                                    <td>${factura.id_proveedor}</td>
+                                    <td>${factura.fecha_emision}</td>
+                                    <td>${factura.estado_pago}</td>
+                                    <td>${factura.total} Gs.</td>
+                                    <td><button class="button is-small is-info seleccionar-factura" data-id="${factura.id_factura}">Seleccionar</button></td>
+                                </tr>
+                            `
+                                )
+                                .join("")}
+                        </tbody>
+                    </table>
+                `;
+
+                // Agregar eventos a los botones "Seleccionar"
+                document.querySelectorAll(".seleccionar-factura").forEach((boton) => {
+                    boton.addEventListener("click", (event) => {
+                        const facturaSeleccionada = data.find(
+                            (factura) => factura.id_factura === parseInt(event.target.dataset.id)
+                        );
+                        seleccionarFactura(
+                            facturaSeleccionada.numero_factura,
+                            facturaSeleccionada.id_proveedor,
+                            facturaSeleccionada.fecha_emision,
+                            facturaSeleccionada.estado_pago,
+                            facturaSeleccionada.total
+                        );
+                    });
+                });
+            } else {
+                resultados.innerHTML = `<p class="has-text-centered has-text-danger">No se encontraron facturas con los datos ingresados.</p>`;
+            }
+        } catch (error) {
+            resultados.innerHTML = `<p class="has-text-centered has-text-danger">Error al buscar las facturas: ${error.message}</p>`;
         }
-
-        datosCheque = {
-            fechaCheque,
-            montoCheque,
-            numeroCheque,
-        };
+    } else {
+        resultados.innerHTML = `<p class="has-text-centered has-text-danger">Por favor, ingresa al menos un criterio de búsqueda.</p>`;
     }
+});
 
-    // Crear la orden de pago
-    const ordenPago = {
-        id: Date.now(), // ID único para la orden de pago
-        facturas: facturasSeleccionadas,
-        metodoPago: metodoPago,
-        fecha: new Date().toISOString().split('T')[0], // Fecha actual
-        datosCheque: metodoPago === "cheque" ? datosCheque : null, // Datos del cheque (si aplica)
-    };
-
-    // Agregar la orden de pago a la lista
-    ordenesPago.push(ordenPago);
-
-    alert(`Orden de pago generada:\n
-           ID: ${ordenPago.id}\n
-           Facturas: ${ordenPago.facturas.join(', ')}\n
-           Método de Pago: ${ordenPago.metodoPago}\n
-           Fecha: ${ordenPago.fecha}\n
-           ${ordenPago.metodoPago === "cheque" ? `Datos del Cheque:\n
-           Fecha: ${ordenPago.datosCheque.fechaCheque}\n
-           Monto: $${ordenPago.datosCheque.montoCheque}\n
-           Número: ${ordenPago.datosCheque.numeroCheque}` : ''}`);
-
-    // Aquí podrías enviar los datos a un backend para guardar en la base de datos
-    // enviarDatosAlBackend(ordenPago);
+// Mostrar la factura seleccionada
+function seleccionarFactura(numero, ruc, fecha, estado, total) {
+    document.getElementById("factura_seleccionada").style.display = "block";
+    document.getElementById("factura_numero").textContent = numero;
+    document.getElementById("factura_ruc").textContent = ruc;
+    document.getElementById("factura_fecha").textContent = fecha;
+    document.getElementById("factura_estado").textContent = estado;
+    document.getElementById("factura_total").textContent = total;
 }
-
-// Función para simular la generación de un cheque en PDF
-function generarChequePDF() {
-    alert("Generando cheque en PDF... (esto es una simulación)");
-    // En un entorno real, usarías una biblioteca como FPDF o jsPDF para generar el PDF.
-}
-
-// Cargar las facturas pendientes al iniciar la página
-document.addEventListener('DOMContentLoaded', cargarFacturasPendientes);
