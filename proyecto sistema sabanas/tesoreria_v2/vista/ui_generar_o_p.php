@@ -81,8 +81,7 @@
                     <p><strong>Total:</strong> <span id="factura_total"></span></p>
                 </div>
 
-                
-                <input type="hidden" id="id_venta" name="id_venta" value="12345">
+
 
 
                 <!-- Contenedor para mostrar las facturas seleccionadas -->
@@ -91,7 +90,9 @@
                     <table class="table is-fullwidth is-striped">
                         <thead>
                             <tr>
+                                <th>Id factura</th>
                                 <th>Número de Factura</th>
+                                <th>Id Porveedor</th>
                                 <th>RUC</th>
                                 <th>Fecha</th>
                                 <th>Estado</th>
@@ -118,7 +119,6 @@
                             <select id="metodo_pago" name="metodo_pago">
                                 <option value="" selected disabled>Selecciona un método de pago</option> <!-- Opción vacía por defecto -->
                                 <option value="cheque">Cheque</option>
-                                <option value="transferencia">Transferencia</option>
                             </select>
                         </div>
                     </div>
@@ -157,10 +157,10 @@
                 </div>
 
                 <div class="field">
-                    <div class="control">
-                        <button type="submit" class="button is-success">Generar Orden de Pago</button>
-                    </div>
-                </div>
+        <div class="control">
+            <button type="button" class="button is-success" id="generarOrdenPago">Generar Orden de Pago</button>
+        </div>
+    </div>
             </form>
         </div>
     </section>
