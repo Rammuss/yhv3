@@ -15,7 +15,7 @@
         
         <!-- Selección de Proveedor -->
         <div class="field">
-          <label class="label">Proveedor</label>
+          <label class="label">Proveedor tipo ff</label>
           <div class="control">
             <div class="select">
               <select name="proveedor_id" id="proveedorSelect" required>

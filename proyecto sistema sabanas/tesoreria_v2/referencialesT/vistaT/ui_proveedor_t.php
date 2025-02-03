@@ -78,13 +78,20 @@
           </div>
         </div>
 
-        <!-- Tipo (opcional) -->
+        <!-- Tipo de Proveedor -->
         <div class="field">
           <label class="label">Tipo</label>
           <div class="control">
-            <input class="input" type="text" name="tipo" placeholder="Tipo (opcional)">
+            <div class="select">
+              <select name="tipo" id="tipoProveedor">
+                <option value="">Seleccione un tipo</option>
+                <option value="comercial">Comercial</option>
+                <option value="fondo_fijo">Fondo Fijo</option>
+              </select>
+            </div>
           </div>
         </div>
+
 
         <!-- Botón de envío -->
         <div class="field">

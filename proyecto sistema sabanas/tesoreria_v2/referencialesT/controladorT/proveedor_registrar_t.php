@@ -2,7 +2,7 @@
 // register_proveedor.php
 
 header("Content-Type: application/json");
-include "../../conexion"; // Asegúrate de que la ruta sea la correcta
+include "../../../conexion/configv2.php"; // Asegúrate de que la ruta sea la correcta
 
 // Leer la entrada JSON
 $input = file_get_contents('php://input');

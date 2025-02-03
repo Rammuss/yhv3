@@ -1,6 +1,7 @@
 // script.js
 ///ENVIAR EL POST 
 document.getElementById("proveedorForm").addEventListener("submit", function(e) {
+    console.log("Evento submit detectado"); // Verifica si el evento ocurre
     e.preventDefault(); // Evita el envío tradicional del formulario
 
     const form = e.target;
@@ -12,9 +13,9 @@ document.getElementById("proveedorForm").addEventListener("submit", function(e) 
         telefono: form.telefono.value.trim(),
         email: form.email.value.trim(),
         ruc: form.ruc.value.trim(),
-        id_pais: form.id_pais.value ? parseInt(form.id_pais.value) : null,
-        id_ciudad: form.id_ciudad.value ? parseInt(form.id_ciudad.value) : null,
-        tipo: form.tipo.value.trim() ? form.tipo.value.trim() : null
+        id_pais: form.paisSelect.value ? parseInt(form.paisSelect.value) : null,
+        id_ciudad: form.selectCiudad.value ? parseInt(form.selectCiudad.value) : null,
+        tipo: form.tipoProveedor.value.trim() ? form.tipoProveedor.value.trim() : null
     };
 
     // Enviar los datos al backend mediante fetch
