@@ -37,6 +37,7 @@ function buscarProvisiones() {
                 <td>${provision.id_factura}</td>
                 <td>${provision.id_proveedor}</td>
                 <td>${provision.monto_provisionado}</td>
+                <td>${provision.tipo_provision}</td>
                 <td>${provision.estado_provision}</td>
                 <td>${provision.fecha_creacion}</td>
             `;

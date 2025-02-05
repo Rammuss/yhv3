@@ -45,6 +45,7 @@
                         <th>ID Factura</th>
                         <th>ID Proveedor</th>
                         <th>Monto Provisionado</th>
+                        <th>Tipo_provision</th>
                         <th>Estado</th>
                         <th>Fecha Creación</th>
                     </tr>

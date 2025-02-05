@@ -54,7 +54,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     if ($monto_asignado >= $total_rendido) {
         // Caso A: No se excede el fondo fijo
         $esperado = $monto_asignado - $total_rendido; // dinero no gastado, a reponer
-        if (round($monto_repuesto,2) == round($esperado,2)) {
+        if (round($monto_repuesto, 2) == round($esperado, 2)) {
             $estado_reposicion = "Completada";
         } else {
             $estado_reposicion = "Pendiente";
@@ -71,12 +71,16 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $sqlUpdate = "UPDATE reposiciones_ff SET estado = $1 WHERE id = $2";
     pg_query_params($conn, $sqlUpdate, [$estado_reposicion, $reposicion_id]);
     
+    // Si la reposición es completada, actualizamos también la rendición asociada a 'Completada'
+    if ($estado_reposicion === "Completada") {
+        $sqlUpdateRend = "UPDATE rendiciones_ff SET estado = 'Completada' WHERE id = $1";
+        pg_query_params($conn, $sqlUpdateRend, [$rendicion_id]);
+    }
+    
     // En caso de que se haya excedido el fondo fijo (Caso B), generar la cuenta por pagar
     if ($monto_asignado < $total_rendido) {
         // En este caso, se espera que el empleado aporte el excedente, que es:
         $excedente = round($total_rendido - $monto_asignado, 2);
-        // También se podría considerar usar: $excedente = round($monto_repuesto - $excedente, 2) si el usuario aporta más de lo esperado, 
-        // pero aquí se toma el valor "esperado" (la diferencia fija).
         
         // Recuperar id_proveedor de la rendición (a través de asignaciones)
         $sqlProv = "SELECT p.id_proveedor 
