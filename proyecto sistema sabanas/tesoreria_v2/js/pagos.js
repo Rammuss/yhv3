@@ -57,61 +57,77 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Manejo del envío del formulario
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
 
-        // Verificar que se haya seleccionado una orden de pago
-        if (ordenPagoSelect.value === '') {
-            alert("Por favor, seleccione una orden de pago.");
-            return;
-        }
+    // Verificar que se haya seleccionado una orden de pago
+    if (ordenPagoSelect.value === '') {
+        alert("Por favor, seleccione una orden de pago.");
+        return;
+    }
 
-        // Preparar los datos a enviar
-        const formData = {
-            id_orden_pago: parseInt(ordenPagoSelect.value),
-            id_cuenta_bancaria: parseInt(idCuentaBancariaInput.value),
-            monto: parseFloat(montoInput.value),
-            referencia_bancaria: referenciaBancariaInput.value,
-            nombre_beneficiario: nombreBeneficiarioInput.value,
-            metodo_pago: metodoPagoInput.value // Incluir método de pago
-        };
+    // Preparar los datos a enviar
+    const formData = {
+        id_orden_pago: parseInt(ordenPagoSelect.value),
+        id_cuenta_bancaria: parseInt(idCuentaBancariaInput.value),
+        monto: parseFloat(montoInput.value),
+        referencia_bancaria: referenciaBancariaInput.value,
+        nombre_beneficiario: nombreBeneficiarioInput.value,
+        metodo_pago: metodoPagoInput.value // Incluir método de pago ("Cheque", "Transferencia" o "Efectivo")
+    };
 
-        try {
-            // Realizar la petición a la API para registrar el pago
-            const response = await fetch('../controlador/pagos_registrar.php', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
-            });
+    try {
+        // Realizar la petición a la API para registrar el pago
+        const response = await fetch('../controlador/pagos_registrar.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData)
+        });
 
-            const data = await response.json();
+        const data = await response.json();
 
-            if (data.success) {
-                alert("Pago registrado con éxito.");
-                form.reset();
+        if (data.success) {
+            alert("Pago registrado con éxito.");
+            form.reset();
 
-                // Reiniciar los campos de solo lectura
-                idCuentaBancariaInput.value = '';
-                montoInput.value = '';
-                referenciaBancariaInput.value = '';
-                nombreBeneficiarioInput.value = '';
-                metodoPagoInput.value = ''; // Limpiar el campo método de pago
+            // Reiniciar los campos de solo lectura
+            idCuentaBancariaInput.value = '';
+            montoInput.value = '';
+            referenciaBancariaInput.value = '';
+            nombreBeneficiarioInput.value = '';
+            metodoPagoInput.value = ''; // Limpiar el campo método de pago
 
-                // Verificar si se generó un cheque
-                if (data.id_cheque) {
-                    const confirmarImpresion = confirm("El cheque ha sido registrado. ¿Desea imprimirlo?");
-                    if (confirmarImpresion) {
-                        window.location.href = `../controlador/cheque_imprimir.php?id_cheque=${data.id_cheque}`;
+            // Si se generó un cheque, preguntar por impresión
+            if (data.id_cheque) {
+                const confirmarImpresion = confirm("El cheque ha sido registrado. ¿Desea imprimirlo?");
+                if (confirmarImpresion) {
+                    window.location.href = `../controlador/cheque_imprimir.php?id_cheque=${data.id_cheque}`;
+                }
+            }
+            
+            // Para Transferencia y Efectivo, preguntar si desea imprimir el comprobante
+            if (data.imprimir_comprobante) {
+                if (formData.metodo_pago === "Transferencia") {
+                    const confirmarComprobante = confirm("El pago por transferencia ha sido registrado. ¿Desea imprimir el comprobante?");
+                    if (confirmarComprobante) {
+                        window.location.href = `../controlador/transfer_banco_imprimir.php?id_pago=${data.id_pago}`;
+                    }
+                } else if (formData.metodo_pago === "Efectivo") {
+                    const confirmarComprobante = confirm("El pago en efectivo ha sido registrado. ¿Desea imprimir el comprobante?");
+                    if (confirmarComprobante) {
+                        window.location.href = `../controlador/efectivo_comprobante.php?id_pago=${data.id_pago}`;
                     }
                 }
-            } else {
-                alert("Error al registrar el pago: " + data.message);
             }
-        } catch (error) {
-            console.error("Error en la petición:", error);
-            alert("Error en la petición.");
+        } else {
+            alert("Error al registrar el pago: " + data.message);
         }
-    });
+    } catch (error) {
+        console.error("Error en la petición:", error);
+        alert("Error en la petición.");
+    }
+});
+
 
 
     // Cargar las órdenes de pago al iniciar
