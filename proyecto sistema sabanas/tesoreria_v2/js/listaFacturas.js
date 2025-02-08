@@ -92,10 +92,8 @@ document.getElementById("formulario-busqueda").addEventListener("submit", functi
     buscarFacturas(); // Llamar a la función para buscar facturas
 });
 
-//////
-
 // Función para generar una provisión
-async function generarProvision(idFactura) {
+async function generarProvision(idFactura, boton) {
     try {
         // Enviar la solicitud al backend
         const response = await fetch(`/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/controlador/generar_provision.php?id_factura=${idFactura}`);
@@ -105,6 +103,12 @@ async function generarProvision(idFactura) {
         if (data.message) {
             alert(data.message); // Puedes usar un modal o un toast en lugar de un alert
             console.log("Provisión generada:", data.provision);
+
+            // Deshabilitar el botón después de generar la provisión
+            boton.disabled = true;
+            boton.textContent = "Provisionada"; // Cambiar el texto del botón
+            boton.classList.remove("is-success"); // Cambiar el estilo del botón
+            boton.classList.add("is-light"); // Cambiar el estilo del botón
         } else {
             alert("Error al generar la provisión.");
         }
@@ -114,8 +118,6 @@ async function generarProvision(idFactura) {
     }
 }
 
-
-
 // Asignar el evento a la tabla (delegación de eventos)
 document.addEventListener("DOMContentLoaded", function () {
     const tabla = document.getElementById("tabla-facturas");
@@ -124,15 +126,16 @@ document.addEventListener("DOMContentLoaded", function () {
         // Verificar si el clic provino de un botón con la clase "generar-provision"
         if (event.target.classList.contains("generar-provision")) {
             const idFactura = event.target.getAttribute("data-id"); // Obtener el id_factura del atributo data-id
+            const boton = event.target; // Obtener el botón que se hizo clic
+
             if (idFactura) {
-                generarProvision(idFactura); // Llamar a la función para generar la provisión
+                generarProvision(idFactura, boton); // Llamar a la función para generar la provisión
             } else {
                 alert("No se pudo obtener el ID de la factura.");
             }
         }
     });
 });
-
 
 // Función para generar IVA
 async function generarIva(idFactura, boton) {

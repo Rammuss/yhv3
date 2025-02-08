@@ -33,8 +33,8 @@
                                 <div class="select">
                                     <select id="estado-busqueda">
                                         <option value="">Todos</option>
-                                        <option value="pendiente">Pendiente</option>
-                                        <option value="pagada">Pagada</option>
+                                        <option value="Pendiente">Pendiente</option>
+                                        <option value="Pgado">Pagada</option>
                                         <option value="anulada">Anulada</option>
                                     </select>
                                 </div>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,14 +15,25 @@
             cursor: pointer;
             text-align: center;
         }
+
         .btn-imprimir:hover {
             background-color: #45a049;
         }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h2 class="title is-2">Órdenes de Pago</h2>
+        <div class="container is-pulled-right">
+            <label class="label" for="filtroEstado">Filtrar por estado:</label>
+            <select class="select" id="filtroEstado" onchange="cargarOrdenes()">
+                <option value="">Todos</option>
+                <option value="Pendiente">Pendiente</option>
+                <option value="Pagado">Pagado</option>
+                <option value="Anulado">Anulado</option>
+            </select>
+        </div>
 
         <!-- Tabla para mostrar las órdenes de pago -->
         <table class="table is-striped is-fullwidth">
@@ -29,6 +41,7 @@
                 <tr>
                     <th>Orden de Pago</th>
                     <th>Proveedor</th>
+                    <th>Metodo de pago</th>
                     <th>Numero cheque</th>
                     <th>Monto Total</th>
                     <th>Fecha</th>
@@ -44,4 +57,5 @@
 
     <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/js/lista_op_cheque.js"></script>
 </body>
+
 </html>

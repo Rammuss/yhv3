@@ -48,6 +48,7 @@
                         <th>Tipo_provision</th>
                         <th>Estado</th>
                         <th>Fecha Creación</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="resultados">

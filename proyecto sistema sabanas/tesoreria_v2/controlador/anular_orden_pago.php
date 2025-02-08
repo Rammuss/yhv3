@@ -15,7 +15,7 @@ if (isset($_GET['id_orden'])) {
     }
 
     // Actualizar el estado de la orden a 'Anulada'
-    $query = "UPDATE ordenes_pago SET estado = 'Anulada' WHERE id = $1"; // Usar parámetros para evitar inyección SQL
+    $query = "UPDATE ordenes_pago SET estado = 'Anulado' WHERE id_orden_pago = $1"; // Usar parámetros para evitar inyección SQL
     $result = pg_query_params($conn, $query, array($id_orden));
 
     if ($result) {

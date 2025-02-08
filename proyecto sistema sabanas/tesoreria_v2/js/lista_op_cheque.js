@@ -1,60 +1,59 @@
 // Función para cargar las órdenes de pago desde el servidor
 function cargarOrdenes() {
+    const estadoFiltro = document.getElementById("filtroEstado").value; // Obtener el estado seleccionado
+
     fetch('/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/controlador/obtener_ordenes_pago.php', {
         method: 'GET',
-        headers: {
-            'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' }
     })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error('Error al obtener las órdenes de pago');
-        }
-        return response.json();
-    })
-    .then(ordenes => {
-        const tableBody = document.getElementById('ordenesPagoTable');
+        .then(response => {
+            if (!response.ok) throw new Error('Error al obtener las órdenes de pago');
+            return response.json();
+        })
+        .then(ordenes => {
+            const tableBody = document.getElementById('ordenesPagoTable');
+            if (!tableBody) {
+                console.error('Elemento con ID "ordenesPagoTable" no encontrado.');
+                return;
+            }
 
-        if (!tableBody) {
-            console.error('Elemento con ID "ordenesPagoTable" no encontrado.');
-            return;
-        }
+            tableBody.innerHTML = ''; // Limpiar tabla antes de agregar nuevas filas
 
-        tableBody.innerHTML = ''; // Limpiar la tabla antes de agregar nuevas filas
+            // Filtrar las órdenes por estado si se ha seleccionado uno
+            const ordenesFiltradas = estadoFiltro ? ordenes.filter(orden => orden.estado === estadoFiltro) : ordenes;
 
-        if (ordenes.length === 0) {
-            tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay órdenes de pago disponibles</td></tr>';
-            return;
-        }
+            if (ordenesFiltradas.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No hay órdenes de pago disponibles</td></tr>';
+                return;
+            }
 
-        ordenes.forEach(orden => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${orden.id}</td>
+            ordenesFiltradas.forEach(orden => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                <td>${orden.id_orden_pago}</td>
                 <td>${orden.proveedor}</td>
+                <td>${orden.metodo_pago}</td>
                 <td>${orden.numero_cheque ? orden.numero_cheque : 'N/A'}</td>
-                <td>${orden.monto_total}</td>
-                <td>${orden.fecha_orden}</td>
+                <td>${orden.monto}</td>
+                <td>${orden.fecha_creacion}</td>
                 <td>${orden.estado}</td>
                 <td>
-                    <button class="button is-info" onclick="imprimirCheque('${orden.id_cheque}')">
-                        Imprimir Cheque
-                    </button>
-               
-                
-                    <button class="button is-danger" onclick="anularOrden('${orden.id}')">
+                    <button class="button is-danger" onclick="anularOrden('${orden.id_orden_pago}')"
+                        ${orden.estado === "Anulado" ? "disabled" : ""}>
                         Anular
                     </button>
                 </td>
             `;
-            tableBody.appendChild(row);
+                tableBody.appendChild(row);
+            });
+
+        })
+        .catch(error => {
+            console.error('Error al cargar las órdenes:', error);
+            alert('Hubo un error al obtener las órdenes de pago. Revisa la consola para más detalles.');
         });
-    })
-    .catch(error => {
-        console.error('Error al cargar las órdenes:', error);
-        alert('Hubo un error al obtener las órdenes de pago. Revisa la consola para más detalles.');
-    });
 }
+
 
 // Función para redirigir a la página de impresión del cheque
 function imprimirCheque(id_cheque) {
@@ -83,24 +82,24 @@ function anularOrden(id_orden) {
                 'Content-Type': 'application/json',
             },
         })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Error al anular la orden de pago');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                alert("Orden de pago anulada exitosamente.");
-                cargarOrdenes(); // Recargar las órdenes después de la anulación
-            } else {
-                alert("No se pudo anular la orden de pago. Intenta nuevamente.");
-            }
-        })
-        .catch(error => {
-            console.error('Error al anular la orden:', error);
-            alert('Hubo un error al anular la orden de pago. Revisa la consola para más detalles.');
-        });
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Error al anular la orden de pago');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    alert("Orden de pago anulada exitosamente.");
+                    cargarOrdenes(); // Recargar las órdenes después de la anulación
+                } else {
+                    alert("No se pudo anular la orden de pago. Intenta nuevamente.");
+                }
+            })
+            .catch(error => {
+                console.error('Error al anular la orden:', error);
+                alert('Hubo un error al anular la orden de pago. Revisa la consola para más detalles.');
+            });
     }
 }
 
