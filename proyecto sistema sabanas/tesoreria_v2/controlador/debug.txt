@@ -1,0 +1,76 @@
+POST DATA:
+Array
+(
+    [banco_id] => 2
+)
+
+FILES DATA:
+Array
+(
+    [archivo] => Array
+        (
+            [name] => bnf_prueba.csv
+            [type] => text/csv
+            [tmp_name] => C:\xampp\tmp\phpBA90.tmp
+            [error] => 0
+            [size] => 155
+        )
+
+)
+POST DATA:
+Array
+(
+    [banco_id] => 2
+)
+
+FILES DATA:
+Array
+(
+    [archivo] => Array
+        (
+            [name] => bnf_prueba.csv
+            [type] => text/csv
+            [tmp_name] => C:\xampp\tmp\php8473.tmp
+            [error] => 0
+            [size] => 155
+        )
+
+)
+POST DATA:
+Array
+(
+    [banco_id] => 2
+)
+
+FILES DATA:
+Array
+(
+    [archivo] => Array
+        (
+            [name] => bnf_prueba.csv
+            [type] => text/csv
+            [tmp_name] => C:\xampp\tmp\php6584.tmp
+            [error] => 0
+            [size] => 155
+        )
+
+)
+POST DATA:
+Array
+(
+    [banco_id] => 2
+)
+
+FILES DATA:
+Array
+(
+    [archivo] => Array
+        (
+            [name] => bnf_prueba.csv
+            [type] => text/csv
+            [tmp_name] => C:\xampp\tmp\php3E01.tmp
+            [error] => 0
+            [size] => 155
+        )
+
+)
