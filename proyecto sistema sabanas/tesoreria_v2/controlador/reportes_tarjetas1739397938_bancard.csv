@@ -1,0 +1,5 @@
+Fecha,Hora,Número de Tarjeta,Tipo de Tarjeta,Monto,Estado,Comercio,Comisión,Monto Neto
+10/02/2025,14:35,**** **** **** 1234,Crédito,1500.00,Aprobada,Supermercado ABC,50.00,1450.00
+10/02/2025,15:20,**** **** **** 5678,Débito,800.50,Rechazada,Restaurante XYZ,0.00,800.50
+11/02/2025,09:45,**** **** **** 9876,Crédito,2300.75,Aprobada,Tienda Online 123,75.00,2225.75
+11/02/2025,18:10,**** **** **** 5432,Débito,120.00,Aprobada,Farmacia Salud,5.00,115.00

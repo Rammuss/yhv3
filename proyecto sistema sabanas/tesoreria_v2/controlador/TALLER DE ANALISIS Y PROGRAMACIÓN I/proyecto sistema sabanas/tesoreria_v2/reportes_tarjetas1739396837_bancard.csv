@@ -1,0 +1,4 @@
+Fecha	Hora	Número de Tarjeta	Tipo de Tarjeta	Monto	Estado	Comercio
+10/02/2025	14:35	**** **** **** 1234	Crédito	$100.00	Aprobada	Supermercado ABC
+10/02/2025	15:20	**** **** **** 5678	Débito	$50.00	Aprobada	Tienda XYZ
+
