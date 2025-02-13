@@ -25,6 +25,8 @@ $result = pg_query($conn, $query);
 <html lang="es">
 
 <head>
+<link rel="stylesheet" href="../css/styles_T.css">
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lista de Pagos Ejecutados</title>
@@ -60,6 +62,8 @@ $result = pg_query($conn, $query);
 </head>
 
 <body>
+<div id="navbar-container"></div>
+
     <section class="section">
         <div class="container">
             <h2 class="title has-text-centered">Lista de Pagos Ejecutados</h2>
@@ -122,5 +126,7 @@ $result = pg_query($conn, $query);
         </div>
     </section>
 </body>
+<script src="../js/navbarT.js"></script>
+
 
 </html>

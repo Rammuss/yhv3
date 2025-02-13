@@ -5,9 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Provisiones de Cuentas a Pagar</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="../css/styles_T.css">
+
 </head>
 <body>
+<div id="navbar-container"></div>
+
     <section class="section">
         <div class="container">
             <h1 class="title">Provisiones de Cuentas a Pagar</h1>
@@ -59,5 +62,7 @@
     </section>
 
     <script src="../js/provisiones.js"></script>
+    <script src="../js/navbarT.js"></script>
+
 </body>
 </html>

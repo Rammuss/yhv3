@@ -4,11 +4,15 @@
     <meta charset="UTF-8">
     <title>Registrar Orden de Pago</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="../css/styles_T.css">
+
     <style>
         .required::after { content: "*"; color: red; margin-left: 3px; }
     </style>
 </head>
 <body>
+<div id="navbar-container"></div>
+
     <section class="section">
         <div class="container">
             <h1 class="title">Registrar Nueva Orden</h1>
@@ -76,5 +80,7 @@
     </section>
 
     <script src="../js/generarOrdenPago.js"></script>
+    <script src="../js/navbarT.js"></script>
+
 </body>
 </html>

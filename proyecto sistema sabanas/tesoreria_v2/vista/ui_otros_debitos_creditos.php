@@ -6,9 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cargar Otros Débitos y Créditos</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="../css/styles_T.css">
+
 </head>
 
 <body>
+<div id="navbar-container"></div>
+
     <section class="section">
         <div class="container">
             <h1 class="title">Cargar Otros Débitos y Créditos</h1>
@@ -88,6 +92,8 @@
     </section>
 
     <script src="../js/otros_deb_cred.js"></script>
+    <script src="../js/navbarT.js"></script>
+
 </body>
 
 </html>

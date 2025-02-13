@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Lista de Facturas</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+    <link rel="stylesheet" href="../css/styles_T.css">
+    
+
 </head>
 <body>
+
+<div id="navbar-container"></div>
+
     <section class="section">
         <div class="container">
             <h1 class="title">Lista de Facturas</h1>
@@ -93,5 +99,7 @@
     </section>
 
     <script src="../js/listaFacturas.js"></script>
+    <script src="../js/navbarT.js"></script>
+
 </body>
 </html>
