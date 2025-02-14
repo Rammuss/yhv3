@@ -33,32 +33,8 @@ $result = pg_query($conn, $query);
     <!-- Incluir Bulma CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.3/css/bulma.min.css">
     <!-- Archivo de estilos personalizado -->
-    <link rel="stylesheet" href="../../styles.css">
-    <style>
-        /* Colores más claros para las filas según el método de pago */
-        .cheque {
-            background-color: #fff9c4 !important;
-            /* Amarillo pastel */
-        }
-
-        .transferencia {
-            background-color: #c8e6c9 !important;
-            /* Verde pastel */
-        }
-
-        .efectivo {
-            background-color: #ffcdd2 !important;
-            /* Rojo pastel */
-        }
-
-        .table tbody tr:hover {
-            background-color: #f5f5f5 !important;
-        }
-
-        .action-button {
-            margin: 2px;
-        }
-    </style>
+    <link rel="stylesheet" href="../../tesoreria_v2/css/styles_T.css">
+   
 </head>
 
 <body>
