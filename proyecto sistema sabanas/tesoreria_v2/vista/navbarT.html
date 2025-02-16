@@ -1,83 +1,106 @@
-<nav class="navbar">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Navbar Nativo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Vincula el archivo CSS externo -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="navbar">
     <ul>
-        <li><a style="color: aqua;" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboard.php">Dash Board</a></li>
-        
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Facturación</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_cargar_factura.php">Cargar Factura</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_factura.php">Lista de Facturas</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_provisiones.php">Provisiones</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_ivas.php">Ivas</a>
-            </div>
-        </li>
-        
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Órdenes de Pago</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_generar_o_p.php">Generar Órdenes de Pago</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_op_cheques.php">Lista de Órdenes de Pago con Cheques</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_pagos.php">Registrar pagos</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_pagos_lista.php">Lista de pagos</a>
-            </div>
-        </li>
-        
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Cheques</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_entrega_cheque.php">Entrega de Cheque</a>
-            </div>
-        </li>
-
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Fondo Fijo</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_asignar_fondo_fijo.php">Asingar Fondo Fijo</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_asignaciones_tabla.php">Lista de Asignaciones</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_rendicion.php">Rendicion de Fondo Fijo</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_rendicion_gestionar.php">Lista de rendiciones</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_reposicion_ff.php">Reposición de Fondo Fijo</a>
-            </div>
-        </li>
-        
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Conciliaciones</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_cargar_extracto_banco.php">Cargar Extracto</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_conciliar_banco.php">Conciliar</a>
-            </div>
-        </li>
-        
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Otros Movimientos</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_otros_debitos_creditos.php">Cargar Otros debits y creditos</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_listar_otros_deb_cred.php">Lista de otros movimientos</a>
-            </div>
-        </li>
-        
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Boletas de depósitos</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_boletas_depositos.php">Registrar Depósito </a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_depositos.php">Lista de depositos</a>
-            </div>
-        </li>
-        
-        <li class="dropdown">
-            <a href="#" class="dropbtn">Liquidaciones tarjetas</a>
-            <div class="dropdown-content">
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_liquidacion_tarjetas.php">Cargar Reporte de Tarjetas</a>
-                <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_generar_liquidacion_tarjeta.php">Generar Liquidación de Tarjetas</a>
-            </div>
-        </li>
-        
-        <li>
-            <a class="a_contenedor" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/panel_usuario/ui_panel_usuario.php" id="perfil-contenedor">
-                <div class="p_perfil"><img class="img_perfil" id="imagen-perfil" src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/panel_usuario/imagenes_perfil/default.png" alt="Imagen de Perfil" width="50" height="50"></div>
-                <div class="p2_perfil" id="nombre-usuario">Cargando...</div>
-            </a>
-        </li>
-        <li><a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/menu/cerrar_sesion.php" class="cerrar-sesion">Cerrar Sesión</a></li>
+      <li class="lidedashboard">
+        <a style="color: aqua;" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboard.php">
+          Dash Board
+        </a>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Facturación</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_cargar_factura.php">Cargar Factura</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_factura.php">Lista de Facturas</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_provisiones.php">Provisiones</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_ivas.php">Ivas</a>
+        </div>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Órdenes de Pago</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_generar_o_p.php">Generar Órdenes de Pago</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_op_cheques.php">Lista de Órdenes de Pago con Cheques</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_pagos.php">Registrar pagos</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_pagos_lista.php">Lista de pagos</a>
+        </div>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Cheques</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_entrega_cheque.php">Entrega de Cheque</a>
+        </div>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Fondo Fijo</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_asignar_fondo_fijo.php">Asingar Fondo Fijo</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_asignaciones_tabla.php">Lista de Asignaciones</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_rendicion.php">Rendicion de Fondo Fijo</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_rendicion_gestionar.php">Lista de rendiciones</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_reposicion_ff.php">Reposición de Fondo Fijo</a>
+        </div>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Conciliaciones</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_cargar_extracto_banco.php">Cargar Extracto</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_conciliar_banco.php">Conciliar</a>
+        </div>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Otros Movimientos</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_otros_debitos_creditos.php">Cargar Otros debits y creditos</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_listar_otros_deb_cred.php">Lista de otros movimientos</a>
+        </div>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Boletas de depósitos</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_boletas_depositos.php">Registrar Depósito</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_lista_depositos.php">Lista de depositos</a>
+        </div>
+      </li>
+      
+      <li class="dropdown">
+        <a href="#" class="dropbtn">Liquidaciones tarjetas</a>
+        <div class="dropdown-content">
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_liquidacion_tarjetas.php">Cargar Reporte de Tarjetas</a>
+          <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/tesoreria_v2/vista/ui_generar_liquidacion_tarjeta.php">Generar Liquidación de Tarjetas</a>
+        </div>
+      </li>
+      
+      <li class="lideimagen">
+        <a class="a_contenedor" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/panel_usuario/ui_panel_usuario.php" id="perfil-contenedor">
+          <div class="p_perfil">
+            <img class="img_perfil" id="imagen-perfil" src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/panel_usuario/imagenes_perfil/default.png" alt="Imagen de Perfil" width="50" height="50">
+          </div>
+          <div class="p2_perfil" id="nombre-usuario">Cargando...</div>
+        </a>
+      </li>
+      
+      <li class="lidecerrarsesion">
+        <a href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/menu/cerrar_sesion.php" class="cerrar-sesion">
+          Cerrar Sesión
+        </a>
+      </li>
     </ul>
-</nav>
+  </nav>
+</body>
+</html>

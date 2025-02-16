@@ -1,25 +1,25 @@
+/* Importar la fuente Poppins de Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
+
 /* Estilos básicos para la barra de navegación */
-/* <div id="navbar-container"></div> */
-
-@import url('https://fonts.cdnfonts.com/css/minecraft-3');
-
 body {
-  background-color: #f4f4f4;
-  /* Fondo oscuro para contrastar con la nav bar */
+  background-color: #f4f4f4; /* Fondo claro para contrastar con la nav bar */
   padding: 20px;
+  margin: 0;
+  font-family: 'Poppins', sans-serif; /* Fuente moderna */
 }
 
 .navbar {
-  font-family: 'Minecraft', sans-serif;
-  background-color: #D2691E;
-  border-bottom: 4px solid #A0522D;
-  /* Naranja oscuro para el borde inferior */
+  background-color: #ffffff; /* Fondo blanco */
+  border-bottom: 4px solid #2ecc71; /* Borde gris claro */
   padding: 0 20px;
   display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra suave */
 }
 
 .navbar ul {
-  justify-content: center;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -33,38 +33,40 @@ body {
 
 .navbar a {
   display: flex;
-  padding: 15px;
-  color: #fff;
+  padding: 15px 20px;
+  color: #333333; /* Texto oscuro */
   text-decoration: none;
   transition: background-color 0.3s ease, transform 0.1s ease;
-  border: 2px solid #A0522D;
-  border-radius: 3px;
+  border-radius: 4px;
   margin: 0 5px;
+  font-weight: 500; /* Texto semi-negrita */
 }
 
 .navbar a:hover {
-  background-color: #A0522D;
+  background-color: #f0f0f0; /* Fondo gris claro al hacer hover */
   transform: scale(1.05);
 }
 
 .dropdown-content {
   display: none;
   position: absolute;
-  background-color: #D2691E;
-  border: 2px solid #A0522D;
+  background-color: #ffffff; /* Fondo blanco para los dropdowns */
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
   z-index: 1;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra suave */
 }
 
 .dropdown-content a {
-  color: #fff;
+  color: #333333; /* Texto oscuro */
   padding: 12px 16px;
   text-decoration: none;
   display: block;
-  border-bottom: 1px solid #A0522D;
+  border-bottom: 1px solid #e0e0e0; /* Borde entre elementos */
 }
 
 .dropdown-content a:hover {
-  background-color: #A0522D;
+  background-color: #f0f0f0; /* Fondo gris claro al hacer hover */
 }
 
 .dropdown:hover .dropdown-content {
@@ -72,24 +74,20 @@ body {
 }
 
 .navbar ul li a.cerrar-sesion {
-  color: rgb(23, 6, 6);
-  /* Cambia el color del texto */
+  color: #e74c3c; /* Rojo para el botón de cerrar sesión */
   font-weight: bold;
-  /* Haz el texto más grueso */
 }
 
 .navbar img {
   max-width: 50%;
-  /* La imagen no excederá el ancho del li */
   max-height: 50%;
-  /* La imagen no excederá la altura del li */
   object-fit: cover;
 }
 
 .perfil_contenedor {
   display: flex;
   align-items: center;
-  max-width: 250px; /* Limita el ancho máximo del contenedor */
+  max-width: 250px;
 }
 
 #imagen-perfil {
@@ -100,7 +98,7 @@ body {
 
 #nombre-usuario {
   font-size: 16px;
-  color: white;
+  color: #333333; /* Texto oscuro */
 }
 
 /* Estilo para p_perfil */
@@ -119,9 +117,9 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  width: auto; /* Permitir que el contenido determine el ancho */
-  height: auto; /* Permitir que el contenido determine la altura */
-  padding: 0 10px; /* Añadir un poco de padding para que no se vea demasiado ajustado */
+  width: auto;
+  height: auto;
+  padding: 0 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -144,20 +142,20 @@ body {
   }
 
   .navbar a {
-    width: 100%; /* Asegura que los enlaces ocupen el ancho completo */
-    text-align: center; /* Centra el texto */
+    width: 100%;
+    text-align: center;
     padding: 10px;
-    font-size: 14px; /* Reduce el tamaño del texto */
+    font-size: 14px;
   }
 
   .perfil_contenedor {
     flex-direction: column;
     align-items: center;
-    max-width: 100%; /* Ajusta el ancho para móviles */
+    max-width: 100%;
   }
 
   .p_perfil {
-    width: 40px; /* Tamaño reducido para imagen de perfil */
+    width: 40px;
     height: 40px;
   }
 
@@ -171,7 +169,7 @@ body {
 /* Media query para pantallas muy pequeñas (por debajo de 480px) */
 @media (max-width: 480px) {
   .navbar a {
-    font-size: 12px; /* Texto más pequeño */
+    font-size: 12px;
     padding: 8px;
   }
 
@@ -186,6 +184,6 @@ body {
 }
 
 .img_perfil {
-  border-radius: 50%; /* Esto hace que la imagen sea circular */
+  border-radius: 50%;
   object-fit: cover;
 }
