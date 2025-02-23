@@ -76,8 +76,9 @@ function mostrarFacturas(facturas) {
 
 // Función para ver el detalle de una factura (placeholder)
 function verDetalle(idFactura) {
-    alert(`Ver detalle de la factura con ID: ${idFactura}`);
+    window.location.href = '../controlador/ver_detalle_factura.php?id_factura=' + idFactura;
 }
+
 
 // Función para eliminar una factura (placeholder)
 function eliminarFactura(idFactura) {

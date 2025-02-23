@@ -112,7 +112,7 @@ $rol = $_SESSION['rol']; // Acceder al rol del usuario
                     <div class="card">
                         <div class="card-content">
                             <h3 class="title is-5">Administración</h3>
-                            <a class="button is-link is-fullwidth" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/menu/tabla_prespuestos.html">Ir al módulo de Administración</a>
+                            <a class="button is-link is-fullwidth" href="../dashboard/en_construccion.php">Ir al módulo de Administración</a>
                         </div>
                     </div>
                 </div>

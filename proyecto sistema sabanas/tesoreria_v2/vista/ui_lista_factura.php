@@ -40,7 +40,7 @@
                                     <select id="estado-busqueda">
                                         <option value="">Todos</option>
                                         <option value="Pendiente">Pendiente</option>
-                                        <option value="Pgado">Pagada</option>
+                                        <option value="Pagado">Pagada</option>
                                         <option value="anulada">Anulada</option>
                                     </select>
                                 </div>
