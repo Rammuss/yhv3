@@ -66,6 +66,7 @@
           </div>
         </div>
 
+        <!-- Ciudad -->
         <div class="field">
           <label class="label">Ciudad</label>
           <div class="control">
@@ -92,11 +93,13 @@
           </div>
         </div>
 
-
-        <!-- Botón de envío -->
-        <div class="field">
+        <!-- Botones -->
+        <div class="field is-grouped">
           <div class="control">
             <button class="button is-primary" type="submit">Registrar Proveedor</button>
+          </div>
+          <div class="control">
+            <button class="button" type="button" onclick="history.back()">Atrás</button>
           </div>
         </div>
       </form>

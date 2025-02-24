@@ -46,7 +46,7 @@
                     <th>Orden de Pago</th>
                     <th>Proveedor</th>
                     <th>Metodo de pago</th>
-                    <th>Numero cheque</th>
+                    <th>Referencia</th>
                     <th>Monto Total</th>
                     <th>Fecha</th>
                     <th>Estado</th>

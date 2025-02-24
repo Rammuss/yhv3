@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const fechaEntrega = prompt("Ingrese la fecha de entrega (YYYY-MM-DD):");
         const recibidoPor = prompt("Nombre de la persona que recibió el cheque:");
         const observaciones = prompt("Observaciones:");
+        const ci = prompt("INGRESAR NUMERO DE CEDULA:");
 
         if (!fechaEntrega || !recibidoPor) {
             alert("La fecha y el nombre son obligatorios.");
@@ -42,7 +43,8 @@ document.addEventListener('DOMContentLoaded', function () {
             id_cheque: idCheque,
             fecha_entrega: fechaEntrega,
             recibido_por: recibidoPor,
-            observaciones: observaciones
+            observaciones: observaciones,
+            ci: ci
         };
 
         // Enviar los datos al backend para actualizar el cheque

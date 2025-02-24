@@ -22,13 +22,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 data.transacciones_conciliadas.forEach(transaccion => {
                     const row = document.createElement('tr');
-                    row.innerHTML = `<td>${transaccion.fecha_transaccion}</td><td>${transaccion.descripcion}</td><td>${transaccion.monto}</td>`;
+                    row.innerHTML = `<td>${transaccion.fecha_transaccion}</td><td>${transaccion.referencia_bancaria}</td><td>${transaccion.monto}</td>`;
                     transaccionesConciliadas.appendChild(row);
                 });
 
                 data.transacciones_no_conciliadas.forEach(transaccion => {
                     const row = document.createElement('tr');
-                    row.innerHTML = `<td>${transaccion.fecha_transaccion}</td><td>${transaccion.descripcion}</td><td>${transaccion.monto}</td>`;
+                    row.innerHTML = `<td>${transaccion.fecha_transaccion}</td><td>${transaccion.referencia_bancaria}</td><td>${transaccion.monto}</td>`;
                     transaccionesNoConciliadas.appendChild(row);
                 });
             } else {

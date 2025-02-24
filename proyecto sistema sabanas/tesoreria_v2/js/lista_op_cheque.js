@@ -33,7 +33,7 @@ function cargarOrdenes() {
                 <td>${orden.id_orden_pago}</td>
                 <td>${orden.proveedor}</td>
                 <td>${orden.metodo_pago}</td>
-                <td>${orden.numero_cheque ? orden.numero_cheque : 'N/A'}</td>
+                <td>${orden.referencia ? orden.referencia : 'N/A'}</td>
                 <td>${orden.monto}</td>
                 <td>${orden.fecha_creacion}</td>
                 <td>${orden.estado}</td>

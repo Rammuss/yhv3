@@ -9,7 +9,7 @@ $query = "
         pr.nombre AS nombre_proveedor  -- Usa un alias claro
     FROM provisiones_cuentas_pagar p
     JOIN proveedores pr ON p.id_proveedor = pr.id_proveedor
-    WHERE p.estado_provision = 'Pendiente'
+    WHERE p.estado_provision = 'pendiente'
 ";
 
 $result = pg_query($conn, $query);
