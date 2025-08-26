@@ -185,7 +185,7 @@
     
     <div id="na"></div>
 
-    <form form action="procesar_pedido_interno.php" id="form_pedido_interno" method="post">
+    <form action="procesar_pedido_interno.php" id="form_pedido_interno" method="post">
 
         <h2>Pedido Interno</h2>
         <label for="numeroPedido">Número de Pedido:</label>
@@ -217,6 +217,8 @@
                     <th>Id Producto</th>
                     <th>Nombre</th>
                     <th>Cantidad</th>
+                    <th>Stock Actual</th>
+                    <th>Accion</th>
                 </tr>
             </thead>
             <tbody id="productos">
@@ -234,7 +236,8 @@
     <!-- Modal para seleccionar productos -->
     <div id="modalProductos" class="modal">
         <div class="modal-content">
-            <span class="close">&times;</span>
+            <span class="close" id="cerrarModal">&times;</span>
+
             <h2>Seleccionar Producto</h2>
             <table id="tablaSeleccionarProducto">
                 <thead>
