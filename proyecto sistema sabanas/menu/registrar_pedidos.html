@@ -171,7 +171,7 @@
     </script>
 </head>
 
-  
+
 <body>
 
     <div id="navbar-container"></div>
@@ -182,7 +182,7 @@
             <button id="popup-close">Cerrar</button>
         </div>
     </div>
-    
+
     <div id="na"></div>
 
     <form action="procesar_pedido_interno.php" id="form_pedido_interno" method="post">
@@ -192,7 +192,16 @@
         <input type="text" id="numeroPedido" name="numeroPedido" readonly required>
 
         <label for="departamento">Departamento Solicitante:</label>
-        <input type="text" id="departamento" name="departameto" required>
+        <select id="departamento" name="departamento" required>
+            <option value="">-- Seleccionar --</option>
+            <option value="Ventas">Ventas</option>
+            <option value="Compras">Compras</option>
+            <option value="Tesorería">Tesorería</option>
+            <option value="Logística">Logística</option>
+            <option value="Administración">Administración</option>
+            <option value="Otro">Otro</option>
+        </select>
+
 
         <label for="telefono">Teléfono:</label>
         <input type="tel" id="telefono" name="telefono" required>
