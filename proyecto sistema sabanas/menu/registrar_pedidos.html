@@ -263,7 +263,18 @@
         </div>
     </div>
     <script src="funciones_v2.js"></script>
-
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const inputFecha = document.getElementById('fechaPedido');
+  if (inputFecha) {
+    const hoy = new Date();
+    const yyyy = hoy.getFullYear();
+    const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+    const dd = String(hoy.getDate()).padStart(2, '0');
+    inputFecha.value = `${yyyy}-${mm}-${dd}`;
+  }
+});
+</script>
 
 </body>
 

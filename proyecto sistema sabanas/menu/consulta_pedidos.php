@@ -1,36 +1,52 @@
 <?php
+header('Content-Type: application/json; charset=utf-8');
+
 // Configuración de conexión a PostgreSQL
 include("../conexion/config.php");
 
 // Conexión a PostgreSQL
 $conn = pg_connect("host=$host port=$port dbname=$dbname user=$user password=$password");
+if (!$conn) { echo json_encode(["error"=>"Error de conexión a PostgreSQL."]); exit; }
 
-if (!$conn) {
-    echo "Error de conexión a PostgreSQL.";
-    exit;
+// Parámetros opcionales de filtro
+$estado = $_GET['estado'] ?? '';          // ej: "Abierto", "Anulado", etc.
+$q      = trim($_GET['q'] ?? '');         // búsqueda por nro o departamento
+
+$sql = "SELECT 
+          numero_pedido,
+          departamento_solicitante,
+          telefono,
+          correo,
+          fecha_pedido,
+          fecha_entrega_solicitada,
+          estado
+        FROM cabecera_pedido_interno
+        WHERE 1=1";
+
+$params = [];
+$i = 1;
+
+if ($estado !== '') {
+  $sql .= " AND estado = $" . $i++;
+  $params[] = $estado;
 }
 
-// Consulta SQL para obtener la tabla de cabecera de pedidos internos
-$query = "SELECT numero_pedido, departamento_solicitante, telefono, correo ,fecha_pedido, fecha_entrega_solicitada FROM cabecera_pedido_interno";
-
-$result = pg_query($conn, $query);
-
-if (!$result) {
-    echo "Error al ejecutar la consulta.";
-    exit;
+if ($q !== '') {
+  $sql .= " AND (CAST(numero_pedido AS TEXT) ILIKE $" . $i . " 
+               OR departamento_solicitante ILIKE $" . $i . ")";
+  $params[] = "%$q%";
+  $i++;
 }
 
-// Preparar resultados para ser devueltos como JSON (opcional)
-$pedidos = array();
-while ($row = pg_fetch_assoc($result)) {
-    $pedidos[] = $row;
-}
+$sql .= " ORDER BY numero_pedido DESC LIMIT 500";
 
-// Cerrar la conexión a PostgreSQL
-pg_free_result($result);
+$res = pg_query_params($conn, $sql, $params);
+if (!$res) { echo json_encode(["error"=>"Error al ejecutar la consulta."]); exit; }
+
+$rows = [];
+while ($row = pg_fetch_assoc($res)) { $rows[] = $row; }
+
+pg_free_result($res);
 pg_close($conn);
 
-// Devolver los resultados como JSON (opcional)
-header('Content-Type: application/json');
-echo json_encode($pedidos);
-?>
+echo json_encode($rows, JSON_UNESCAPED_UNICODE);
