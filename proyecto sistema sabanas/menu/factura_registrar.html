@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Registrar Factura de Compra</title>
+  <style>
+    body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
+    .wrap{max-width:1100px; margin:auto}
+    h1{margin:0 0 12px}
+    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
+    select,input,button,textarea{padding:8px}
+    table{width:100%; border-collapse:collapse; margin-top:8px}
+    th,td{border:1px solid #eaeaea; padding:8px; text-align:left}
+    th{background:#fafafa}
+    .right{text-align:right}
+    .muted{color:#777}
+    .btn{padding:8px 12px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
+    .btn:hover{background:#f3f3f3}
+    .badge{display:inline-block;padding:2px 6px;border:1px solid #ddd;border-radius:12px;font-size:12px;background:#fff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Registrar Factura de Compra</h1>
+
+    <div class="row">
+      <label>Proveedor:</label>
+      <select id="proveedor"></select>
+
+      <label>Nº Pedido (opcional):</label>
+      <input type="number" id="numero_pedido" placeholder="Ej: 123">
+
+      <button class="btn" id="btnCargar">Cargar OCs con pendientes</button>
+      <span class="badge" id="infoPend"></span>
+    </div>
+
+    <div class="row">
+      <label>Fecha Emisión:</label>
+      <input type="date" id="fecha_emision">
+      <label>Nº Documento:</label>
+      <input type="text" id="numero_documento" placeholder="F001-000001">
+      <label>Observación:</label>
+      <input type="text" id="observacion" style="min-width:260px">
+    </div>
+
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th>OC</th>
+          <th>ID Det</th>
+          <th>ID Producto</th>
+          <th>Producto</th>
+          <th class="right">Pendiente</th>
+          <th class="right">Cant a facturar</th>
+          <th class="right">P.Unit</th>
+          <th>IVA</th>
+          <th class="right">Total línea</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr>
+          <th colspan="8" class="right">Total</th>
+          <th class="right" id="total">0</th>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="row">
+      <button class="btn" id="btnGuardar">Guardar Factura</button>
+    </div>
+  </div>
+
+  <script>
+    // Ajustá las rutas si tus PHP están en otra carpeta
+    const RUTAS = {
+      proveedores: 'proveedores_options.php',
+      preparar:    'factura_preparar.php',
+      guardar:     'factura_guardar.php'
+    };
+
+    const $ = s => document.querySelector(s);
+    let lineas = []; // {id_oc,id_oc_det,id_producto,producto,pendiente, cantidad, precio, iva}
+
+    document.addEventListener('DOMContentLoaded', () => {
+      setFechaHoy();
+      cargarProveedores();
+      $('#btnCargar').addEventListener('click', cargarPendientes);
+      $('#btnGuardar').addEventListener('click', guardar);
+    });
+
+    function setFechaHoy(){
+      const hoy = new Date().toISOString().slice(0,10);
+      $('#fecha_emision').value = hoy;
+    }
+
+    async function cargarProveedores(){
+      try{
+        const r = await fetch(RUTAS.proveedores);
+        const data = await r.json();
+        const sel = $('#proveedor');
+        sel.innerHTML = '<option value="">Seleccione proveedor</option>';
+        data.forEach(p=>{
+          const o = document.createElement('option');
+          o.value = p.id_proveedor;
+          o.textContent = p.nombre;
+          sel.appendChild(o);
+        });
+      }catch(e){ alert('Error cargando proveedores'); }
+    }
+
+    async function cargarPendientes(){
+      const prov = $('#proveedor').value;
+      if(!prov){ alert('Seleccione proveedor'); return; }
+      const ped = $('#numero_pedido').value.trim();
+      let url = `${RUTAS.preparar}?id_proveedor=${encodeURIComponent(prov)}`;
+      if (ped) url += `&numero_pedido=${encodeURIComponent(ped)}`;
+
+      $('#infoPend').textContent = 'Cargando...';
+      try{
+        const r = await fetch(url);
+        const j = await r.json();
+        if(!j.ok) throw new Error(j.error || 'Error');
+        lineas = (j.data || []).map(x => ({
+          id_oc: +x.id_oc,
+          id_oc_det: +x.id_oc_det,
+          id_producto: +x.id_producto,
+          producto: x.producto,
+          pendiente: +x.pendiente,
+          cantidad: +x.pendiente, // por defecto facturar todo (editable)
+          precio: 0,
+          iva: '10%'
+        }));
+        renderTabla();
+        $('#infoPend').textContent = `${lineas.length} ítems con pendiente`;
+      }catch(e){
+        console.error(e);
+        alert('Error cargando pendientes');
+        $('#infoPend').textContent = '';
+      }
+    }
+
+    function renderTabla(){
+      const tb = $('#tabla tbody');
+      tb.innerHTML = '';
+      lineas.forEach((l,idx)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${l.id_oc}</td>
+          <td>${l.id_oc_det}</td>
+          <td>${l.id_producto}</td>
+          <td>${esc(l.producto)}</td>
+          <td class="right">${l.pendiente}</td>
+          <td class="right">
+            <input type="number" min="1" max="${l.pendiente}" value="${l.cantidad}" style="width:90px"
+                   oninput="onCant(${idx}, this.value)">
+          </td>
+          <td class="right">
+            <input type="number" min="0" step="0.01" value="${l.precio}" style="width:110px"
+                   oninput="onPrecio(${idx}, this.value)">
+          </td>
+          <td>
+            <select onchange="onIva(${idx}, this.value)">
+              <option value="10%" ${l.iva==='10%'?'selected':''}>10%</option>
+              <option value="5%"  ${l.iva==='5%'?'selected':''}>5%</option>
+              <option value="Exento" ${l.iva==='Exento'?'selected':''}>Exento</option>
+            </select>
+          </td>
+          <td class="right" id="rowTotal-${idx}">${fmt(l.cantidad*l.precio)}</td>
+        `;
+        tb.appendChild(tr);
+      });
+      recalcularTotal();
+    }
+
+    function onCant(i, v){
+      const n = Math.max(1, Math.min(+v||0, lineas[i].pendiente));
+      lineas[i].cantidad = n;
+      $('#rowTotal-'+i).textContent = fmt(n*lineas[i].precio);
+      recalcularTotal();
+    }
+    function onPrecio(i, v){
+      const n = Math.max(0, +v||0);
+      lineas[i].precio = n;
+      $('#rowTotal-'+i).textContent = fmt(n*lineas[i].cantidad);
+      recalcularTotal();
+    }
+    function onIva(i,v){ lineas[i].iva = v; }
+
+    function recalcularTotal(){
+      const t = lineas.reduce((acc,l)=> acc + (l.cantidad*l.precio), 0);
+      $('#total').textContent = fmt(t);
+    }
+
+    function fmt(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+    async function guardar(){
+      const id_proveedor = $('#proveedor')?.value;
+      const fecha_emision = $('#fecha_emision')?.value;
+      const numero_documento = $('#numero_documento')?.value.trim();
+      const observacion = $('#observacion')?.value.trim();
+
+      if(!id_proveedor){ alert('Proveedor requerido'); return; }
+      if(!fecha_emision){ alert('Fecha requerida'); return; }
+      if(!numero_documento){ alert('Nº Documento requerido'); return; }
+      if(lineas.length===0){ alert('No hay líneas'); return; }
+
+      for(const l of lineas){
+        if(l.cantidad<=0 || l.cantidad>l.pendiente){ alert('Cantidad inválida en alguna línea'); return; }
+        if(l.precio<0){ alert('Precio inválido'); return; }
+      }
+
+      const fd = new FormData();
+      fd.append('id_proveedor', id_proveedor);
+      fd.append('fecha_emision', fecha_emision);
+      fd.append('numero_documento', numero_documento);
+      fd.append('observacion', observacion);
+
+      lineas.forEach(l=>{
+        fd.append('id_oc_det[]', l.id_oc_det);
+        fd.append('cantidad[]', l.cantidad);
+        fd.append('precio_unitario[]', l.precio);
+        fd.append('tipo_iva[]', l.iva);
+      });
+
+      try{
+        const r = await fetch(RUTAS.guardar,{method:'POST', body: fd});
+        const j = await r.json();
+        if(!r.ok || !j.ok){ alert('Error: ' + (j.error||'')); return; }
+        alert(`Factura guardada #${j.id_factura} — Total ${fmt(j.total)}`);
+        // reset mínimo
+        lineas = [];
+        renderTabla();
+        $('#numero_documento').value = '';
+        $('#observacion').value = '';
+        $('#infoPend').textContent = '';
+      }catch(e){
+        console.error(e);
+        alert('Error al guardar la factura');
+      }
+    }
+
+    // Exponer handlers
+    window.onCant = onCant;
+    window.onPrecio = onPrecio;
+    window.onIva = onIva;
+  </script>
+</body>
+</html>

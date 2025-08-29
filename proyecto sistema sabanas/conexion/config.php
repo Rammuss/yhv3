@@ -3,7 +3,7 @@
 
 
 $host = "localhost";
-$port = "5432";
+$port = "5433";
 $dbname = "bd_sabanas";
 $user = "postgres";
 $password = "1996";
