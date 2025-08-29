@@ -1,142 +1,259 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-  <meta charset="utf-8" />
-  <title>Presupuestos por Pedido</title>
-  <style>
-    body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
-    .wrap{max-width:1100px; margin:auto}
-    h1{margin:0 0 12px}
-    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px}
-    select,input,button{padding:8px}
-    .card{background:#fff; border:1px solid #e5e5e5; border-radius:8px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.05)}
-    .card-header{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #eee}
-    .card-body{padding:12px 16px}
-    .meta{font-size:12px; color:#666}
-    table{width:100%; border-collapse:collapse; margin-top:8px}
-    th,td{border:1px solid #eaeaea; padding:8px; text-align:left}
-    th{background:#fafafa}
-    .badge{display:inline-block; padding:3px 8px; border-radius:999px; font-size:12px}
-    .ok{background:#e6f7e6; color:#256029; border:1px solid #bfe3bf}
-    .warn{background:#fff3cd; color:#856404; border:1px solid #ffeeba}
-    .muted{color:#777}
-    .actions{display:flex; gap:6px}
-    .btn{padding:6px 10px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
-    .btn:hover{background:#f3f3f3}
-    .btn-approve{border-color:#2e7d32; color:#2e7d32}
-    .btn-approve:hover{background:#e8f5e9}
-    .info{font-size:13px; color:#555; margin-bottom:10px}
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <h1>Presupuestos por Pedido</h1>
-
-    <div class="row">
-      <label for="pedido">Pedido:</label>
-      <select id="pedido">
-        <option value="">Cargando...</option>
-      </select>
-      <button class="btn" id="btnCargar">Cargar presupuestos</button>
-    </div>
-
-    <div class="info">
-      • Seleccioná un pedido para ver sus presupuestos.<br>
-      • Podés <b>aprobar</b> una línea (parcial o total). El backend valida que no excedas lo <i>pendiente</i> del pedido.
-    </div>
-
-    <div id="lista"></div>
-  </div>
-
-  <script>
-    const $ = s => document.querySelector(s);
-
-    document.addEventListener('DOMContentLoaded', () => {
-      cargarPedidos();
-      $('#btnCargar').addEventListener('click', cargarLista);
-    });
-
-    async function cargarPedidos(){
-      try{
-        const res = await fetch('pedidos_options.php');
-        const data = await res.json();
-        const sel = $('#pedido');
-        sel.innerHTML = '<option value="">Selecciona un pedido</option>';
-        data.forEach(r=>{
-          const opt = document.createElement('option');
-          opt.value = r.numero_pedido;
-          opt.textContent = `#${r.numero_pedido} - ${r.departamento_solicitante} (${r.estado})`;
-          sel.appendChild(opt);
-        });
-      }catch(e){
-        console.error(e);
-        alert('Error cargando pedidos');
-      }
-    }
-
-    async function cargarLista(){
-      const numero_pedido = $('#pedido').value;
-      if(!numero_pedido){ alert('Elegí un pedido'); return; }
-
-      const cont = $('#lista');
-      cont.innerHTML = 'Cargando...';
-
-      try{
-        const url = `listar_presupuestos.php?numero_pedido=${encodeURIComponent(numero_pedido)}`;
-        const res = await fetch(url);
-        const json = await res.json();
-        if(!json.ok){ cont.innerHTML = 'Error al cargar.'; return; }
-
-        const items = json.data || [];
-        if(items.length === 0){
-          cont.innerHTML = '<div class="muted">No hay presupuestos para este pedido.</div>';
-          return;
+    <meta charset="utf-8" />
+    <title>Presupuestos por Pedido</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f7f7f7;
+            margin: 20px
         }
 
-        cont.innerHTML = '';
-        items.forEach(p => cont.appendChild(renderCardPresupuesto(p)));
-      }catch(e){
-        console.error(e);
-        $('#lista').innerHTML = 'Error al cargar.';
-      }
-    }
+        .wrap {
+            max-width: 1100px;
+            margin: auto
+        }
 
-    function renderCardPresupuesto(p){
-      const card = document.createElement('div');
-      card.className = 'card';
+        h1 {
+            margin: 0 0 12px
+        }
 
-      const totalCot = numberFmt(p.total_cotizado);
-      const totalApr = numberFmt(p.total_aprobado);
+        .row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px
+        }
 
-      card.innerHTML = `
-        <div class="card-header">
-          <div>
-            <b>Presupuesto #${p.id_presupuesto}</b> — Proveedor: ${p.proveedor || p.id_proveedor}
-            <div class="meta">
-              Pedido: #${p.numero_pedido} • F.Registro: ${p.fecharegistro || '-'} • F.Venc: ${p.fechavencimiento || '-'}
-            </div>
-          </div>
-          <div class="meta">
-            Cotizado: <span class="badge">${totalCot}</span>
-            &nbsp; Aprobado: <span class="badge ok">${totalApr}</span>
-            &nbsp; Estado: <span class="badge ${badgeClass(p.estado)}">${p.estado}</span>
-          </div>
+        select,
+        input,
+        button {
+            padding: 8px
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, .05)
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee
+        }
+
+        .card-body {
+            padding: 12px 16px
+        }
+
+        .meta {
+            font-size: 12px;
+            color: #666
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px
+        }
+
+        th,
+        td {
+            border: 1px solid #eaeaea;
+            padding: 8px;
+            text-align: left
+        }
+
+        th {
+            background: #fafafa
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 12px
+        }
+
+        .ok {
+            background: #e6f7e6;
+            color: #256029;
+            border: 1px solid #bfe3bf
+        }
+
+        .warn {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba
+        }
+
+        .muted {
+            color: #777
+        }
+
+        .actions {
+            display: flex;
+            gap: 6px
+        }
+
+        .btn {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 6px
+        }
+
+        .btn:hover {
+            background: #f3f3f3
+        }
+
+        .btn-approve {
+            border-color: #2e7d32;
+            color: #2e7d32
+        }
+
+        .btn-approve:hover {
+            background: #e8f5e9
+        }
+
+        .info {
+            font-size: 13px;
+            color: #555;
+            margin-bottom: 10px
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <h1>Presupuestos por Pedido</h1>
+
+        <div class="row">
+            <label for="pedido">Pedido:</label>
+            <select id="pedido">
+                <option value="">Cargando...</option>
+            </select>
+            <button class="btn" id="btnCargar">Cargar presupuestos</button>
         </div>
-        <div class="card-body">
-          ${renderTablaLineas(p.lineas)}
+
+        <div class="info">
+            • Seleccioná un pedido para ver sus presupuestos.<br>
+            • Podés <b>aprobar</b> una línea (parcial o total). El backend valida que no excedas lo <i>pendiente</i> del
+            pedido.
         </div>
-      `;
-      return card;
-    }
 
-    function renderTablaLineas(lineas){
-      if (!lineas || lineas.length === 0) return '<div class="muted">Sin líneas.</div>';
+        <div id="lista"></div>
+    </div>
 
-      const rows = lineas.map(l => {
-        const totalLinea = numberFmt(l.total_linea);
-        const estado = l.estado_detalle;
-        const puedeAprobar = (estado === 'Propuesto');
-        return `
+    <script>
+        const $ = s => document.querySelector(s);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            cargarPedidos();
+            $('#btnCargar').addEventListener('click', cargarLista);
+        });
+
+        async function cargarPedidos() {
+            try {
+                // 👇 Agregamos el scope=presupuesto para filtrar
+                const res = await fetch('pedidos_options.php?scope=presupuesto');
+                const data = await res.json();
+                const sel = $('#pedido');
+                sel.innerHTML = '<option value="">Selecciona un pedido</option>';
+                data.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r.numero_pedido;
+                    opt.textContent = `#${r.numero_pedido} - ${r.departamento_solicitante} (${r.estado})`;
+                    sel.appendChild(opt);
+                });
+            } catch (e) {
+                console.error(e);
+                alert('Error cargando pedidos');
+            }
+        }
+
+
+        async function cargarLista() {
+            const numero_pedido = $('#pedido').value;
+            if (!numero_pedido) { alert('Elegí un pedido'); return; }
+
+            const cont = $('#lista');
+            cont.innerHTML = 'Cargando...';
+
+            try {
+                const url = `listar_presupuestos.php?numero_pedido=${encodeURIComponent(numero_pedido)}`;
+                const res = await fetch(url);
+                const json = await res.json();
+                if (!json.ok) { cont.innerHTML = 'Error al cargar.'; return; }
+
+                const items = json.data || [];
+                if (items.length === 0) {
+                    cont.innerHTML = '<div class="muted">No hay presupuestos para este pedido.</div>';
+                    return;
+                }
+
+                cont.innerHTML = '';
+                items.forEach(p => cont.appendChild(renderCardPresupuesto(p)));
+            } catch (e) {
+                console.error(e);
+                $('#lista').innerHTML = 'Error al cargar.';
+            }
+        }
+
+        function renderCardPresupuesto(p) {
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            const totalCot = numberFmt(p.total_cotizado);
+            const totalApr = numberFmt(p.total_aprobado);
+
+            const accionesHeader = (p.estado === 'Anulado' || p.estado === 'Anulado Parcial')
+                ? ''
+                : `<div class="actions">
+         <button class="btn" onclick="anularPresupuesto(${p.id_presupuesto})">Anular presupuesto</button>
+       </div>`;
+
+            card.innerHTML = `
+    <div class="card-header">
+      <div>
+        <b>Presupuesto #${p.id_presupuesto}</b> — Proveedor: ${p.proveedor || p.id_proveedor}
+        <div class="meta">
+          Pedido: #${p.numero_pedido} • F.Registro: ${p.fecharegistro || '-'} • F.Venc: ${p.fechavencimiento || '-'}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div class="meta" style="margin-bottom:6px">
+          Cotizado: <span class="badge">${totalCot}</span>
+          &nbsp; Aprobado: <span class="badge ok">${totalApr}</span>
+          &nbsp; Estado: <span class="badge ${badgeClass(p.estado)}">${p.estado}</span>
+        </div>
+        ${accionesHeader}
+      </div>
+    </div>
+    <div class="card-body">
+      ${renderTablaLineas(p.lineas)}
+    </div>
+  `;
+            return card;
+        }
+
+
+        function renderTablaLineas(lineas) {
+            if (!lineas || lineas.length === 0) return '<div class="muted">Sin líneas.</div>';
+
+            const rows = lineas.map(l => {
+                const totalLinea = numberFmt(l.total_linea);
+                const estado = l.estado_detalle;
+                const puedeAprobar = (estado === 'Propuesto');
+                return `
           <tr>
             <td>${l.id_presupuesto_detalle}</td>
             <td>${l.id_producto}</td>
@@ -151,9 +268,9 @@
             </td>
           </tr>
         `;
-      }).join('');
+            }).join('');
 
-      return `
+            return `
         <table>
           <thead>
             <tr>
@@ -171,57 +288,94 @@
           <tbody>${rows}</tbody>
         </table>
       `;
-    }
-
-    async function aprobarLinea(id_presupuesto_detalle, cantidadOfertada){
-      const porDefecto = cantidadOfertada; // sugerencia
-      let cant = prompt(`Cantidad a aprobar (máx ${cantidadOfertada}):`, porDefecto);
-      if (cant === null) return; // canceló
-      cant = parseInt(cant, 10);
-      if (!(cant > 0)) { alert('Cantidad inválida'); return; }
-
-      const fd = new FormData();
-      fd.append('id_presupuesto_detalle', id_presupuesto_detalle);
-      fd.append('cantidad_aprobada', cant);
-
-      try{
-        const res = await fetch('aprobar_linea_presupuesto.php', { method: 'POST', body: fd });
-        const json = await res.json();
-        if(!res.ok || !json.ok){
-          alert('No se pudo aprobar: ' + (json.error || ''));
-          return;
         }
-        alert('Línea aprobada.');
-        cargarLista(); // refresca
-      }catch(e){
-        console.error(e);
-        alert('Error aprobando línea');
-      }
-    }
 
-    function numberFmt(n){
-      if (n == null) return '0';
-      const f = Number(n);
-      return f.toLocaleString('es-PY', {minimumFractionDigits:2, maximumFractionDigits:2});
-    }
+        async function aprobarLinea(id_presupuesto_detalle, cantidadOfertada) {
+            const porDefecto = cantidadOfertada; // sugerencia
+            let cant = prompt(`Cantidad a aprobar (máx ${cantidadOfertada}):`, porDefecto);
+            if (cant === null) return; // canceló
+            cant = parseInt(cant, 10);
+            if (!(cant > 0)) { alert('Cantidad inválida'); return; }
 
-    function badgeClass(est){
-      if (!est) return '';
-      const s = est.toLowerCase();
-      if (s.includes('registr')) return 'warn';
-      if (s.includes('aprob')) return 'ok';
-      return '';
-    }
+            const fd = new FormData();
+            fd.append('id_presupuesto_detalle', id_presupuesto_detalle);
+            fd.append('cantidad_aprobada', cant);
 
-    function escapeHtml(s){
-      if (s == null) return '';
-      return String(s).replace(/[&<>"']/g, c => ({
-        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-      })[c]);
-    }
+            try {
+                const res = await fetch('aprobar_linea_presupuesto.php', { method: 'POST', body: fd });
+                const json = await res.json();
+                if (!res.ok || !json.ok) {
+                    alert('No se pudo aprobar: ' + (json.error || ''));
+                    return;
+                }
+                alert('Línea aprobada.');
+                cargarLista(); // refresca
+            } catch (e) {
+                console.error(e);
+                alert('Error aprobando línea');
+            }
+        }
 
-    // Exponer aprobarLinea al scope global para el onclick de los botones
-    window.aprobarLinea = aprobarLinea;
-  </script>
+        function numberFmt(n) {
+            if (n == null) return '0';
+            const f = Number(n);
+            return f.toLocaleString('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function badgeClass(est) {
+            if (!est) return '';
+            const s = est.toLowerCase();
+            if (s.includes('anulado parcial')) return 'warn';
+            if (s.includes('anulado')) return 'muted';
+            if (s.includes('registr')) return 'warn';
+            if (s.includes('aprob')) return 'ok';
+            return '';
+        }
+
+
+        function escapeHtml(s) {
+            if (s == null) return '';
+            return String(s).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[c]);
+        }
+
+        // Exponer aprobarLinea al scope global para el onclick de los botones
+        window.aprobarLinea = aprobarLinea;
+    </script>
+
+    <script>
+        async function anularPresupuesto(id_presupuesto) {
+            if (!confirm(`¿Anular el presupuesto #${id_presupuesto}?`)) return;
+
+            const permitir = confirm(
+                '¿Permitir anulación aunque tenga líneas comprometidas en OCs activas?\n' +
+                'Aceptar = Sí (quedará "Anulado Parcial")\n' +
+                'Cancelar = No (bloquear si hay OCs activas)'
+            ) ? 1 : 0;
+
+            const motivo = prompt('Motivo de anulación (opcional):') || '';
+
+            const fd = new FormData();
+            fd.append('id_presupuesto', id_presupuesto);
+            fd.append('permitir_con_oc', permitir);
+            fd.append('motivo', motivo);
+
+            try {
+                const r = await fetch('presupuesto_anular.php', { method: 'POST', body: fd });
+                const json = await r.json();
+                if (!r.ok || !json.ok) throw new Error(json.error || 'No se pudo anular');
+                alert(json.msg || 'Presupuesto anulado');
+                // refrescar la lista para el pedido seleccionado
+                await cargarLista();
+            } catch (e) {
+                console.error(e);
+                alert(e.message || 'Error al anular presupuesto');
+            }
+        }
+
+    </script>
+
 </body>
+
 </html>

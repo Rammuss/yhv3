@@ -1,21 +1,32 @@
 <?php
-// pedidos_options.php
 header('Content-Type: application/json; charset=utf-8');
-
 require_once("../conexion/config.php");
-$conn = pg_connect("host=$host port=$port dbname=$dbname user=$user password=$password");
-if (!$conn) { http_response_code(500); echo json_encode(["ok"=>false,"error"=>"DB"]); exit; }
+
+$c = pg_connect("host=$host port=$port dbname=$dbname user=$user password=$password");
+if(!$c){ echo json_encode([]); exit; }
+
+$scope = isset($_GET['scope']) ? trim($_GET['scope']) : ''; // ej: presupuesto
+
+$where = "1=1";
+$params = [];
+if ($scope === 'presupuesto') {
+  // Solo pedidos en los que tiene sentido cargar presupuestos
+  $where = "estado IN ('Abierto','Parcialmente Ordenado')";
+}
 
 $sql = "
-  SELECT numero_pedido, departamento_solicitante, estado, fecha_pedido
+  SELECT
+    numero_pedido,
+    departamento_solicitante,
+    estado
   FROM public.cabecera_pedido_interno
-  WHERE estado <> 'Anulado'
+  WHERE $where
   ORDER BY numero_pedido DESC
   LIMIT 500
 ";
-$res = pg_query($conn, $sql);
+
+$res = pg_query($c, $sql);
 $out = [];
-if ($res) {
-  while ($r = pg_fetch_assoc($res)) $out[] = $r;
-}
+if ($res) while ($r = pg_fetch_assoc($res)) $out[] = $r;
+
 echo json_encode($out, JSON_UNESCAPED_UNICODE);

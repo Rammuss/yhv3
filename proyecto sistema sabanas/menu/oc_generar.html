@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Generar Orden de Compra</title>
+  <link rel="stylesheet" href="styles.css"><!-- tu navbar y estilos -->
+  <style>
+    body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
+    .wrap{max-width:1100px; margin:auto}
+    h1{margin:0 0 12px}
+    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px}
+    select,input,button,textarea{padding:8px}
+    .card{background:#fff; border:1px solid #e5e5e5; border-radius:8px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.05)}
+    .card-header{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #eee}
+    .card-body{padding:12px 16px}
+    table{width:100%; border-collapse:collapse; margin-top:8px}
+    th,td{border:1px solid #eaeaea; padding:8px; text-align:left}
+    th{background:#fafafa}
+    .right{text-align:right}
+    .muted{color:#777}
+    .ok{color:#256029}
+    .btn{padding:8px 12px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
+    .btn:hover{background:#f3f3f3}
+    .btn-primary{border-color:#3149c2; color:#3149c2}
+    .btn-primary:hover{background:#e9edff}
+    .total{font-weight:bold; margin-top:8px; text-align:right}
+    textarea{width:100%; min-height:70px}
+  </style>
+</head>
+<body>
+  <div id="navbar-container"></div><!-- tu navbar -->
+  <div class="wrap">
+    <h1>Generar Orden de Compra</h1>
+
+    <div class="row">
+      <label for="pedido">Pedido:</label>
+      <select id="pedido"><option value="">Cargando...</option></select>
+
+      <label for="proveedor">Proveedor:</label>
+      <select id="proveedor" disabled>
+        <option value="">Seleccioná un pedido primero</option>
+      </select>
+
+      <button class="btn" id="btnCargar" disabled>Cargar líneas aprobadas</button>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div><b>Líneas aprobadas del proveedor</b></div>
+        <div class="muted">Ajustá cantidades (no pueden superar lo aprobado)</div>
+      </div>
+      <div class="card-body" id="panelLineas">
+        <div class="muted">Seleccioná pedido y proveedor para ver las líneas.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><b>Observación</b></div>
+      <div class="card-body">
+        <textarea id="observacion" placeholder="Notas para esta OC (opcional)"></textarea>
+        <div class="total">Total OC: <span id="totalOC">0,00</span></div>
+        <div style="margin-top:10px; text-align:right">
+          <button class="btn btn-primary" id="btnGenerar" disabled>Generar OC</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="resultado"></div>
+  </div>
+
+  <script src="navbar.js"></script><!-- si usás navbar dinámico -->
+  <script src="oc_generar.js"></script>
+</body>
+</html>

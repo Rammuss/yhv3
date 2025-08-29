@@ -22,7 +22,8 @@ function setFechas(){
 
 async function cargarPedidos(){
   try{
-    const res = await fetch('pedidos_options.php');
+    // 👇 Agregamos el scope=presupuesto para filtrar
+    const res = await fetch('pedidos_options.php?scope=presupuesto');
     const data = await res.json();
     const sel = $('#pedido');
     sel.innerHTML = '<option value="">Selecciona un pedido</option>';
@@ -37,6 +38,7 @@ async function cargarPedidos(){
     alert('Error cargando pedidos');
   }
 }
+
 
 async function cargarProveedores(){
   try{
