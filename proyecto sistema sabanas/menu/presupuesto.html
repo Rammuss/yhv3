@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Registrar Presupuesto</title>
+  <style>
+    body{font-family:Arial, sans-serif; margin:20px; background:#f7f7f7;}
+    form{max-width:900px; margin:auto; background:#fff; padding:16px; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,.08)}
+    h2{margin-top:0}
+    .row{display:flex; gap:12px; margin-bottom:12px;}
+    .row > div{flex:1}
+    label{display:block; font-size:12px; color:#444; margin-bottom:4px}
+    input,select,button,textarea{width:100%; padding:8px; box-sizing:border-box}
+    table{width:100%; border-collapse:collapse; background:#fff; margin-top:8px}
+    th,td{border:1px solid #ddd; padding:8px; text-align:left}
+    th{background:#f3f3f3}
+    .actions{display:flex; justify-content:flex-end; gap:8px; margin-top:12px}
+    .total{font-weight:bold; text-align:right; margin-top:10px}
+    .hint{font-size:12px; color:#666}
+  </style>
+</head>
+<body>
+
+  <form id="form-presu" onsubmit="return false;">
+    <h2>Registrar Presupuesto</h2>
+
+    <div class="row">
+      <div>
+        <label>Pedido</label>
+        <select id="pedido" required>
+          <option value="">Cargando...</option>
+        </select>
+        <div class="hint">Solo aparecen pedidos no anulados.</div>
+      </div>
+      <div>
+        <label>Proveedor</label>
+        <select id="proveedor" required>
+          <option value="">Cargando...</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Fecha registro</label>
+        <input type="date" id="fecha_registro">
+      </div>
+      <div>
+        <label>Fecha vencimiento</label>
+        <input type="date" id="fecha_vencimiento">
+      </div>
+    </div>
+
+    <h3>Detalle</h3>
+    <div class="row">
+      <div>
+        <label>Producto (según pedido seleccionado)</label>
+        <select id="producto">
+          <option value="">Seleccione un pedido primero</option>
+        </select>
+        <div class="hint">Se muestran con su Pendiente disponible.</div>
+      </div>
+      <div>
+        <label>Cantidad</label>
+        <input type="number" id="cantidad" min="1" placeholder="Ej: 50">
+      </div>
+      <div>
+        <label>Precio unitario</label>
+        <input type="number" id="precio" min="0" step="0.01" placeholder="Ej: 12000">
+      </div>
+      <div style="align-self:flex-end">
+        <button type="button" id="btnAgregar">Agregar</button>
+      </div>
+    </div>
+
+    <table id="tablaDetalle">
+      <thead>
+        <tr>
+          <th>ID</th><th>Producto</th><th>Cantidad</th><th>P. Unit</th><th>Total</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="total">Total: <span id="total">0.00</span></div>
+
+    <div class="actions">
+      <button type="button" id="btnGuardar">Guardar Presupuesto</button>
+    </div>
+  </form>
+
+  <script src="presupuesto.js"></script>
+</body>
+</html>
