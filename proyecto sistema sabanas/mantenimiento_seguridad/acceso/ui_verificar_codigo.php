@@ -48,7 +48,7 @@ session_start();
                     mostrarNotificacion(data.mensaje); // Mostrar mensaje de respuesta
                     if (data.success) {
                         setTimeout(() => {
-                            window.location.href = "/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboard.php"; // Cambia a la página deseada
+                            window.location.href = "/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboardv1.php"; // Cambia a la página deseada
                         }, 2000);
                     }
                 })

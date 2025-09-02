@@ -134,7 +134,7 @@ if (!isset($_SESSION['nombre_usuario'])) {
             <a class="cerrar-sesion" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I//proyecto sistema sabanas//mantenimiento_seguridad//dashboard//logout.php">
                 <img title="Cerrar Sesion" src="/TALLER DE ANALISIS Y PROGRAMACIÓN I//proyecto sistema sabanas//mantenimiento_seguridad//panel_usuario//iconosPerfil//cerrar-sesion.png" alt="">
             </a>
-            <a class="cerrar-sesion" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboard.php">Dash Board</a>
+            <a class="cerrar-sesion" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboardv1.php">Dash Board</a>
             <a class="cerrar-sesion" href="javascript:history.back()">
                 <img title="Volver Atras" src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas//mantenimiento_seguridad//panel_usuario/iconosPerfil/hacia-atras.png" alt="Volver atrás" />
             </a>

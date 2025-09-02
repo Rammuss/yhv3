@@ -1,4 +1,13 @@
-// presupuesto.js (versión con edición fluida sin repintar toda la tabla)
+// presupuesto.js (versión con edición fluida + reseteo post-guardado)
+// ================================================================
+
+/** Comportamiento tras guardar:
+ *  'keep-pedido' -> Limpia detalle y refresca pendientes del mismo pedido (UX fluida)
+ *  'reset-all'   -> Limpia TODO (incluye pedido) y recarga combos de pedidos/proveedores
+ *  'reload'      -> Recarga la página (hard refresh)
+ */
+const POST_SAVE_BEHAVIOR = 'keep-pedido';
+
 let resumenPorProducto = {}; // id_producto -> {nombre, pedida, cotizada, pendiente, precio_sugerido}
 let detalle = [];            // [{id_producto, nombre, cantidad, precio_unitario}]
 
@@ -9,9 +18,9 @@ document.addEventListener('DOMContentLoaded', () => {
   cargarPedidos();
   cargarProveedores();
 
-  $('#pedido').addEventListener('change', cargarProductosDelPedido);
-  $('#btnAgregar').addEventListener('click', agregarLinea);
-  $('#btnGuardar').addEventListener('click', guardarPresupuesto);
+  $('#pedido')?.addEventListener('change', cargarProductosDelPedido);
+  $('#btnAgregar')?.addEventListener('click', agregarLinea);
+  $('#btnGuardar')?.addEventListener('click', guardarPresupuesto);
 });
 
 function setFechas(){
@@ -26,6 +35,7 @@ async function cargarPedidos(){
     const res = await fetch('pedidos_options.php?scope=presupuesto');
     const data = await res.json();
     const sel = $('#pedido');
+    if (!sel) return;
     sel.innerHTML = '<option value="">Selecciona un pedido</option>';
     data.forEach(r=>{
       const opt = document.createElement('option');
@@ -39,12 +49,12 @@ async function cargarPedidos(){
   }
 }
 
-
 async function cargarProveedores(){
   try{
     const res = await fetch('proveedores_options.php');
     const data = await res.json();
     const sel = $('#proveedor');
+    if (!sel) return;
     sel.innerHTML = '<option value="">Selecciona un proveedor</option>';
     data.forEach(r=>{
       const opt = document.createElement('option');
@@ -63,7 +73,7 @@ async function cargarProductosDelPedido(){
   detalle = [];
   pintarDetalle(); // solo una vez para limpiar
 
-  const nro = $('#pedido').value;
+  const nro = $('#pedido')?.value;
   const selProd = $('#producto');
   resumenPorProducto = {};
 
@@ -230,6 +240,35 @@ function quitar(idx){
   pintarDetalle(); // re-render para reindexar ids rowTotal-*
 }
 
+/** Helper para limpiar el formulario/UI */
+function resetPresupuestoUI({ clearPedido = false } = {}) {
+  // estado en memoria
+  resumenPorProducto = {};
+  detalle = [];
+
+  // tabla y total
+  pintarDetalle();
+  const tot = $('#total'); if (tot) tot.textContent = '0.00';
+
+  // selects/inputs de línea
+  const selProd = $('#producto'); if (selProd) selProd.innerHTML = '<option value="">Selecciona un pedido primero</option>';
+  const c = $('#cantidad'); if (c) c.value = '';
+  const p = $('#precio');   if (p) p.value = '';
+
+  // proveedor y fechas
+  const prov = $('#proveedor'); if (prov) prov.value = '';
+  setFechas();
+
+  // pedido (opcional)
+  if (clearPedido) {
+    const ped = $('#pedido'); if (ped) ped.value = '';
+  }
+
+  // si hay un <form>, podés usar reset nativo también:
+  // const f = $('#formPresupuesto'); if (f) f.reset();
+  // setFechas(); // importante reponer la fecha si usás reset()
+}
+
 async function guardarPresupuesto(){
   const numero_pedido = $('#pedido')?.value;
   const id_proveedor  = $('#proveedor')?.value;
@@ -239,6 +278,10 @@ async function guardarPresupuesto(){
   if(!numero_pedido){ alert('Seleccioná un pedido'); return; }
   if(!id_proveedor){  alert('Seleccioná un proveedor'); return; }
   if(detalle.length === 0){ alert('No hay líneas en el detalle'); return; }
+
+  // Anti doble click
+  const btn = $('#btnGuardar');
+  if (btn) { btn.disabled = true; btn.textContent = 'Guardando…'; }
 
   const fd = new FormData();
   fd.append('numero_pedido', numero_pedido);
@@ -259,14 +302,31 @@ async function guardarPresupuesto(){
       alert('Error al guardar: ' + (json.error || ''));
       return;
     }
+
     alert('Presupuesto guardado. ID: ' + json.id_presupuesto);
 
-    // reset mínimo
-    detalle = [];
-    pintarDetalle();
-    await cargarProductosDelPedido(); // refresca pendientes
+    // === Acciones post-guardado según configuración ===
+    if (POST_SAVE_BEHAVIOR === 'reload') {
+      window.location.reload();
+      return;
+    }
+
+    if (POST_SAVE_BEHAVIOR === 'reset-all') {
+      // Limpiar todo (incluye pedido) y recargar combos
+      resetPresupuestoUI({ clearPedido: true });
+      await cargarPedidos();
+      await cargarProveedores();
+      return;
+    }
+
+    // keep-pedido: limpiar detalle y refrescar pendientes del mismo pedido
+    resetPresupuestoUI({ clearPedido: false });
+    await cargarProductosDelPedido();
+
   }catch(e){
     console.error(e);
     alert('Error al guardar presupuesto');
+  }finally{
+    if (btn) { btn.disabled = false; btn.textContent = 'Guardar'; }
   }
 }

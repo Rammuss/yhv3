@@ -40,30 +40,43 @@
                 /* Ajustar el tamaño de fuente */
             }
 
-            table, thead, tbody, th, td, tr {
-        display: block; /* Convierte la tabla en un diseño de bloque en pantallas pequeñas */
-    }
+            table,
+            thead,
+            tbody,
+            th,
+            td,
+            tr {
+                display: block;
+                /* Convierte la tabla en un diseño de bloque en pantallas pequeñas */
+            }
 
-    th, td {
-        font-size: 14px; /* Reducir el tamaño de la fuente */
-        padding: 6px; /* Reducir el padding para celdas */
-        text-align: left;
-    }
+            th,
+            td {
+                font-size: 14px;
+                /* Reducir el tamaño de la fuente */
+                padding: 6px;
+                /* Reducir el padding para celdas */
+                text-align: left;
+            }
 
-    thead tr {
-        display: none; /* Oculta el encabezado de la tabla */
-    }
+            thead tr {
+                display: none;
+                /* Oculta el encabezado de la tabla */
+            }
 
-    tr {
-        margin-bottom: 10px; /* Añadir espacio entre las filas */
-        border: 1px solid #ddd; /* Opcional: bordes para mejorar la legibilidad */
-    }
+            tr {
+                margin-bottom: 10px;
+                /* Añadir espacio entre las filas */
+                border: 1px solid #ddd;
+                /* Opcional: bordes para mejorar la legibilidad */
+            }
 
-    td::before {
-        content: attr(data-label); /* Usa un atributo para mostrar el nombre de la columna */
-        font-weight: bold;
-        display: block;
-    }
+            td::before {
+                content: attr(data-label);
+                /* Usa un atributo para mostrar el nombre de la columna */
+                font-weight: bold;
+                display: block;
+            }
 
             .btn-eliminar,
             .btn-modificar {
@@ -154,6 +167,7 @@
             cursor: pointer;
             margin: 5px;
         }
+
         .btn-modificar {
             background-color: #007BFF;
             color: white;
@@ -166,6 +180,7 @@
         .btn-eliminar:hover {
             background-color: darkred;
         }
+
         .btn-modificar:hover {
             background-color: darkblue;
         }
