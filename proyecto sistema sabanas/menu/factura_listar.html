@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
   <title>Facturas de Compra</title>
-    <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css">
   <style>
     body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
     .wrap{max-width:1100px; margin:auto}
@@ -18,7 +18,7 @@
   </style>
 </head>
 <body>
-        <div id="navbar-container"></div>
+  <div id="navbar-container"></div>
   <div class="wrap">
     <h1>Facturas de Compra</h1>
 
@@ -46,6 +46,7 @@
           <th>Fecha</th>
           <th>Nº Doc</th>
           <th>Estado</th>
+          <th>Condición</th>
           <th class="right">Total</th>
           <th>Acciones</th>
         </tr>
@@ -55,12 +56,11 @@
   </div>
 
   <script>
-    // Ajustá las rutas si tus PHP están en otra carpeta
     const RUTAS = {
       proveedores: 'proveedores_options.php',
       listar:      'factura_listar.php',
       anular:      'factura_anular.php',
-      ver:         '../menu/factura_ver.php'
+      ver:         '../menu/factura_ver.php' // ajustá si cambia la ruta real
     };
 
     const $ = s => document.querySelector(s);
@@ -68,7 +68,7 @@
     document.addEventListener('DOMContentLoaded', ()=>{
       cargarProveedores();
       $('#btnBuscar').addEventListener('click', buscar);
-      buscar(); // primera carga
+      buscar();
     });
 
     async function cargarProveedores(){
@@ -77,7 +77,7 @@
         const data = await r.json();
         const sel = $('#proveedor');
         sel.innerHTML = '<option value="">Todos</option>';
-        data.forEach(p=>{
+        (data||[]).forEach(p=>{
           const o = document.createElement('option');
           o.value = p.id_proveedor;
           o.textContent = p.nombre;
@@ -109,135 +109,139 @@
     }
 
     function render(rows){
-  const tb = $('#tabla tbody');
-  tb.innerHTML = '';
-  if (rows.length===0){
-    tb.innerHTML = '<tr><td colspan="7" class="right">Sin resultados</td></tr>';
-    return;
-  }
-  rows.forEach(f=>{
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${f.id_factura}</td>
-      <td>${esc(f.proveedor) || f.id_proveedor}</td>
-      <td>${f.fecha_emision || ''}</td>
-      <td>${esc(f.numero_documento) || ''}</td>
-      <td>${esc(f.estado) || ''}</td>
-      <td class="right">${fmt(f.total_factura)}</td>
-      <td>
-        <button class="btn" onclick="verFactura(${f.id_factura})">Ver</button>
-        ${(f.estado==='Anulada')
-          ? '<span style="color:#888;margin-left:6px">—</span>'
-          : `<button class="btn" style="margin-left:6px" onclick="anular(${f.id_factura})">Anular</button>`
-        }
-      </td>
-    `;
-    tb.appendChild(tr);
-  });
-}
+      const tb = $('#tabla tbody');
+      tb.innerHTML = '';
+      if ((rows||[]).length===0){
+        tb.innerHTML = '<tr><td colspan="8" class="right">Sin resultados</td></tr>'; // <-- 8 columnas
+        return;
+      }
+      rows.forEach(f=>{
+        const condicionTxt = (f.condicion||'') === 'CREDITO'
+          ? `CREDITO · ${f.cuotas||1} cuota(s)`
+          : (f.condicion||'CONTADO');
 
-  async function verFactura(id_factura){
-  try{
-    const r = await fetch(`${RUTAS.ver}?id_factura=${encodeURIComponent(id_factura)}`);
-    const j = await r.json();
-    if(!j.ok) throw new Error(j.error || 'No se pudo obtener la factura');
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${f.id_factura}</td>
+          <td>${esc(f.proveedor)||f.id_proveedor}</td>
+          <td>${f.fecha_emision||''}</td>
+          <td>${esc(f.numero_documento)||''}</td>
+          <td>${esc(f.estado)||''}</td>
+          <td>${esc(condicionTxt)}</td>
+          <td class="right">${fmt(f.total_factura)}</td>
+          <td>
+            <button class="btn" onclick="verFactura(${f.id_factura})">Ver</button>
+            ${
+              (f.estado==='Anulada')
+              ? '<span style="color:#888;margin-left:6px">—</span>'
+              : `<button class="btn" style="margin-left:6px" onclick="anular(${f.id_factura})">Anular</button>`
+            }
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+    }
 
-    const f = j.cabecera;
-    const items = j.detalles || [];
-    const t = j.totales || {};
+    async function verFactura(id_factura){
+      try{
+        const r = await fetch(`${RUTAS.ver}?id_factura=${encodeURIComponent(id_factura)}`);
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error||'No se pudo obtener la factura');
 
-    
+        const f = j.cabecera||{};
+        const items = j.detalles||[];
+        const t = j.totales||{};
 
-    const rowsHtml = items.map((it,i)=>`
-  <tr>
-    <td>${i+1}</td>
-    <td>${esc(it.producto||'')}</td>
-    <td class="right">${Number(it.cantidad)}</td>
-    <td class="right">${fmt(it.precio_unitario)}</td>
-    <td class="right">${(it.iva!=null? it.iva+'%':'')}</td>
-    <td class="right">${fmt(it.total_linea)}</td>  <!-- total con IVA -->
-  </tr>
-`).join('');
+        const rowsHtml = items.map((it,i)=>{
+          const ivaLabel = (it.iva===0 || it.iva==='0') ? 'Exento' : `${it.iva}%`;
+          return `
+            <tr>
+              <td>${i+1}</td>
+              <td>${esc(it.producto||'')}</td>
+              <td class="right">${Number(it.cantidad)}</td>
+              <td class="right">${fmt(it.precio_unitario)}</td>
+              <td class="right">${ivaLabel}</td>
+              <td class="right">${fmt(it.total_linea)}</td>
+            </tr>
+          `;
+        }).join('');
 
+        const condicionTxt = (f.condicion||'') === 'CREDITO'
+          ? `CREDITO · ${f.cuotas||1} cuota(s)`
+          : (f.condicion||'CONTADO');
 
-    const html = `
-      <div class="grid">
-        <div>
-          <div><strong># Factura:</strong> ${f.id_factura}</div>
-          <div><strong>Nº Doc:</strong> ${esc(f.numero_documento||'')}</div>
-          <div><strong>Fecha:</strong> ${esc(f.fecha_emision||'')}</div>
-          <div class="muted">${esc(f.estado||'')}</div>
-        </div>
-        <div>
-          <div><strong>Proveedor:</strong> ${esc(f.proveedor||'')}</div>
-          <div><strong>RUC:</strong> ${esc(f.ruc||'')}</div>
-          <div><strong>Teléfono:</strong> ${esc(f.telefono||'')}</div>
-        </div>
-      </div>
+        const html = `
+          <div class="grid">
+            <div>
+              <div><strong># Factura:</strong> ${f.id_factura}</div>
+              <div><strong>Nº Doc:</strong> ${esc(f.numero_documento||'')}</div>
+              <div><strong>Fecha:</strong> ${esc(f.fecha_emision||'')}</div>
+              <div class="muted">${esc(f.estado||'')}</div>
+              <div><strong>Condición:</strong> ${esc(condicionTxt)}</div>
+            </div>
+            <div>
+              <div><strong>Proveedor:</strong> ${esc(f.proveedor||'')}</div>
+              <div><strong>RUC:</strong> ${esc(f.ruc||'')}</div>
+              <div><strong>Teléfono:</strong> ${esc(f.telefono||'')}</div>
+            </div>
+          </div>
 
-      ${f.observacion? `<p class="muted" style="margin-top:8px"><strong>Obs.:</strong> ${esc(f.observacion)}</p>`:''}
+          ${f.observacion ? `<p class="muted" style="margin-top:8px"><strong>Obs.:</strong> ${esc(f.observacion)}</p>` : ''}
 
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Producto</th>
-            <th class="right">Cant.</th>
-            <th class="right">P. Unit.</th>
-            <th class="right">IVA</th>
-            <th class="right">Total</th>
-          </tr>
-        </thead>
-        <tbody>${rowsHtml || `<tr><td colspan="6" class="right muted">Sin ítems</td></tr>`}</tbody>
-        <tfoot>
-          <tr><td colspan="5" class="right">Subtotal</td><td class="right">${fmt(t.subtotal)}</td></tr>
-          ${t.iva10!=null ? `<tr><td colspan="5" class="right">IVA 10%</td><td class="right">${fmt(t.iva10)}</td></tr>`:''}
-          ${t.iva5!=null ? `<tr><td colspan="5" class="right">IVA 5%</td><td class="right">${fmt(t.iva5)}</td></tr>`:''}
-          ${t.iva_exenta!=null ? `<tr><td colspan="5" class="right">Exentas</td><td class="right">${fmt(t.iva_exenta)}</td></tr>`:''}
-          <tr><td colspan="5" class="right">Total</td><td class="right">${fmt(t.total)}</td></tr>
-        </tfoot>
-      </table>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Producto</th>
+                <th class="right">Cant.</th>
+                <th class="right">P. Unit.</th>
+                <th class="right">IVA</th>
+                <th class="right">Total</th>
+              </tr>
+            </thead>
+            <tbody>${rowsHtml || `<tr><td colspan="6" class="right muted">Sin ítems</td></tr>`}</tbody>
+            <tfoot>
+              <tr><td colspan="5" class="right">Subtotal</td><td class="right">${fmt(t.subtotal)}</td></tr>
+              ${t.iva10!=null ? `<tr><td colspan="5" class="right">IVA 10%</td><td class="right">${fmt(t.iva10)}</td></tr>` : ''}
+              ${t.iva5!=null  ? `<tr><td colspan="5" class="right">IVA 5%</td><td class="right">${fmt(t.iva5)}</td></tr>`   : ''}
+              ${t.iva_exenta!=null ? `<tr><td colspan="5" class="right">Exentas</td><td class="right">${fmt(t.iva_exenta)}</td></tr>` : ''}
+              <tr><td colspan="5" class="right">Total</td><td class="right">${fmt(t.total)}</td></tr>
+            </tfoot>
+          </table>
 
-      <div class="actions">
-        <button class="btn" onclick="imprimirFactura()">Imprimir</button>
-      </div>
-    `;
-    $('#ver-content').innerHTML = html;
-    abrirVer();
-  }catch(e){
-    alert(e.message || 'Error al cargar la factura');
-  }
-}
+          <div class="actions">
+            <button class="btn" onclick="imprimirFactura()">Imprimir</button>
+          </div>
+        `;
+        $('#ver-content').innerHTML = html;
+        abrirVer();
+      }catch(e){
+        alert(e.message||'Error al cargar la factura');
+      }
+    }
 
-function abrirVer(){
-  const bd = $('#ver-backdrop');
-  bd.style.display = 'flex';
-}
-function cerrarVer(){
-  const bd = $('#ver-backdrop');
-  bd.style.display = 'none';
-}
-function imprimirFactura(){
-  // Versión simple: imprime lo que hay en el modal
-  const w = window.open('', '_blank');
-  w.document.write(`
-    <html><head><title>Factura</title>
-    <meta charset="utf-8"/>
-    <style>
-      body{font-family:Arial, sans-serif; padding:16px}
-      table{width:100%; border-collapse:collapse}
-      th,td{border:1px solid #ccc; padding:6px}
-      .right{text-align:right}
-      tfoot td{font-weight:bold}
-    </style>
-    </head><body>${$('#ver-content').innerHTML}</body></html>
-  `);
-  w.document.close();
-  w.focus();
-  w.print();
-  // w.close(); // si querés cerrarlo después de imprimir
-}
+    function abrirVer(){ $('#ver-backdrop').style.display = 'flex'; }
+    function cerrarVer(){ $('#ver-backdrop').style.display = 'none'; }
 
+    function imprimirFactura(){
+      const w = window.open('', '_blank');
+      if(!w){ alert('Desbloqueá los popups para imprimir.'); return; }
+      w.document.write(`
+        <html><head><title>Factura</title>
+        <meta charset="utf-8"/>
+        <style>
+          body{font-family:Arial, sans-serif; padding:16px}
+          table{width:100%; border-collapse:collapse}
+          th,td{border:1px solid #ccc; padding:6px}
+          .right{text-align:right}
+          tfoot td{font-weight:bold}
+        </style>
+        </head><body>${$('#ver-content').innerHTML}</body></html>
+      `);
+      w.document.close();
+      w.focus();
+      w.print();
+    }
 
     async function anular(id_factura){
       if(!confirm(`¿Anular factura #${id_factura}?`)) return;
@@ -246,10 +250,10 @@ function imprimirFactura(){
       fd.append('id_factura', id_factura);
       fd.append('motivo', motivo);
       try{
-        const r = await fetch(RUTAS.anular,{method:'POST', body: fd});
+        const r = await fetch(RUTAS.anular, {method:'POST', body: fd});
         const j = await r.json();
-        if (!r.ok || !j.ok) throw new Error(j.error||'No se pudo anular');
-        alert(j.msg || 'Factura anulada');
+        if(!r.ok || !j.ok) throw new Error(j.error||'No se pudo anular');
+        alert(j.msg||'Factura anulada');
         buscar();
       }catch(e){ alert(e.message||'Error'); }
     }
@@ -257,41 +261,40 @@ function imprimirFactura(){
     function fmt(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
+    // Exponer para inline handlers
     window.anular = anular;
+    window.verFactura = verFactura;
   </script>
-    <script src="navbar.js"></script>
+  <script src="navbar.js"></script>
 
-    <style>
-  /* Modal simple */
-  .modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:9999}
-  .modal{background:#fff; width:min(1000px,95vw); max-height:90vh; overflow:auto; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.2)}
-  .modal header{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #eee}
-  .modal header h3{margin:0}
-  .modal .content{padding:16px}
-  .modal .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
-  .modal .muted{color:#666; font-size:13px}
-  .modal .right{text-align:right}
-  .modal .btn-close{border:0; background:#eee; padding:6px 10px; border-radius:6px; cursor:pointer}
-  .modal table{width:100%; border-collapse:collapse; margin-top:8px}
-  .modal th,.modal td{border:1px solid #eee; padding:8px; text-align:left}
-  .modal tfoot td{font-weight:bold}
-  .modal .actions{display:flex; gap:8px; justify-content:flex-end; margin-top:12px}
-  .modal .btn{padding:6px 10px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
-  .modal .btn:hover{background:#f3f3f3}
-  @media (max-width:700px){ .modal .grid{grid-template-columns:1fr} }
-</style>
+  <style>
+    /* Modal simple */
+    .modal-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:9999}
+    .modal{background:#fff; width:min(1000px,95vw); max-height:90vh; overflow:auto; border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.2)}
+    .modal header{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #eee}
+    .modal header h3{margin:0}
+    .modal .content{padding:16px}
+    .modal .grid{display:grid; grid-template-columns:1fr 1fr; gap:12px}
+    .modal .muted{color:#666; font-size:13px}
+    .modal .right{text-align:right}
+    .modal .btn-close{border:0; background:#eee; padding:6px 10px; border-radius:6px; cursor:pointer}
+    .modal table{width:100%; border-collapse:collapse; margin-top:8px}
+    .modal th,.modal td{border:1px solid #eee; padding:8px; text-align:left}
+    .modal tfoot td{font-weight:bold}
+    .modal .actions{display:flex; gap:8px; justify-content:flex-end; margin-top:12px}
+    .modal .btn{padding:6px 10px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
+    .modal .btn:hover{background:#f3f3f3}
+    @media (max-width:700px){ .modal .grid{grid-template-columns:1fr} }
+  </style>
 
-<div id="ver-backdrop" class="modal-backdrop">
-  <div class="modal">
-    <header>
-      <h3>Factura de Compra</h3>
-      <button class="btn-close" onclick="cerrarVer()">Cerrar</button>
-    </header>
-    <div class="content" id="ver-content">
-      <!-- Aquí se inyecta la factura -->
+  <div id="ver-backdrop" class="modal-backdrop">
+    <div class="modal">
+      <header>
+        <h3>Factura de Compra</h3>
+        <button class="btn-close" onclick="cerrarVer()">Cerrar</button>
+      </header>
+      <div class="content" id="ver-content"><!-- se inyecta --></div>
     </div>
   </div>
-</div>
-
 </body>
 </html>

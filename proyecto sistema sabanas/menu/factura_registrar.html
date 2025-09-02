@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <title>Registrar Factura de Compra</title>
-    <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css">
   <style>
     body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
     .wrap{max-width:1100px; margin:auto}
@@ -18,10 +18,15 @@
     .btn{padding:8px 12px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
     .btn:hover{background:#f3f3f3}
     .badge{display:inline-block;padding:2px 6px;border:1px solid #ddd;border-radius:12px;font-size:12px;background:#fff}
+    .grid{display:grid; gap:10px}
+    .grid.cols-4{grid-template-columns:repeat(4, minmax(160px,1fr))}
+    .grid.cols-3{grid-template-columns:repeat(3, minmax(160px,1fr))}
+    .cuota-item{display:flex; gap:8px; align-items:center}
+    .cuota-item input[type="date"]{padding:6px}
   </style>
 </head>
 <body>
-    <div id="navbar-container"></div>
+  <div id="navbar-container"></div>
   <div class="wrap">
     <h1>Registrar Factura de Compra</h1>
 
@@ -44,6 +49,40 @@
       <label>Observación:</label>
       <input type="text" id="observacion" style="min-width:260px">
     </div>
+
+    <!-- === BLOQUE CONDICIÓN / CUOTAS === -->
+    <div class="row" style="align-items:flex-start">
+      <div class="grid cols-4" style="flex:1">
+        <div>
+          <label>Condición:</label><br>
+          <select id="condicion">
+            <option value="CREDITO" selected>CRÉDITO</option>
+            <option value="CONTADO">CONTADO</option>
+          </select>
+        </div>
+        <div>
+          <label>Nº de cuotas:</label><br>
+          <input type="number" id="cuotas" min="1" value="1" style="width:120px">
+        </div>
+        <div>
+          <label>Días al 1er venc.:</label><br>
+          <input type="number" id="dias_plazo" min="0" value="30" style="width:140px">
+        </div>
+        <div>
+          <label>Intervalo (días):</label><br>
+          <input type="number" id="intervalo_dias" min="1" value="30" style="width:140px">
+        </div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px">
+        <label class="cuota-item">
+          <input type="checkbox" id="editarFechas">
+          <span>Editar fechas de cuotas</span>
+        </label>
+        <button class="btn" id="btnPreview">Previsualizar cuotas</button>
+      </div>
+    </div>
+
+    <div id="cuotasBox" class="grid cols-3" style="display:none; margin-bottom:8px"></div>
 
     <table id="tabla">
       <thead>
@@ -74,7 +113,6 @@
   </div>
 
   <script>
-    // Ajustá las rutas si tus PHP están en otra carpeta
     const RUTAS = {
       proveedores: 'proveedores_options.php',
       preparar:    'factura_preparar.php',
@@ -89,6 +127,16 @@
       cargarProveedores();
       $('#btnCargar').addEventListener('click', cargarPendientes);
       $('#btnGuardar').addEventListener('click', guardar);
+
+      // cuotas UI
+      $('#condicion').addEventListener('change', onCondicionChange);
+      $('#cuotas').addEventListener('input', previewCuotas);
+      $('#dias_plazo').addEventListener('input', previewCuotas);
+      $('#intervalo_dias').addEventListener('input', previewCuotas);
+      $('#editarFechas').addEventListener('change', toggleEditarFechas);
+      $('#btnPreview').addEventListener('click', previewCuotas);
+
+      onCondicionChange(); // set defaults
     });
 
     function setFechaHoy(){
@@ -129,7 +177,7 @@
           id_producto: +x.id_producto,
           producto: x.producto,
           pendiente: +x.pendiente,
-          cantidad: +x.pendiente, // por defecto facturar todo (editable)
+          cantidad: +x.pendiente, // por defecto facturar todo
           precio: 0,
           iva: '10%'
         }));
@@ -173,6 +221,7 @@
         tb.appendChild(tr);
       });
       recalcularTotal();
+      previewCuotas(); // refresca la sugerencia de vencimientos con el total
     }
 
     function onCant(i, v){
@@ -197,6 +246,57 @@
     function fmt(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2}); }
     function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
+    // ==== CUOTAS UI ====
+    function onCondicionChange(){
+      const cond = $('#condicion').value;
+      if(cond === 'CONTADO'){
+        $('#cuotas').value = 1;
+        $('#dias_plazo').value = 0; // si querés al día
+      }
+      previewCuotas();
+    }
+
+    function toggleEditarFechas(){
+      previewCuotas();
+    }
+
+    function previewCuotas(){
+      const box = $('#cuotasBox');
+      const cond = $('#condicion').value;
+      const cuotas = Math.max(1, +($('#cuotas').value||1));
+      const dias1  = Math.max(0, +($('#dias_plazo').value||0));
+      const inter  = Math.max(1, +($('#intervalo_dias').value||30));
+      const editable = $('#editarFechas').checked;
+
+      // mostrar/ocultar contenedor
+      box.style.display = (cond === 'CREDITO' || cuotas>1 || editable) ? 'grid' : (editable ? 'grid' : 'none');
+      box.innerHTML = '';
+
+      // calcular fechas sugeridas
+      const base = new Date($('#fecha_emision').value || new Date().toISOString().slice(0,10));
+      let cur = new Date(base);
+      cur.setDate(cur.getDate() + dias1);
+
+      for(let n=1; n<=cuotas; n++){
+        if(n>1){
+          cur = new Date(cur);
+          cur.setDate(cur.getDate() + inter);
+        }
+        const y = cur.getFullYear();
+        const m = String(cur.getMonth()+1).padStart(2,'0');
+        const d = String(cur.getDate()).padStart(2,'0');
+        const iso = `${y}-${m}-${d}`;
+
+        const div = document.createElement('div');
+        div.className = 'cuota-item';
+        div.innerHTML = `
+          <span style="width:70px">Cuota ${n}</span>
+          <input type="date" ${editable?'':'disabled'} value="${iso}" data-cuota="${n}" class="fecha-cuota">
+        `;
+        box.appendChild(div);
+      }
+    }
+
     async function guardar(){
       const id_proveedor = $('#proveedor')?.value;
       const fecha_emision = $('#fecha_emision')?.value;
@@ -219,6 +319,24 @@
       fd.append('numero_documento', numero_documento);
       fd.append('observacion', observacion);
 
+      // cuotas/condición
+      const condicion = $('#condicion').value;
+      const cuotas = Math.max(1, +($('#cuotas').value||1));
+      const dias_plazo = Math.max(0, +($('#dias_plazo').value||0));
+      const intervalo_dias = Math.max(1, +($('#intervalo_dias').value||30));
+      fd.append('condicion', condicion);
+      fd.append('cuotas', cuotas);
+      fd.append('dias_plazo', dias_plazo);
+      fd.append('intervalo_dias', intervalo_dias);
+
+      // si el usuario activó edición de fechas, mandamos fechas_cuota[]
+      if($('#editarFechas').checked){
+        document.querySelectorAll('.fecha-cuota').forEach(inp=>{
+          fd.append('fechas_cuota[]', inp.value);
+        });
+      }
+
+      // detalle de líneas
       lineas.forEach(l=>{
         fd.append('id_oc_det[]', l.id_oc_det);
         fd.append('cantidad[]', l.cantidad);
@@ -229,25 +347,32 @@
       try{
         const r = await fetch(RUTAS.guardar,{method:'POST', body: fd});
         const j = await r.json();
-        if(!r.ok || !j.ok){ alert('Error: ' + (j.error||'')); return; }
-        alert(`Factura guardada #${j.id_factura} — Total ${fmt(j.total)}`);
+        if(!r.ok || !j.ok){ alert('Error: ' + (j.error||'Desconocido')); return; }
+        alert(`Factura guardada #${j.id_factura} — Total ${fmt(j.total_factura)}`);
+
         // reset mínimo
         lineas = [];
         renderTabla();
         $('#numero_documento').value = '';
         $('#observacion').value = '';
         $('#infoPend').textContent = '';
+        // reset cuotas visual
+        $('#cuotas').value = 1;
+        $('#dias_plazo').value = 30;
+        $('#intervalo_dias').value = 30;
+        $('#editarFechas').checked = false;
+        previewCuotas();
       }catch(e){
         console.error(e);
         alert('Error al guardar la factura');
       }
     }
 
-    // Exponer handlers
+    // Exponer handlers (para inputs dentro de la tabla)
     window.onCant = onCant;
     window.onPrecio = onPrecio;
     window.onIva = onIva;
   </script>
-    <script src="navbar.js"></script>
+  <script src="navbar.js"></script>
 </body>
 </html>

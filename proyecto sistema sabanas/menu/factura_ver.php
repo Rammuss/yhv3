@@ -13,21 +13,26 @@ try {
 
   // CABECERA
   $sqlCab = "
-    SELECT f.id_factura,
-           f.id_proveedor,
-           to_char(f.fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
-           f.numero_documento,
-           f.estado,
-           f.total_factura,
-           f.observacion,
-           p.nombre   AS proveedor,
-           p.ruc,
-           p.telefono
-      FROM public.factura_compra_cab f
-      JOIN public.proveedores p ON p.id_proveedor = f.id_proveedor
-     WHERE f.id_factura = $1
-     LIMIT 1;
-  ";
+  SELECT f.id_factura,
+         f.id_proveedor,
+         to_char(f.fecha_emision, 'YYYY-MM-DD') AS fecha_emision,
+         f.numero_documento,
+         f.estado,
+         f.total_factura,
+         f.observacion,
+         f.condicion,
+         f.cuotas,
+         f.dias_plazo,
+         f.intervalo_dias,
+         p.nombre   AS proveedor,
+         p.ruc,
+         p.telefono
+    FROM public.factura_compra_cab f
+    JOIN public.proveedores p ON p.id_proveedor = f.id_proveedor
+   WHERE f.id_factura = $1
+   LIMIT 1;
+";
+
   $rcab = pg_query_params($conn, $sqlCab, [$id]);
   if (!$rcab)  { throw new Exception('Error consultando cabecera: ' . pg_last_error($conn)); }
   if (pg_num_rows($rcab) === 0) { throw new Exception('No existe la factura'); }
@@ -95,17 +100,23 @@ try {
 
   // Respuesta
   $response['cabecera'] = [
-    'id_factura'       => (int) $cab['id_factura'],
-    'id_proveedor'     => (int) $cab['id_proveedor'],
-    'proveedor'        => $cab['proveedor'],
-    'ruc'              => $cab['ruc'],
-    'telefono'         => $cab['telefono'],
-    'fecha_emision'    => $cab['fecha_emision'],
-    'numero_documento' => $cab['numero_documento'],
-    'estado'           => $cab['estado'],
-    'observacion'      => $cab['observacion'],
-    'total_factura'    => isset($cab['total_factura']) ? (float) $cab['total_factura'] : null,
-  ];
+  'id_factura'       => (int)$cab['id_factura'],
+  'id_proveedor'     => (int)$cab['id_proveedor'],
+  'proveedor'        => $cab['proveedor'],
+  'ruc'              => $cab['ruc'],
+  'telefono'         => $cab['telefono'],
+  'fecha_emision'    => $cab['fecha_emision'],
+  'numero_documento' => $cab['numero_documento'],
+  'estado'           => $cab['estado'],
+  'observacion'      => $cab['observacion'],
+  'total_factura'    => isset($cab['total_factura']) ? (float)$cab['total_factura'] : null,
+  // nuevos:
+  'condicion'        => $cab['condicion'],
+  'cuotas'           => isset($cab['cuotas']) ? (int)$cab['cuotas'] : null,
+  'dias_plazo'       => isset($cab['dias_plazo']) ? (int)$cab['dias_plazo'] : null,
+  'intervalo_dias'   => isset($cab['intervalo_dias']) ? (int)$cab['intervalo_dias'] : null,
+];
+
   $response['detalles'] = $detalles;
   $response['totales']  = [
     'subtotal'   => round($subtotal, 2),

@@ -1,31 +1,68 @@
 <?php
 // factura_listar.php
 header('Content-Type: application/json; charset=utf-8');
-require_once("../conexion/config.php");
 
-$c = pg_connect("host=$host port=$port dbname=$dbname user=$user password=$password");
-if(!$c){ echo json_encode(["ok"=>false,"error"=>"DB"]); exit; }
+try {
+  require __DIR__ . '/../conexion/configv2.php'; // $conn
 
-$q = "
-  SELECT f.id_factura, f.id_proveedor, p.nombre AS proveedor,
-         f.fecha_emision, f.numero_documento, f.estado, f.total_factura
-  FROM factura_compra_cab f
-  LEFT JOIN proveedores p ON p.id_proveedor=f.id_proveedor
-  WHERE 1=1
-";
-$P = [];
+  if (!$conn) {
+    echo json_encode(['ok'=>false,'error'=>'Sin conexión']); exit;
+  }
 
-if (!empty($_GET['id_proveedor'])){ $P[] = (int)$_GET['id_proveedor']; $q.=" AND f.id_proveedor=$".count($P); }
-if (!empty($_GET['estado'])){ $P[] = $_GET['estado']; $q.=" AND f.estado=$".count($P); }
-if (!empty($_GET['desde'])){ $P[] = $_GET['desde']; $q.=" AND f.fecha_emision>=$".count($P); }
-if (!empty($_GET['hasta'])){ $P[] = $_GET['hasta']; $q.=" AND f.fecha_emision<=$".count($P); }
+  // Filtros
+  $id_proveedor = isset($_GET['id_proveedor']) && ctype_digit($_GET['id_proveedor']) ? (int)$_GET['id_proveedor'] : null;
+  $estado       = isset($_GET['estado']) ? trim($_GET['estado']) : '';
+  $desde        = isset($_GET['desde']) ? trim($_GET['desde']) : '';
+  $hasta        = isset($_GET['hasta']) ? trim($_GET['hasta']) : '';
 
-$q .= " ORDER BY f.id_factura DESC LIMIT 500";
+  $where = [];
+  $params = [];
+  $i = 1;
 
-$res = $P ? pg_query_params($c,$q,$P) : pg_query($c,$q);
-if(!$res){ echo json_encode(["ok"=>false,"error"=>"Query"]); exit; }
+  if ($id_proveedor) { $where[] = "f.id_proveedor = $" . ($i++); $params[] = $id_proveedor; }
+  if ($estado !== ''){ $where[] = "f.estado = $" . ($i++);       $params[] = $estado; }
+  if ($desde !== '') { $where[] = "f.fecha_emision >= $" . ($i++);$params[] = $desde; }
+  if ($hasta !== '') { $where[] = "f.fecha_emision <= $" . ($i++);$params[] = $hasta; }
 
-$out = [];
-while($r = pg_fetch_assoc($res)) $out[] = $r;
+  $sql = "
+    SELECT
+      f.id_factura,
+      p.nombre AS proveedor,
+      to_char(f.fecha_emision,'YYYY-MM-DD') AS fecha_emision,
+      f.numero_documento,
+      f.estado,
+      f.total_factura,
+      -- IMPORTANTES PARA TU COLUMNA:
+      COALESCE(NULLIF(f.condicion,''),'CONTADO') AS condicion,
+      f.cuotas
+    FROM public.factura_compra_cab f
+    JOIN public.proveedores p ON p.id_proveedor = f.id_proveedor
+    " . (count($where) ? "WHERE ".implode(' AND ',$where) : "") . "
+    ORDER BY f.fecha_emision DESC, f.id_factura DESC
+    LIMIT 500
+  ";
 
-echo json_encode(["ok"=>true,"data"=>$out], JSON_UNESCAPED_UNICODE);
+  $res = pg_query_params($conn, $sql, $params);
+  if (!$res) {
+    echo json_encode(['ok'=>false,'error'=>'Error consultando: '.pg_last_error($conn)]); exit;
+  }
+
+  $data = [];
+  while ($row = pg_fetch_assoc($res)) {
+    $data[] = [
+      'id_factura'      => (int)$row['id_factura'],
+      'proveedor'       => $row['proveedor'],
+      'fecha_emision'   => $row['fecha_emision'],
+      'numero_documento'=> $row['numero_documento'],
+      'estado'          => $row['estado'],
+      'total_factura'   => (float)$row['total_factura'],
+      // claves que usa tu front:
+      'condicion'       => strtoupper(trim($row['condicion'] ?? 'CONTADO')), // CREDITO/CONTADO
+      'cuotas'          => isset($row['cuotas']) ? (int)$row['cuotas'] : null,
+    ];
+  }
+
+  echo json_encode(['ok'=>true,'data'=>$data], JSON_UNESCAPED_UNICODE);
+} catch (Throwable $e) {
+  echo json_encode(['ok'=>false,'error'=>$e->getMessage()]);
+}
