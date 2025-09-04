@@ -96,6 +96,12 @@ async function verOC(id_oc){
 
     const oc = json.data;
 
+    // NUEVO: preparar textos de condición y sucursal
+    const condicionTxt = oc.condicion_pago ? String(oc.condicion_pago) : 'CONTADO';
+    const sucursalTxt  = oc.sucursal_nombre
+      ? oc.sucursal_nombre
+      : (oc.id_sucursal ? ('ID ' + oc.id_sucursal) : '—');
+
     const detRows = (oc.det || []).map((d,i)=>{
       const lt = Number(d.cantidad)*Number(d.precio_unit);
       return `
@@ -117,10 +123,14 @@ async function verOC(id_oc){
           <div><b>Pedido:</b> #${oc.numero_pedido}</div>
           <div><b>Fecha:</b> ${oc.fecha_emision || ''}</div>
           <div><b>Estado:</b> ${oc.estado}</div>
+          <div><b>Condición:</b> ${escapeHtml(condicionTxt)}</div>
+          <div><b>Sucursal:</b> ${escapeHtml(sucursalTxt)}</div>
         </div>
         <div style="flex:1">
           ${oc.observacion ? `<div><b>Obs:</b> ${escapeHtml(oc.observacion)}</div>` : ''}
-          <div style="text-align:right; font-weight:bold; margin-top:6px">Total: ${Number(oc.total_oc).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+          <div style="text-align:right; font-weight:bold; margin-top:6px">
+            Total: ${Number(oc.total_oc).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2})}
+          </div>
         </div>
       </div>
       <table style="width:100%">

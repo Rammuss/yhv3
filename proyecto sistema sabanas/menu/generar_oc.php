@@ -1,7 +1,7 @@
 <?php
 // generar_oc.php
 header('Content-Type: application/json; charset=utf-8');
-require_once("../conexion/config.php");
+require_once("../conexion/configv2.php");
 
 $c = pg_connect("host=$host port=$port dbname=$dbname user=$user password=$password");
 if(!$c){ http_response_code(500); echo json_encode(["ok"=>false,"error"=>"DB"]); exit; }
@@ -11,6 +11,8 @@ if(!$c){ http_response_code(500); echo json_encode(["ok"=>false,"error"=>"DB"]);
  * - numero_pedido (int)
  * - id_proveedor (int)
  * - observacion (opcional)
+ * - condicion_pago ('CONTADO'|'CREDITO') (opcional, default CONTADO)
+ * - id_sucursal (int|null) (opcional)
  * - id_presupuesto_detalle[] (array)
  * - cantidad[] (array, misma longitud)
  */
@@ -19,6 +21,17 @@ $pedido = isset($_POST['numero_pedido']) ? (int)$_POST['numero_pedido'] : 0;
 $prov   = isset($_POST['id_proveedor'])  ? (int)$_POST['id_proveedor']  : 0;
 $obs    = $_POST['observacion'] ?? null;
 
+// NUEVO: condicion_pago (validada)
+$condicion = $_POST['condicion_pago'] ?? 'CONTADO';
+if (!in_array($condicion, ['CONTADO','CREDITO'], true)) {
+  $condicion = 'CONTADO';
+}
+
+// NUEVO: id_sucursal (puede venir vacío -> NULL)
+$id_sucursal = isset($_POST['id_sucursal']) && $_POST['id_sucursal'] !== ''
+  ? (int)$_POST['id_sucursal']
+  : null;
+
 $ids    = $_POST['id_presupuesto_detalle'] ?? [];   // arrays paralelos
 $cants  = $_POST['cantidad'] ?? [];
 
@@ -26,13 +39,25 @@ if ($pedido<=0 || $prov<=0) { http_response_code(400); echo json_encode(["ok"=>f
 if (!is_array($ids) || count($ids)==0) { http_response_code(400); echo json_encode(["ok"=>false,"error"=>"Sin líneas"]); exit; }
 if (!is_array($cants) || count($cants)!=count($ids)) { http_response_code(400); echo json_encode(["ok"=>false,"error"=>"Datos de líneas inválidos"]); exit; }
 
+// NUEVO: si vino sucursal, validar que exista y esté ACTIVA
+if ($id_sucursal !== null) {
+  $qSuc = pg_query_params($c, "SELECT 1 FROM public.sucursales WHERE id_sucursal=$1 AND estado='ACTIVO' LIMIT 1", [$id_sucursal]);
+  if (!$qSuc || pg_num_rows($qSuc) === 0) {
+    http_response_code(400);
+    echo json_encode(["ok"=>false,"error"=>"Sucursal inexistente o INACTIVA"]);
+    exit;
+  }
+}
+
 pg_query($c, "BEGIN");
 
+// NUEVO: insertar condicion_pago e id_sucursal en cabecera
 $insCab = "
-  INSERT INTO public.orden_compra_cab (numero_pedido, id_proveedor, observacion)
-  VALUES ($1,$2,$3) RETURNING id_oc
+  INSERT INTO public.orden_compra_cab (numero_pedido, id_proveedor, observacion, condicion_pago, id_sucursal)
+  VALUES ($1,$2,$3,$4,$5)
+  RETURNING id_oc
 ";
-$rCab = pg_query_params($c, $insCab, [$pedido, $prov, $obs]);
+$rCab = pg_query_params($c, $insCab, [$pedido, $prov, $obs, $condicion, $id_sucursal]);
 if(!$rCab){ pg_query($c,"ROLLBACK"); http_response_code(500); echo json_encode(["ok"=>false,"error"=>"No se pudo crear OC"]); exit; }
 $id_oc = (int)pg_fetch_result($rCab, 0, 0);
 
@@ -57,7 +82,7 @@ for($i=0; $i<count($ids); $i++){
       pd.cantidad_aprobada,
       pr.id_proveedor,
       pr.numero_pedido,
-      pr.id_presupuesto              -- <-- lo necesitamos para recalcular estado del presupuesto
+      pr.id_presupuesto
     FROM public.presupuesto_detalle pd
     JOIN public.presupuestos pr ON pr.id_presupuesto = pd.id_presupuesto
     WHERE pd.id_presupuesto_detalle = $1
@@ -85,17 +110,20 @@ for($i=0; $i<count($ids); $i++){
   $okDet = pg_query_params($c,$insDet,[$id_oc, $id_prod, $cant, $precio, $id_det]);
   if(!$okDet){ pg_query($c,"ROLLBACK"); http_response_code(500); echo json_encode(["ok"=>false,"error"=>"No se pudo insertar detalle OC"]); exit; }
 
-  // Descontar de lo aprobado (evitar reuso) con tope en 0
-  $upd = "UPDATE public.presupuesto_detalle SET cantidad_aprobada = GREATEST(cantidad_aprobada - $2, 0) WHERE id_presupuesto_detalle = $1";
-  $okU = pg_query_params($c,$upd,[$id_det,$cant]);
+  // Descontar de lo aprobado (evitar reuso)
+  $okU = pg_query_params($c,
+    "UPDATE public.presupuesto_detalle
+     SET cantidad_aprobada = GREATEST(cantidad_aprobada - $2, 0)
+     WHERE id_presupuesto_detalle = $1",
+    [$id_det,$cant]
+  );
   if(!$okU){ pg_query($c,"ROLLBACK"); http_response_code(500); echo json_encode(["ok"=>false,"error"=>"No se pudo actualizar aprobación"]); exit; }
 
-  // Acumular presupuesto tocado
   $presupuestosTocados[] = (int)$L['id_presupuesto'];
 }
 
-// 1) Ajustar estado_detalle por si quedaron en 0
-$idsDet = '{'.implode(',', array_map('intval',$ids)).'}'; // array literal para ANY($1::int[])
+// 1) Ajustar estado_detalle
+$idsDet = '{'.implode(',', array_map('intval',$ids)).'}';
 pg_query_params($c, "
   UPDATE public.presupuesto_detalle
   SET estado_detalle = CASE
@@ -105,10 +133,9 @@ pg_query_params($c, "
   WHERE id_presupuesto_detalle = ANY($1::int[])
 ", [$idsDet]);
 
-// 2) Recalcular estado de cada presupuesto involucrado
+// 2) Recalcular estado de cada presupuesto
 $presupuestosTocados = array_values(array_unique($presupuestosTocados));
 foreach ($presupuestosTocados as $idp) {
-  // remanente (aprobado que aún no se llevó a OC)
   $r1 = pg_query_params($c, "
     SELECT COALESCE(SUM(cantidad_aprobada),0)
     FROM presupuesto_detalle
@@ -116,7 +143,6 @@ foreach ($presupuestosTocados as $idp) {
   ", [$idp]);
   $remanente = $r1 ? (float)pg_fetch_result($r1,0,0) : 0;
 
-  // comprometida (usada en OCs no anuladas)
   $r2 = pg_query_params($c, "
     SELECT COALESCE(SUM(ocd.cantidad),0)
     FROM presupuesto_detalle pd
@@ -139,14 +165,12 @@ $r = pg_query_params($c, "
   WITH x AS (
     SELECT d.id_producto,
            d.cantidad AS pedida,
-           COALESCE((
-             SELECT SUM(ocd.cantidad)
-             FROM orden_compra_det ocd
-             JOIN orden_compra_cab occ ON occ.id_oc=ocd.id_oc
-             WHERE occ.numero_pedido=d.numero_pedido
-               AND ocd.id_producto=d.id_producto
-               AND occ.estado<>'Anulada'
-           ),0) AS ordenada
+           COALESCE((SELECT SUM(ocd.cantidad)
+                     FROM orden_compra_det ocd
+                     JOIN orden_compra_cab occ ON occ.id_oc=ocd.id_oc
+                     WHERE occ.numero_pedido=d.numero_pedido
+                       AND ocd.id_producto=d.id_producto
+                       AND occ.estado<>'Anulada'),0) AS ordenada
     FROM detalle_pedido_interno d
     WHERE d.numero_pedido=$1
   )

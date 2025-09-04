@@ -8,7 +8,7 @@
     body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
     .wrap{max-width:1100px; margin:auto}
     h1{margin:0 0 12px}
-    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px}
+    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
     select,input,button,textarea{padding:8px}
     .card{background:#fff; border:1px solid #e5e5e5; border-radius:8px; margin-bottom:16px; box-shadow:0 1px 4px rgba(0,0,0,.05)}
     .card-header{display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid #eee}
@@ -25,6 +25,9 @@
     .btn-primary:hover{background:#e9edff}
     .total{font-weight:bold; margin-top:8px; text-align:right}
     textarea{width:100%; min-height:70px}
+    /* Pequeño ajuste para labels */
+    label{font-size:12px; color:#444}
+    .field{display:flex; flex-direction:column; gap:4px; min-width:220px}
   </style>
 </head>
 <body>
@@ -32,16 +35,42 @@
   <div class="wrap">
     <h1>Generar Orden de Compra</h1>
 
+    <!-- Fila 1: Pedido, Proveedor, Cargar líneas -->
     <div class="row">
-      <label for="pedido">Pedido:</label>
-      <select id="pedido"><option value="">Cargando...</option></select>
+      <div class="field" style="min-width:260px">
+        <label for="pedido">Pedido</label>
+        <select id="pedido"><option value="">Cargando...</option></select>
+      </div>
 
-      <label for="proveedor">Proveedor:</label>
-      <select id="proveedor" disabled>
-        <option value="">Seleccioná un pedido primero</option>
-      </select>
+      <div class="field" style="min-width:260px">
+        <label for="proveedor">Proveedor</label>
+        <select id="proveedor" disabled>
+          <option value="">Seleccioná un pedido primero</option>
+        </select>
+      </div>
 
-      <button class="btn" id="btnCargar" disabled>Cargar líneas aprobadas</button>
+      <div class="field" style="min-width:200px; align-self:flex-end">
+        <button class="btn" id="btnCargar" disabled style="width:100%">Cargar líneas aprobadas</button>
+      </div>
+    </div>
+
+    <!-- Fila 2 (NUEVO): Condición y Sucursal -->
+    <div class="row">
+      <div class="field" style="min-width:220px">
+        <label for="condicion_pago">Condición de pago</label>
+        <select id="condicion_pago" required>
+          <option value="CONTADO">Contado</option>
+          <option value="CREDITO">Crédito</option>
+        </select>
+      </div>
+
+      <div class="field" style="min-width:300px">
+        <label for="id_sucursal">Sucursal</label>
+        <select id="id_sucursal">
+          <option value="">-- Seleccionar sucursal --</option>
+          <!-- Se completa con sucursales_options.php?estado=ACTIVO -->
+        </select>
+      </div>
     </div>
 
     <div class="card">

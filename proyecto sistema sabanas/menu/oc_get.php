@@ -11,10 +11,20 @@ if ($id_oc <= 0) { echo json_encode(["ok"=>false,"error"=>"id_oc requerido"]); e
 
 $sqlCab = "
   SELECT
-    oc.id_oc, oc.numero_pedido, oc.id_proveedor, prov.nombre AS proveedor,
-    oc.fecha_emision, oc.estado, oc.observacion
+    oc.id_oc,
+    oc.numero_pedido,
+    oc.id_proveedor,
+    prov.nombre AS proveedor,
+    oc.fecha_emision,
+    oc.estado,
+    oc.observacion,
+    -- NUEVO
+    oc.condicion_pago,
+    oc.id_sucursal,
+    s.nombre AS sucursal_nombre
   FROM public.orden_compra_cab oc
   LEFT JOIN public.proveedores prov ON prov.id_proveedor = oc.id_proveedor
+  LEFT JOIN public.sucursales  s    ON s.id_sucursal = oc.id_sucursal
   WHERE oc.id_oc = $1
   LIMIT 1
 ";
@@ -23,15 +33,20 @@ if (!$rc || pg_num_rows($rc)==0) { echo json_encode(["ok"=>false,"error"=>"OC no
 $cab = pg_fetch_assoc($rc);
 
 $sqlDet = "
-  SELECT d.id_oc_det, d.id_producto, p.nombre AS producto,
-         d.cantidad, d.precio_unit, d.id_presupuesto_detalle
+  SELECT
+    d.id_oc_det,
+    d.id_producto,
+    p.nombre AS producto,
+    d.cantidad,
+    d.precio_unit,
+    d.id_presupuesto_detalle
   FROM public.orden_compra_det d
   JOIN public.producto p ON p.id_producto = d.id_producto
   WHERE d.id_oc = $1
   ORDER BY d.id_oc_det
 ";
 $rd = pg_query_params($c,$sqlDet,[$id_oc]);
-$det = []; $total = 0;
+$det = []; $total = 0.0;
 if ($rd) {
   while ($d = pg_fetch_assoc($rd)) {
     $det[] = $d;

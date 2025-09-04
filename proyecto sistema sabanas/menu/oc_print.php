@@ -1,5 +1,5 @@
 <?php
-// oc_print.php — versión formal con datos de proveedor
+// oc_print.php — versión formal con datos de proveedor + condición y sucursal
 require_once("../conexion/config.php");
 $c = pg_connect("host=$host port=$port dbname=$dbname user=$user password=$password");
 if (!$c) { die("DB error"); }
@@ -15,21 +15,26 @@ $empresa_tel      = "+595 21 000 000";
 $empresa_email    = "compras@miempresa.com";
 $empresa_logo_url = ""; // si tenés un logo accesible por URL, ponelo aquí
 
-/* === CABECERA OC + PROVEEDOR + CIUDAD/PAÍS === */
+/* === CABECERA OC + PROVEEDOR + CIUDAD/PAÍS + CONDICIÓN + SUCURSAL === */
 $sqlCab = "
   SELECT
     oc.id_oc, oc.numero_pedido, oc.id_proveedor, oc.fecha_emision, oc.estado, oc.observacion,
-    prov.nombre AS proveedor,
-    prov.ruc    AS proveedor_ruc,
-    prov.direccion AS proveedor_direccion,
-    prov.telefono  AS proveedor_telefono,
-    prov.email     AS proveedor_email,
-    pa.nombre      AS proveedor_pais,
-    ci.nombre      AS proveedor_ciudad
+    oc.condicion_pago,
+    oc.id_sucursal,
+    s.nombre AS sucursal_nombre,
+
+    prov.nombre      AS proveedor,
+    prov.ruc         AS proveedor_ruc,
+    prov.direccion   AS proveedor_direccion,
+    prov.telefono    AS proveedor_telefono,
+    prov.email       AS proveedor_email,
+    pa.nombre        AS proveedor_pais,
+    ci.nombre        AS proveedor_ciudad
   FROM public.orden_compra_cab oc
   LEFT JOIN public.proveedores prov ON prov.id_proveedor = oc.id_proveedor
   LEFT JOIN public.paises pa       ON pa.id_pais = prov.id_pais
   LEFT JOIN public.ciudades ci     ON ci.id_ciudad = prov.id_ciudad
+  LEFT JOIN public.sucursales s    ON s.id_sucursal = oc.id_sucursal
   WHERE oc.id_oc = $1
   LIMIT 1
 ";
@@ -147,12 +152,29 @@ $proveedor_ruc = $cab['proveedor_ruc'] ?? '';
       <?php if ($proveedor_linea3): ?><div><?php echo h($proveedor_linea3); ?></div><?php endif; ?>
       <?php if ($proveedor_linea4): ?><div class="muted"><?php echo h($proveedor_linea4); ?></div><?php endif; ?>
     </div>
+
     <div class="box">
       <h3>Pedido relacionado</h3>
       <div>Pedido #: <b><?php echo (int)$cab['numero_pedido']; ?></b></div>
       <?php if (!empty($cab['observacion'])): ?>
         <div style="margin-top:6px"><span class="muted">Obs:</span> <?php echo nl2br(h($cab['observacion'])); ?></div>
       <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- NUEVO: Condición y Sucursal -->
+  <div class="grid" style="margin-top:12px">
+    <div class="box">
+      <h3>Condición y sucursal</h3>
+      <div>Condición de pago: <b><?php echo h($cab['condicion_pago'] ?: 'CONTADO'); ?></b></div>
+      <div>Sucursal: <b><?php echo h($cab['sucursal_nombre'] ?: ($cab['id_sucursal'] ? 'ID '.$cab['id_sucursal'] : '—')); ?></b></div>
+    </div>
+    <div class="box">
+      <h3>Notas</h3>
+      <div class="muted" style="font-size:12px">
+        Indicar número de OC en factura y remisión. Cualquier diferencia en cantidades o precios debe informarse
+        antes del despacho. La entrega debe coordinarse con el área de recepción de la sucursal indicada.
+      </div>
     </div>
   </div>
 
@@ -183,7 +205,7 @@ $proveedor_ruc = $cab['proveedor_ruc'] ?? '';
     </tbody>
   </table>
 
-  <!-- Totales (si luego agregás IVA, acá es buen lugar) -->
+  <!-- Totales -->
   <div class="totals">
     <div class="sum">
       <div class="row"><span>Subtotal</span><span><?php echo n2($total); ?></span></div>

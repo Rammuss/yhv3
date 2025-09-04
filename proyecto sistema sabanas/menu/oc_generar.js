@@ -5,6 +5,7 @@ let lineas = []; // [{id_presupuesto_detalle, id_producto, producto, precio_unit
 
 document.addEventListener('DOMContentLoaded', () => {
   cargarPedidos();
+  cargarSucursales(); // 👈 NUEVO: catálogo de sucursales (ACTIVAS)
 
   $('#pedido').addEventListener('change', onPedidoChange);
   $('#proveedor').addEventListener('change', onProveedorChange);
@@ -12,14 +13,17 @@ document.addEventListener('DOMContentLoaded', () => {
   $('#btnGenerar').addEventListener('click', generarOC);
 });
 
+/* ===========================
+ *  Carga de combos
+ * =========================== */
 async function cargarPedidos(){
   try{
-    // 👇 Agregamos el scope=presupuesto para filtrar
+    // scope=presupuesto para filtrar los que tienen presupuestos relacionados
     const res = await fetch('pedidos_options.php?scope=presupuesto');
     const data = await res.json();
     const sel = $('#pedido');
     sel.innerHTML = '<option value="">Selecciona un pedido</option>';
-    data.forEach(r=>{
+    (data || []).forEach(r=>{
       const opt = document.createElement('option');
       opt.value = r.numero_pedido;
       opt.textContent = `#${r.numero_pedido} - ${r.departamento_solicitante} (${r.estado})`;
@@ -31,7 +35,30 @@ async function cargarPedidos(){
   }
 }
 
+// 👇 NUEVO
+async function cargarSucursales(){
+  const sel = $('#id_sucursal');
+  if (!sel) return; // por si no está en el DOM
+  try{
+    // Debe devolver un JSON: [{id_sucursal, nombre}]
+    const res = await fetch('../menu/referenciales_compra/sucursales/sucursales_options.php?estado=ACTIVO');
+    const data = await res.json();
+    sel.innerHTML = '<option value="">-- Seleccionar sucursal --</option>';
+    (data || []).forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id_sucursal;
+      opt.textContent = s.nombre;
+      sel.appendChild(opt);
+    });
+  }catch(e){
+    console.error(e);
+    // si falla, queda la opción por defecto
+  }
+}
 
+/* ===========================
+ *  Eventos de selección
+ * =========================== */
 async function onPedidoChange(){
   $('#proveedor').innerHTML = '<option value="">Cargando proveedores...</option>';
   $('#proveedor').disabled = true;
@@ -47,7 +74,7 @@ async function onPedidoChange(){
     return;
   }
 
-  // Detectar proveedores con líneas APROBADAS leyendo listar_presupuestos.php
+  // Detectar proveedores con líneas APROBADAS
   try{
     const url = `listar_presupuestos.php?numero_pedido=${encodeURIComponent(pedido)}`;
     const res = await fetch(url);
@@ -89,6 +116,9 @@ function onProveedorChange(){
   actualizarTotal();
 }
 
+/* ===========================
+ *  Cargar líneas aprobadas
+ * =========================== */
 async function cargarLineasAprobadas(){
   const pedido = $('#pedido').value;
   const prov   = $('#proveedor').value;
@@ -118,6 +148,9 @@ async function cargarLineasAprobadas(){
   }
 }
 
+/* ===========================
+ *  Render tabla y totales
+ * =========================== */
 function renderTabla(){
   if (lineas.length === 0){
     $('#panelLineas').innerHTML = '<div class="muted">Sin líneas aprobadas para este proveedor.</div>';
@@ -165,14 +198,32 @@ function cambiarCant(idx, val){
 
 function actualizarTotal(){
   const t = lineas.reduce((acc,l) => acc + (l.cantidad_oc*l.precio_unitario), 0);
-  $('#totalOC').textContent = t.toLocaleString('es-PY', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const el = $('#totalOC');
+  if (el) el.textContent = t.toLocaleString('es-PY', {minimumFractionDigits:2, maximumFractionDigits:2});
   $('#btnGenerar').disabled = !(lineas.some(l => l.cantidad_oc > 0));
 }
 
+/* ===========================
+ *  Generar OC (con condición y sucursal)
+ * =========================== */
 async function generarOC(){
   const pedido = $('#pedido').value;
   const prov   = $('#proveedor').value;
-  const obs    = $('#observacion').value.trim();
+  const obs    = ($('#observacion')?.value || '').trim();
+
+  // 👇 NUEVO: leer condición y sucursal
+  const condicion = ($('#condicion_pago')?.value || 'CONTADO');
+  const idSucursal = ($('#id_sucursal')?.value || '');
+
+  // Validación básica
+  if (!pedido || !prov){
+    alert('Elegí pedido y proveedor.');
+    return;
+  }
+  if (!['CONTADO','CREDITO'].includes(condicion)) {
+    alert('Condición de pago inválida.');
+    return;
+  }
 
   const seleccionadas = lineas.filter(l => l.cantidad_oc > 0);
   if (seleccionadas.length === 0){
@@ -184,6 +235,11 @@ async function generarOC(){
   fd.append('numero_pedido', pedido);
   fd.append('id_proveedor', prov);
   if (obs) fd.append('observacion', obs);
+
+  // 👇 NUEVO: adjuntar condición y sucursal
+  fd.append('condicion_pago', condicion);
+  if (idSucursal) fd.append('id_sucursal', idSucursal);
+
   seleccionadas.forEach(l => {
     fd.append('id_presupuesto_detalle[]', l.id_presupuesto_detalle);
     fd.append('cantidad[]', l.cantidad_oc);
@@ -199,9 +255,7 @@ async function generarOC(){
     const idoc = json.id_oc;
     alert('OC generada. ID: ' + idoc);
 
-    // mostrar un pequeño resumen de OCs del pedido
     await mostrarOCsDelPedido(pedido);
-    // limpiar selección de líneas
     lineas = [];
     renderTabla();
   }catch(e){
@@ -210,6 +264,9 @@ async function generarOC(){
   }
 }
 
+/* ===========================
+ *  Listado / Resumen
+ * =========================== */
 async function mostrarOCsDelPedido(pedido){
   try{
     const r = await fetch(`oc_listar.php?numero_pedido=${encodeURIComponent(pedido)}`);
@@ -235,7 +292,11 @@ async function mostrarOCsDelPedido(pedido){
         <div class="card">
           <div class="card-header">
             <div><b>OC #${oc.id_oc}</b> — ${oc.proveedor || oc.id_proveedor}</div>
-            <div class="muted">Fecha: ${oc.fecha_emision || ''} • Estado: ${oc.estado}</div>
+            <div class="muted">
+              Fecha: ${oc.fecha_emision || ''} • Estado: ${oc.estado}
+              ${oc.condicion_pago ? ` • Condición: ${oc.condicion_pago}` : ''}
+              ${oc.sucursal_nombre ? ` • Sucursal: ${escapeHtml(oc.sucursal_nombre)}` : (oc.id_sucursal ? ` • Sucursal ID: ${oc.id_sucursal}` : '')}
+            </div>
           </div>
           <div class="card-body">
             <table>
@@ -254,6 +315,9 @@ async function mostrarOCsDelPedido(pedido){
   }
 }
 
+/* ===========================
+ *  Utils
+ * =========================== */
 function escapeHtml(s){
   if (s == null) return '';
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
