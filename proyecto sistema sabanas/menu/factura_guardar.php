@@ -333,18 +333,19 @@ try {
   }
 
   /* =======================
-     LIBRO DE COMPRAS
+     LIBRO DE COMPRAS (con TIMBRADO)
      ======================= */
   $rProv = pg_query_params($conn, "SELECT ruc FROM public.proveedores WHERE id_proveedor=$1", [$id_prov]);
   $rucProv = ($rProv && pg_num_rows($rProv) > 0) ? pg_fetch_result($rProv, 0, 0) : null;
 
+  // IMPORTANTE: esta versión inserta también timbrado_numero en libro_compras
   $insLibro = pg_query_params(
     $conn,
     "INSERT INTO public.libro_compras
       (id_factura, fecha, id_proveedor, ruc, numero_documento,
-       gravada_10, iva_10, gravada_5, iva_5, exentas, total, estado)
+       gravada_10, iva_10, gravada_5, iva_5, exentas, total, estado, timbrado_numero)
      VALUES
-      ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Vigente')",
+      ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'Vigente',$12)",
     [
       $id_factura,
       $fecha,
@@ -356,7 +357,8 @@ try {
       $grav5,
       $iva5,
       $exentas,
-      $total_factura
+      $total_factura,
+      $timbr // << timbrado del encabezado
     ]
   );
   if (!$insLibro) {
