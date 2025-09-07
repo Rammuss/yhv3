@@ -45,6 +45,7 @@
           <th>Proveedor</th>
           <th>Fecha</th>
           <th>Nº Doc</th>
+          <th>Timbrado</th><!-- NUEVO -->
           <th>Estado</th>
           <th>Condición</th>
           <th class="right">Total</th>
@@ -112,7 +113,7 @@
       const tb = $('#tabla tbody');
       tb.innerHTML = '';
       if ((rows||[]).length===0){
-        tb.innerHTML = '<tr><td colspan="8" class="right">Sin resultados</td></tr>'; // <-- 8 columnas
+        tb.innerHTML = '<tr><td colspan="9" class="right">Sin resultados</td></tr>'; // 9 columnas ahora
         return;
       }
       rows.forEach(f=>{
@@ -126,6 +127,7 @@
           <td>${esc(f.proveedor)||f.id_proveedor}</td>
           <td>${f.fecha_emision||''}</td>
           <td>${esc(f.numero_documento)||''}</td>
+          <td>${esc(f.timbrado_numero||'')}</td> <!-- NUEVO -->
           <td>${esc(f.estado)||''}</td>
           <td>${esc(condicionTxt)}</td>
           <td class="right">${fmt(f.total_factura)}</td>
@@ -152,6 +154,21 @@
         const items = j.detalles||[];
         const t = j.totales||{};
 
+        // Sucursal
+        const sucTxt = f.sucursal_nombre ? f.sucursal_nombre : (f.id_sucursal ? ('ID '+f.id_sucursal) : '—');
+        // Condición + cuotas
+        const condicionTxt = (f.condicion||'') === 'CREDITO'
+          ? `CREDITO · ${f.cuotas||1} cuota(s)`
+          : (f.condicion||'CONTADO');
+        // Plazos (solo si es crédito)
+        const plazoTxt = (f.condicion==='CREDITO')
+          ? `1ra: ${f.dias_plazo ?? 0} día(s) • Intervalo: ${f.intervalo_dias ?? 0} día(s)`
+          : '—';
+        // Moneda
+        const monedaTxt = f.moneda || 'PYG';
+        // Timbrado
+        const timbradoTxt = f.timbrado_numero ? f.timbrado_numero : '—';
+
         const rowsHtml = items.map((it,i)=>{
           const ivaLabel = (it.iva===0 || it.iva==='0') ? 'Exento' : `${it.iva}%`;
           return `
@@ -166,23 +183,23 @@
           `;
         }).join('');
 
-        const condicionTxt = (f.condicion||'') === 'CREDITO'
-          ? `CREDITO · ${f.cuotas||1} cuota(s)`
-          : (f.condicion||'CONTADO');
-
         const html = `
           <div class="grid">
             <div>
               <div><strong># Factura:</strong> ${f.id_factura}</div>
               <div><strong>Nº Doc:</strong> ${esc(f.numero_documento||'')}</div>
+              <div><strong>Timbrado:</strong> ${esc(timbradoTxt)}</div> <!-- NUEVO -->
               <div><strong>Fecha:</strong> ${esc(f.fecha_emision||'')}</div>
-              <div class="muted">${esc(f.estado||'')}</div>
+              <div><strong>Estado:</strong> ${esc(f.estado||'')}</div>
+              <div><strong>Moneda:</strong> ${esc(monedaTxt)}</div>
               <div><strong>Condición:</strong> ${esc(condicionTxt)}</div>
+              <div><strong>Plazos:</strong> ${esc(plazoTxt)}</div>
             </div>
             <div>
               <div><strong>Proveedor:</strong> ${esc(f.proveedor||'')}</div>
               <div><strong>RUC:</strong> ${esc(f.ruc||'')}</div>
               <div><strong>Teléfono:</strong> ${esc(f.telefono||'')}</div>
+              <div><strong>Sucursal:</strong> ${esc(sucTxt)}</div>
             </div>
           </div>
 
@@ -209,7 +226,7 @@
             </tfoot>
           </table>
 
-          <div class="actions">
+          <div class="actions" style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px">
             <button class="btn" onclick="imprimirFactura()">Imprimir</button>
           </div>
         `;

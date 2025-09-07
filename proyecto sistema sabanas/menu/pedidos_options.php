@@ -11,7 +11,7 @@ $where = "1=1";
 $params = [];
 if ($scope === 'presupuesto') {
   // Solo pedidos en los que tiene sentido cargar presupuestos
-  $where = "estado IN ('Abierto','Parcialmente Ordenado')";
+  $where = "estado IN ('Abierto','Parcialmente Entregado')";
 }
 
 $sql = "

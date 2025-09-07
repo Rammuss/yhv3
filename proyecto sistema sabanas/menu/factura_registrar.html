@@ -23,6 +23,8 @@
     .grid.cols-3{grid-template-columns:repeat(3, minmax(160px,1fr))}
     .cuota-item{display:flex; gap:8px; align-items:center}
     .cuota-item input[type="date"]{padding:6px}
+    label{font-size:12px; color:#444}
+    .error{color:#b00020; font-size:12px}
   </style>
 </head>
 <body>
@@ -37,6 +39,11 @@
       <label>Nº Pedido (opcional):</label>
       <input type="number" id="numero_pedido" placeholder="Ej: 123">
 
+      <label>Sucursal:</label>
+      <select id="id_sucursal">
+        <option value="">-- Seleccionar sucursal --</option>
+      </select>
+
       <button class="btn" id="btnCargar">Cargar OCs con pendientes</button>
       <span class="badge" id="infoPend"></span>
     </div>
@@ -44,8 +51,22 @@
     <div class="row">
       <label>Fecha Emisión:</label>
       <input type="date" id="fecha_emision">
+
       <label>Nº Documento:</label>
       <input type="text" id="numero_documento" placeholder="F001-000001">
+
+      <!-- TIMBRADO SIN LÍMITE (solo dígitos) -->
+      <label>Timbrado:</label>
+      <input
+        type="text"
+        id="timbrado_numero"
+        placeholder="(opcional)"
+        inputmode="numeric"
+        style="width:180px"
+      >
+      <span id="timbrado_error" class="error" style="display:none"></span>
+      <!-- /TIMBRADO -->
+
       <label>Observación:</label>
       <input type="text" id="observacion" style="min-width:260px">
     </div>
@@ -116,7 +137,8 @@
     const RUTAS = {
       proveedores: 'proveedores_options.php',
       preparar:    'factura_preparar.php',
-      guardar:     'factura_guardar.php'
+      guardar:     'factura_guardar.php',
+      sucursales:  '../menu/referenciales_compra/sucursales/sucursales_options.php?estado=ACTIVO'
     };
 
     const $ = s => document.querySelector(s);
@@ -125,6 +147,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       setFechaHoy();
       cargarProveedores();
+      cargarSucursales();
       $('#btnCargar').addEventListener('click', cargarPendientes);
       $('#btnGuardar').addEventListener('click', guardar);
 
@@ -135,6 +158,17 @@
       $('#intervalo_dias').addEventListener('input', previewCuotas);
       $('#editarFechas').addEventListener('change', toggleEditarFechas);
       $('#btnPreview').addEventListener('click', previewCuotas);
+
+      // TIMBRADO: solo dígitos, sin límite de longitud
+      const timb = $('#timbrado_numero');
+      const timbErr = $('#timbrado_error');
+      timb.addEventListener('input', () => {
+        const before = timb.value;
+        const onlyDigits = before.replace(/\D+/g,'');
+        if (before !== onlyDigits) timb.value = onlyDigits;
+        timbErr.style.display = 'none';
+        timbErr.textContent = '';
+      });
 
       onCondicionChange(); // set defaults
     });
@@ -150,13 +184,30 @@
         const data = await r.json();
         const sel = $('#proveedor');
         sel.innerHTML = '<option value="">Seleccione proveedor</option>';
-        data.forEach(p=>{
+        (data || []).forEach(p=>{
           const o = document.createElement('option');
           o.value = p.id_proveedor;
           o.textContent = p.nombre;
           sel.appendChild(o);
         });
       }catch(e){ alert('Error cargando proveedores'); }
+    }
+
+    async function cargarSucursales(){
+      try{
+        const r = await fetch(RUTAS.sucursales);
+        const data = await r.json();
+        const sel = $('#id_sucursal');
+        sel.innerHTML = '<option value="">-- Seleccionar sucursal --</option>';
+        (data || []).forEach(s=>{
+          const o = document.createElement('option');
+          o.value = s.id_sucursal;
+          o.textContent = s.nombre;
+          sel.appendChild(o);
+        });
+      }catch(e){
+        console.error(e);
+      }
     }
 
     async function cargarPendientes(){
@@ -221,7 +272,7 @@
         tb.appendChild(tr);
       });
       recalcularTotal();
-      previewCuotas(); // refresca la sugerencia de vencimientos con el total
+      previewCuotas();
     }
 
     function onCant(i, v){
@@ -251,7 +302,7 @@
       const cond = $('#condicion').value;
       if(cond === 'CONTADO'){
         $('#cuotas').value = 1;
-        $('#dias_plazo').value = 0; // si querés al día
+        $('#dias_plazo').value = 0;
       }
       previewCuotas();
     }
@@ -268,11 +319,9 @@
       const inter  = Math.max(1, +($('#intervalo_dias').value||30));
       const editable = $('#editarFechas').checked;
 
-      // mostrar/ocultar contenedor
-      box.style.display = (cond === 'CREDITO' || cuotas>1 || editable) ? 'grid' : (editable ? 'grid' : 'none');
+      box.style.display = (cond === 'CREDITO' || cuotas>1 || editable) ? 'grid' : 'none';
       box.innerHTML = '';
 
-      // calcular fechas sugeridas
       const base = new Date($('#fecha_emision').value || new Date().toISOString().slice(0,10));
       let cur = new Date(base);
       cur.setDate(cur.getDate() + dias1);
@@ -282,11 +331,7 @@
           cur = new Date(cur);
           cur.setDate(cur.getDate() + inter);
         }
-        const y = cur.getFullYear();
-        const m = String(cur.getMonth()+1).padStart(2,'0');
-        const d = String(cur.getDate()).padStart(2,'0');
-        const iso = `${y}-${m}-${d}`;
-
+        const iso = cur.toISOString().slice(0,10);
         const div = document.createElement('div');
         div.className = 'cuota-item';
         div.innerHTML = `
@@ -302,11 +347,26 @@
       const fecha_emision = $('#fecha_emision')?.value;
       const numero_documento = $('#numero_documento')?.value.trim();
       const observacion = $('#observacion')?.value.trim();
+      const id_sucursal = $('#id_sucursal')?.value;
+
+      // TIMBRADO (opcional, solo dígitos)
+      const timbrado_numero = $('#timbrado_numero')?.value.trim();
+      const timbErr = $('#timbrado_error');
 
       if(!id_proveedor){ alert('Proveedor requerido'); return; }
       if(!fecha_emision){ alert('Fecha requerida'); return; }
       if(!numero_documento){ alert('Nº Documento requerido'); return; }
       if(lineas.length===0){ alert('No hay líneas'); return; }
+
+      if (timbrado_numero && !/^\d+$/.test(timbrado_numero)) {
+        timbErr.textContent = 'El timbrado debe contener solo números';
+        timbErr.style.display = 'inline';
+        alert('El timbrado debe contener solo números');
+        return;
+      } else {
+        timbErr.style.display = 'none';
+        timbErr.textContent = '';
+      }
 
       for(const l of lineas){
         if(l.cantidad<=0 || l.cantidad>l.pendiente){ alert('Cantidad inválida en alguna línea'); return; }
@@ -319,7 +379,9 @@
       fd.append('numero_documento', numero_documento);
       fd.append('observacion', observacion);
 
-      // cuotas/condición
+      if (id_sucursal) fd.append('id_sucursal', id_sucursal);
+      if (timbrado_numero) fd.append('timbrado_numero', timbrado_numero);
+
       const condicion = $('#condicion').value;
       const cuotas = Math.max(1, +($('#cuotas').value||1));
       const dias_plazo = Math.max(0, +($('#dias_plazo').value||0));
@@ -329,14 +391,12 @@
       fd.append('dias_plazo', dias_plazo);
       fd.append('intervalo_dias', intervalo_dias);
 
-      // si el usuario activó edición de fechas, mandamos fechas_cuota[]
       if($('#editarFechas').checked){
         document.querySelectorAll('.fecha-cuota').forEach(inp=>{
           fd.append('fechas_cuota[]', inp.value);
         });
       }
 
-      // detalle de líneas
       lineas.forEach(l=>{
         fd.append('id_oc_det[]', l.id_oc_det);
         fd.append('cantidad[]', l.cantidad);
@@ -348,15 +408,16 @@
         const r = await fetch(RUTAS.guardar,{method:'POST', body: fd});
         const j = await r.json();
         if(!r.ok || !j.ok){ alert('Error: ' + (j.error||'Desconocido')); return; }
-        alert(`Factura guardada #${j.id_factura} — Total ${fmt(j.total_factura)}`);
+        alert(`Factura guardada #${j.id_factura} — Total ${fmt(j.total_factura)}${j.timbrado_numero ? ` — Timbrado ${j.timbrado_numero}`:''}`);
 
         // reset mínimo
         lineas = [];
         renderTabla();
         $('#numero_documento').value = '';
+        $('#timbrado_numero').value = '';
+        $('#timbrado_error').style.display = 'none';
         $('#observacion').value = '';
         $('#infoPend').textContent = '';
-        // reset cuotas visual
         $('#cuotas').value = 1;
         $('#dias_plazo').value = 30;
         $('#intervalo_dias').value = 30;
@@ -368,7 +429,6 @@
       }
     }
 
-    // Exponer handlers (para inputs dentro de la tabla)
     window.onCant = onCant;
     window.onPrecio = onPrecio;
     window.onIva = onIva;

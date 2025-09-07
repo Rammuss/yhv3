@@ -15,7 +15,7 @@ try {
   $desde        = isset($_GET['desde']) ? trim($_GET['desde']) : '';
   $hasta        = isset($_GET['hasta']) ? trim($_GET['hasta']) : '';
 
-  $where = [];
+  $where  = [];
   $params = [];
   $i = 1;
 
@@ -30,9 +30,9 @@ try {
       p.nombre AS proveedor,
       to_char(f.fecha_emision,'YYYY-MM-DD') AS fecha_emision,
       f.numero_documento,
+      f.timbrado_numero,                 -- << NUEVO: timbrado en el listado
       f.estado,
       f.total_factura,
-      -- IMPORTANTES PARA TU COLUMNA:
       COALESCE(NULLIF(f.condicion,''),'CONTADO') AS condicion,
       f.cuotas
     FROM public.factura_compra_cab f
@@ -50,15 +50,16 @@ try {
   $data = [];
   while ($row = pg_fetch_assoc($res)) {
     $data[] = [
-      'id_factura'      => (int)$row['id_factura'],
-      'proveedor'       => $row['proveedor'],
-      'fecha_emision'   => $row['fecha_emision'],
-      'numero_documento'=> $row['numero_documento'],
-      'estado'          => $row['estado'],
-      'total_factura'   => (float)$row['total_factura'],
+      'id_factura'       => (int)$row['id_factura'],
+      'proveedor'        => $row['proveedor'],
+      'fecha_emision'    => $row['fecha_emision'],
+      'numero_documento' => $row['numero_documento'],
+      'timbrado_numero'  => $row['timbrado_numero'], // << NUEVO en la respuesta
+      'estado'           => $row['estado'],
+      'total_factura'    => (float)$row['total_factura'],
       // claves que usa tu front:
-      'condicion'       => strtoupper(trim($row['condicion'] ?? 'CONTADO')), // CREDITO/CONTADO
-      'cuotas'          => isset($row['cuotas']) ? (int)$row['cuotas'] : null,
+      'condicion'        => strtoupper(trim($row['condicion'] ?? 'CONTADO')), // CREDITO/CONTADO
+      'cuotas'           => isset($row['cuotas']) ? (int)$row['cuotas'] : null,
     ];
   }
 

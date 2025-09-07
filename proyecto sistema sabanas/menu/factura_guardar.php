@@ -3,7 +3,7 @@
 header('Content-Type: application/json; charset=utf-8');
 
 try {
-  // Conexión (igual que en factura_ver.php)
+  // Conexión
   require __DIR__ . '/../conexion/configv2.php'; // Debe definir $conn = pg_connect(...)
   if (!$conn) {
     http_response_code(500);
@@ -19,24 +19,33 @@ try {
   $nro     = trim((string)($_POST['numero_documento'] ?? ''));
   $obs     = $_POST['observacion'] ?? null;
 
+  // TIMBRADO: opcional, solo dígitos, sin límite de longitud
+  $timbr   = isset($_POST['timbrado_numero']) ? trim((string)$_POST['timbrado_numero']) : null;
+  if ($timbr === '') { $timbr = null; }
+  if ($timbr !== null && !preg_match('/^\d+$/', $timbr)) {
+    http_response_code(400);
+    echo json_encode(["ok" => false, "error" => "El timbrado debe contener solo números"]);
+    exit;
+  }
+
+  // Moneda / Sucursal
+  $moneda      = $_POST['moneda'] ?? 'PYG';
+  $id_sucursal = isset($_POST['id_sucursal']) && $_POST['id_sucursal'] !== '' ? (int)$_POST['id_sucursal'] : null;
+
   // Detalle factura (desde OC)
   $ids   = $_POST['id_oc_det'] ?? [];
   $cants = $_POST['cantidad'] ?? [];
   $precs = $_POST['precio_unitario'] ?? [];
-  $ivas  = $_POST['tipo_iva'] ?? []; // opcional por línea
+  $ivas  = $_POST['tipo_iva'] ?? [];
 
-  // Parámetros de condición/cuotas (nuevo)
+  // Parámetros de condición/cuotas
   $condicion      = strtoupper(trim((string)($_POST['condicion'] ?? 'CREDITO'))); // CONTADO | CREDITO
   $cuotas_n       = max(1, (int)($_POST['cuotas'] ?? 1));
-  $dias_plazo     = (int)($_POST['dias_plazo'] ?? 30);   // 1ra cuota: +30 días por defecto
-  $intervalo_dias = (int)($_POST['intervalo_dias'] ?? 30); // intervalo entre cuotas
-  $fechas_cuota   = $_POST['fechas_cuota'] ?? null; // opcional: array de fechas exactas 'YYYY-MM-DD'
+  $dias_plazo     = (int)($_POST['dias_plazo'] ?? 30);
+  $intervalo_dias = (int)($_POST['intervalo_dias'] ?? 30);
+  $fechas_cuota   = $_POST['fechas_cuota'] ?? null;
 
-  // Si es CONTADO, por defecto dejamos 1 cuota y vencimiento = fecha (o +dias_plazo si lo enviás)
-  if ($condicion === 'CONTADO') {
-    $cuotas_n = 1;
-    // si querés forzar vencimiento hoy: $dias_plazo = 0;
-  }
+  if ($condicion === 'CONTADO') { $cuotas_n = 1; }
 
   // Validaciones básicas
   if ($id_prov <= 0 || $nro === '') {
@@ -54,24 +63,62 @@ try {
     echo json_encode(["ok" => false, "error" => "Datos de líneas incompletos"]);
     exit;
   }
+  if (!in_array($condicion, ['CONTADO','CREDITO'], true)) {
+    $condicion = 'CREDITO';
+  }
+
+  /* =======================
+     HERENCIA DE SUCURSAL
+     ======================= */
+  if ($id_sucursal === null) {
+    $primer_id_oc_det = (int)$ids[0];
+    $qSucHer = pg_query_params(
+      $conn,
+      "SELECT occ.id_sucursal
+         FROM public.orden_compra_det ocd
+         JOIN public.orden_compra_cab occ ON occ.id_oc = ocd.id_oc
+        WHERE ocd.id_oc_det = $1
+        LIMIT 1",
+      [$primer_id_oc_det]
+    );
+    if ($qSucHer && pg_num_rows($qSucHer) > 0) {
+      $id_sucursal = (int)pg_fetch_result($qSucHer, 0, 0);
+      if ($id_sucursal === 0) { $id_sucursal = null; }
+    }
+  }
+
+  /* =======================
+     Validación de sucursal
+     ======================= */
+  if ($id_sucursal !== null) {
+    $qSuc = pg_query_params($conn,
+      "SELECT 1 FROM public.sucursales WHERE id_sucursal=$1 AND estado='ACTIVO' LIMIT 1",
+      [$id_sucursal]
+    );
+    if (!$qSuc || pg_num_rows($qSuc) === 0) {
+      http_response_code(400);
+      echo json_encode(["ok"=>false,"error"=>"Sucursal inexistente o INACTIVA"]);
+      exit;
+    }
+  }
 
   /* =======================
      TRANSACCIÓN
      ======================= */
   pg_query($conn, "BEGIN");
 
-  // Cabecera de factura
-  // Cabecera de factura (con metadatos de cuotas)
+  // Cabecera de factura (agrega timbrado_numero)
   $insCab = pg_query_params(
     $conn,
     "INSERT INTO public.factura_compra_cab
-     (id_proveedor, fecha_emision, numero_documento, observacion, estado,
-      condicion, cuotas, dias_plazo, intervalo_dias)
-   VALUES ($1,$2,$3,$4,'Registrada',$5,$6,$7,$8)
-   RETURNING id_factura",
-    [$id_prov, $fecha, $nro, $obs, $condicion, $cuotas_n, $dias_plazo, $intervalo_dias]
+       (id_proveedor, fecha_emision, numero_documento, moneda, observacion, estado,
+        total_factura, condicion, cuotas, dias_plazo, intervalo_dias, id_sucursal, timbrado_numero, created_at)
+     VALUES
+       ($1,$2,$3,$4,$5,'Registrada',
+        0, $6, $7, $8, $9, $10, $11, now())
+     RETURNING id_factura",
+    [$id_prov, $fecha, $nro, $moneda, $obs, $condicion, $cuotas_n, $dias_plazo, $intervalo_dias, $id_sucursal, $timbr]
   );
-
   if (!$insCab) {
     pg_query($conn, "ROLLBACK");
     http_response_code(500);
@@ -80,12 +127,10 @@ try {
   }
   $id_factura = (int)pg_fetch_result($insCab, 0, 0);
 
-  // Acumuladores (precio_unitario SIN IVA)
+  // Acumuladores
   $total_base = 0.0;
-  $grav10 = 0.0;
-  $iva10 = 0.0;
-  $grav5  = 0.0;
-  $iva5  = 0.0;
+  $grav10 = 0.0; $iva10 = 0.0;
+  $grav5  = 0.0; $iva5  = 0.0;
   $exentas = 0.0;
 
   $oc_tocadas = []; // id_oc => numero_pedido
@@ -106,7 +151,7 @@ try {
       exit;
     }
 
-    // Traer línea OC + producto (valida proveedor, pendiente y obtiene tipo_iva de producto)
+    // Traer línea OC + producto
     $q = pg_query_params(
       $conn,
       "SELECT ocd.id_oc_det, ocd.id_oc, ocd.id_producto, ocd.cantidad AS oc_cantidad,
@@ -135,7 +180,7 @@ try {
       exit;
     }
 
-    // Pendiente por recibir (excluye anuladas)
+    // Pendiente por recibir
     $rpend = pg_query_params(
       $conn,
       "SELECT (ocd.cantidad - COALESCE((
@@ -156,7 +201,7 @@ try {
       exit;
     }
 
-    // Insert detalle factura
+    // Insert detalle
     $insDet = pg_query_params(
       $conn,
       "INSERT INTO public.factura_compra_det
@@ -185,11 +230,11 @@ try {
       exit;
     }
 
-    // Base (SIN IVA)
+    // Base (sin IVA)
     $baseLinea   = $cant * $prec;
     $total_base += $baseLinea;
 
-    // IVA efectivo: prioriza el de la línea; si no, del producto
+    // IVA efectivo
     $tiva_eff = $tiva_line ?: $L['prod_tipo_iva'];
     $tiva_eff = strtoupper(trim((string)$tiva_eff));
 
@@ -203,7 +248,7 @@ try {
       $exentas += $baseLinea;
     }
 
-    // Marcar OC tocada (para actualizar estados luego)
+    // Marcar OC tocada
     $oc_tocadas[(int)$L['id_oc']] = (int)$L['numero_pedido'];
   }
 
@@ -231,16 +276,16 @@ try {
      CUENTAS POR PAGAR (CAB)
      ======================= */
   $estadoCxP = ($total_factura > 0) ? 'Pendiente' : 'Cancelada';
-  $fecha_venc_ref = (new DateTime($fecha))->modify("+{$dias_plazo} day")->format('Y-m-d'); // solo referencial en cab
+  $fecha_venc_ref = (new DateTime($fecha))->modify("+{$dias_plazo} day")->format('Y-m-d');
 
   $insCxp = pg_query_params(
     $conn,
     "INSERT INTO public.cuenta_pagar
       (id_factura, id_proveedor, fecha_emision, fecha_venc, moneda, total_cxp, saldo_actual, estado, observacion)
      VALUES
-      ($1,$2,$3,$4,'PYG',$5,$5,$6,$7)
+      ($1,$2,$3,$4,$5,$6,$6,$7,$8)
      RETURNING id_cxp",
-    [$id_factura, $id_prov, $fecha, $fecha_venc_ref, $total_factura, $estadoCxP, $obs]
+    [$id_factura, $id_prov, $fecha, $fecha_venc_ref, $moneda, $total_factura, $estadoCxP, $obs]
   );
   if (!$insCxp) {
     pg_query($conn, "ROLLBACK");
@@ -253,13 +298,10 @@ try {
   /* =======================
      CUENTAS POR PAGAR (DET - CUOTAS)
      ======================= */
-  // Reparto por N cuotas (ajustando última por redondeo)
   $monto_base_cuota = $cuotas_n > 0 ? round($total_factura / $cuotas_n, 2) : $total_factura;
-  $acum = 0.00;
-  $fv = null;
+  $acum = 0.00; $fv = null;
 
   for ($n = 1; $n <= $cuotas_n; $n++) {
-    // Monto
     if ($n < $cuotas_n) {
       $monto_cuota = $monto_base_cuota;
       $acum += $monto_cuota;
@@ -267,15 +309,11 @@ try {
       $monto_cuota = round($total_factura - $acum, 2);
     }
 
-    // Fecha de vencimiento
     if (is_array($fechas_cuota) && isset($fechas_cuota[$n - 1]) && !empty($fechas_cuota[$n - 1])) {
       $fv = (new DateTime($fechas_cuota[$n - 1]))->format('Y-m-d');
     } else {
-      if ($n === 1) {
-        $fv = (new DateTime($fecha))->modify("+{$dias_plazo} day")->format('Y-m-d');
-      } else {
-        $fv = (new DateTime($fv))->modify("+{$intervalo_dias} day")->format('Y-m-d');
-      }
+      if ($n === 1) $fv = (new DateTime($fecha))->modify("+{$dias_plazo} day")->format('Y-m-d');
+      else          $fv = (new DateTime($fv))->modify("+{$intervalo_dias} day")->format('Y-m-d');
     }
 
     $insCuota = pg_query_params(
@@ -337,13 +375,11 @@ try {
       $conn,
       "WITH x AS (
          SELECT ocd.id_oc_det, ocd.cantidad AS oc_qty,
-                COALESCE((
-                  SELECT SUM(fcd.cantidad)
-                    FROM public.factura_compra_det fcd
-                    JOIN public.factura_compra_cab fcc
-                      ON fcc.id_factura=fcd.id_factura AND fcc.estado<>'Anulada'
-                   WHERE fcd.id_oc_det=ocd.id_oc_det
-                ),0) AS fact_qty
+                COALESCE((SELECT SUM(fcd.cantidad)
+                           FROM public.factura_compra_det fcd
+                           JOIN public.factura_compra_cab fcc
+                             ON fcc.id_factura=fcd.id_factura AND fcc.estado<>'Anulada'
+                          WHERE fcd.id_oc_det=ocd.id_oc_det),0) AS fact_qty
            FROM public.orden_compra_det ocd
           WHERE ocd.id_oc=$1
        )
@@ -374,15 +410,13 @@ try {
       "WITH x AS (
          SELECT d.id_producto,
                 d.cantidad AS pedida,
-                COALESCE((
-                  SELECT SUM(fcd.cantidad)
-                    FROM public.orden_compra_det ocd
-                    JOIN public.orden_compra_cab occ ON occ.id_oc=ocd.id_oc
-                    JOIN public.factura_compra_det fcd ON fcd.id_oc_det=ocd.id_oc_det
-                    JOIN public.factura_compra_cab fcc ON fcc.id_factura=fcd.id_factura AND fcc.estado<>'Anulada'
-                   WHERE occ.numero_pedido=d.numero_pedido
-                     AND ocd.id_producto=d.id_producto
-                ),0) AS recibida
+                COALESCE((SELECT SUM(fcd.cantidad)
+                           FROM public.orden_compra_det ocd
+                           JOIN public.orden_compra_cab occ ON occ.id_oc=ocd.id_oc
+                           JOIN public.factura_compra_det fcd ON fcd.id_oc_det=ocd.id_oc_det
+                           JOIN public.factura_compra_cab fcc ON fcc.id_factura=fcd.id_factura AND fcc.estado<>'Anulada'
+                          WHERE occ.numero_pedido=d.numero_pedido
+                            AND ocd.id_producto=d.id_producto),0) AS recibida
            FROM public.detalle_pedido_interno d
           WHERE d.numero_pedido=$1
        )
@@ -396,7 +430,7 @@ try {
     list($c2, $t2, $p2) = array_map('intval', pg_fetch_row($r2));
     $estadoPed = 'Abierto';
     if ($t2 > 0 && $c2 === $t2)      $estadoPed = 'Totalmente Entregado';
-    elseif ($p2 > 0 || $c2 > 0)        $estadoPed = 'Parcialmente Entregado';
+    elseif ($p2 > 0 || $c2 > 0)      $estadoPed = 'Parcialmente Entregado';
 
     pg_query_params(
       $conn,
@@ -415,9 +449,11 @@ try {
   echo json_encode([
     "ok"             => true,
     "id_factura"     => $id_factura,
-    "id_cxp"         => $id_cxp,
     "condicion"      => $condicion,
     "cuotas"         => $cuotas_n,
+    "moneda"         => $moneda,
+    "id_sucursal"    => $id_sucursal,
+    "timbrado_numero"=> $timbr,
     "total_base"     => round($total_base, 2),
     "iva10"          => round($iva10, 2),
     "iva5"           => round($iva5, 2),
@@ -425,10 +461,9 @@ try {
     "total_factura"  => round($total_factura, 2)
   ], JSON_UNESCAPED_UNICODE);
   exit;
+
 } catch (Throwable $e) {
-  if (isset($conn)) {
-    @pg_query($conn, "ROLLBACK");
-  }
+  if (isset($conn)) { @pg_query($conn, "ROLLBACK"); }
   http_response_code(500);
   echo json_encode(["ok" => false, "error" => $e->getMessage()]);
 }
