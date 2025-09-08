@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="utf-8" />
+    <title>Registrar Nota (NC / ND)</title>
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f7f7f7;
+            margin: 20px
+        }
+
+        .wrap {
+            max-width: 1100px;
+            margin: auto
+        }
+
+        h1 {
+            margin: 0 0 12px
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-wrap: wrap
+        }
+
+        select,
+        input,
+        button,
+        textarea {
+            padding: 8px
+        }
+
+        .btn {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            background: #fff;
+            cursor: pointer;
+            border-radius: 6px
+        }
+
+        .btn:hover {
+            background: #f3f3f3
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-size: 12px;
+            background: #fff
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px
+        }
+
+        th,
+        td {
+            border: 1px solid #eaeaea;
+            padding: 8px;
+            text-align: left
+        }
+
+        th {
+            background: #fafafa
+        }
+
+        .right {
+            text-align: right
+        }
+
+        .muted {
+            color: #777
+        }
+
+        .error {
+            color: #b00020;
+            font-size: 12px
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            margin: 8px 0
+        }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, .35);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999
+        }
+
+        .modal {
+            background: #fff;
+            width: min(1000px, 95vw);
+            max-height: 90vh;
+            overflow: auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .2)
+        }
+
+        .modal header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid #eee
+        }
+
+        .modal header h3 {
+            margin: 0
+        }
+
+        .modal .content {
+            padding: 16px
+        }
+
+        .modal .btn-close {
+            border: 0;
+            background: #eee;
+            padding: 6px 10px;
+            border-radius: 6px;
+            cursor: pointer
+        }
+
+        .modal .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px
+        }
+
+        @media (max-width:700px) {
+            .modal .grid {
+                grid-template-columns: 1fr
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div id="navbar-container"></div>
+
+    <div class="wrap">
+        <h1>Registrar Nota (NC / ND)</h1>
+
+        <!-- CABECERA -->
+        <div class="row">
+            <label>Tipo:</label>
+            <select id="tipo">
+                <option value="NC" selected>Nota de Crédito (NC)</option>
+                <option value="ND">Nota de Débito (ND)</option>
+            </select>
+
+            <label>Clase:</label>
+            <select id="clase" title="Determina si hay movimiento de stock">
+                <option value="DEVOLUCION" selected>Devolución (mueve stock)</option>
+                <option value="PRECIO">Ajuste de precio</option>
+                <option value="INTERES">Interés / Recargo</option>
+                <option value="OTROS">Otros</option>
+            </select>
+
+            <label>Proveedor:</label>
+            <select id="proveedor"></select>
+
+            <label>Factura ref.:</label>
+            <select id="factura_ref">
+                <option value="">-- Seleccione proveedor primero --</option>
+            </select>
+            <span class="badge" id="factInfo"></span>
+
+            <label>Sucursal:</label>
+            <select id="id_sucursal">
+                <option value="">-- Seleccionar sucursal --</option>
+            </select>
+        </div>
+
+        <div class="row">
+            <label>Fecha Emisión:</label>
+            <input type="date" id="fecha_emision">
+
+            <label>Nº Documento:</label>
+            <input type="text" id="numero_documento" placeholder="NC/ND-000001">
+
+            <label>Timbrado:</label>
+            <input type="text" id="timbrado_numero" placeholder="(opcional)" inputmode="numeric" style="width:160px">
+            <span id="timbrado_error" class="error" style="display:none"></span>
+
+            <label>Observación:</label>
+            <input type="text" id="observacion" style="min-width:260px">
+        </div>
+
+        <div class="toolbar">
+            <button class="btn" id="btnAddDesdeFactura">Agregar productos de la factura…</button>
+            <button class="btn" id="btnAddAjuste">Agregar ajuste (sin producto)…</button>
+            <span class="muted">Clase actual: <b id="claseLabel">DEVOLUCIÓN</b></span>
+        </div>
+
+        <!-- TABLA DETALLE -->
+        <table id="tabla">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>ID Prod</th>
+                    <th>Descripción</th>
+                    <th class="right">Cantidad</th>
+                    <th class="right">P.Unit (base)</th>
+                    <th>IVA</th>
+                    <th class="right">Total línea</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot>
+                <tr>
+                    <th colspan="6" class="right">Total</th>
+                    <th class="right" id="total">0</th>
+                    <th></th>
+                </tr>
+            </tfoot>
+        </table>
+
+        <div class="row">
+            <button class="btn" id="btnGuardar">Guardar Nota</button>
+        </div>
+    </div>
+
+    <!-- MODAL: ELEGIR PRODUCTOS DE LA FACTURA -->
+    <div id="md-backdrop" class="modal-backdrop">
+        <div class="modal">
+            <header>
+                <h3>Productos de la factura</h3>
+                <button class="btn-close" onclick="cerrarModal()">Cerrar</button>
+            </header>
+            <div class="content">
+                <div class="row" style="margin-bottom:10px">
+                    <input type="text" id="filtroProd" placeholder="Buscar por nombre..." style="flex:1">
+                    <button class="btn" id="btnRefrescarFactura">Refrescar</button>
+                </div>
+                <table id="tablaFactura">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            <th>ID</th>
+                            <th>Producto</th>
+                            <th class="right">Facturado</th>
+                            <th class="right">Devuelto</th>
+                            <th class="right">Disponible</th>
+                            <th class="right">P.Unit (base)</th>
+                            <th>IVA</th>
+                            <th class="right" style="width:130px">Cant a agregar</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <div class="row" style="justify-content:flex-end; margin-top:10px">
+                    <button class="btn" id="btnAgregarSeleccionados">Agregar seleccionados</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: AJUSTE SIN PRODUCTO -->
+    <div id="md-ajuste" class="modal-backdrop">
+        <div class="modal">
+            <header>
+                <h3>Agregar ajuste (sin producto)</h3>
+                <button class="btn-close" onclick="cerrarModalAjuste()">Cerrar</button>
+            </header>
+            <div class="content">
+                <div class="grid">
+                    <div>
+                        <label>Descripción</label><br>
+                        <input type="text" id="aj_desc" style="width:100%" placeholder="Ajuste de precio factura ...">
+                    </div>
+                    <div>
+                        <label>Monto base (sin IVA)</label><br>
+                        <input type="number" id="aj_monto" min="0" step="0.01" style="width:100%" value="0">
+                    </div>
+                    <div>
+                        <label>IVA</label><br>
+                        <select id="aj_iva" style="width:100%">
+                            <option value="10%">10%</option>
+                            <option value="5%">5%</option>
+                            <option value="Exento">Exento</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row" style="justify-content:flex-end; margin-top:10px">
+                    <button class="btn" id="btnGuardarAjuste">Agregar a la nota</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NAVBAR -->
+    <script src="navbar.js"></script>
+
+    <div id="toast" class="toast"></div>
+
+    <script>
+        const RUTAS = {
+            proveedores: 'proveedores_options.php',
+            facturasProv: 'facturas_proveedor_options.php',
+            // Debe devolver [{id_producto, producto, cantidad_facturada, cantidad_devuelta_previa, disponible, precio_unitario_base, tipo_iva}]
+            facturaItems: 'factura_items_para_nota.php',
+            guardarNota: 'nota_guardar.php',
+            sucursales: '../menu/referenciales_compra/sucursales/sucursales_options.php?estado=ACTIVO'
+        };
+
+        const $ = s => document.querySelector(s);
+
+        let detalle = [];           // [{id_producto|null, descripcion, cantidad, precio, iva}]
+        let itemsFactura = [];      // items de la factura para el modal
+        let filtroTimer = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setFechaHoy();
+            cargarProveedores();
+            cargarSucursales();
+
+            // Eventos cabecera
+            $('#proveedor').addEventListener('change', onProveedorChange);
+            $('#factura_ref').addEventListener('change', onFacturaChange);
+            $('#clase').addEventListener('change', () => { $('#claseLabel').textContent = $('#clase').value; });
+
+            // Botones
+            $('#btnAddDesdeFactura').addEventListener('click', abrirModal);
+            $('#btnAddAjuste').addEventListener('click', abrirModalAjuste);
+            $('#btnGuardarAjuste').addEventListener('click', agregarAjuste);
+            $('#btnAgregarSeleccionados').addEventListener('click', agregarSeleccionados);
+            $('#btnRefrescarFactura').addEventListener('click', cargarItemsFactura);
+            $('#btnGuardar').addEventListener('click', guardarNota);
+
+            // Filtro modal
+            $('#filtroProd').addEventListener('input', onFiltroChange);
+
+            // Timbrado: solo dígitos
+            const timb = $('#timbrado_numero');
+            const timbErr = $('#timbrado_error');
+            timb.addEventListener('input', () => {
+                const before = timb.value;
+                const onlyDigits = before.replace(/\D+/g, '');
+                if (before !== onlyDigits) timb.value = onlyDigits;
+                timbErr.style.display = 'none'; timbErr.textContent = '';
+            });
+        });
+
+        function setFechaHoy() { $('#fecha_emision').value = new Date().toISOString().slice(0, 10); }
+
+        async function cargarProveedores() {
+            try {
+                const r = await fetch(RUTAS.proveedores);
+                const data = await r.json();
+                const sel = $('#proveedor');
+                sel.innerHTML = '<option value="">Seleccione proveedor</option>';
+                (data || []).forEach(p => {
+                    const o = document.createElement('option');
+                    o.value = p.id_proveedor;
+                    o.textContent = p.nombre;
+                    sel.appendChild(o);
+                });
+            } catch (e) { showToast('Error cargando proveedores', 'error'); }
+        }
+
+        async function cargarSucursales() {
+            try {
+                const r = await fetch(RUTAS.sucursales);
+                const data = await r.json();
+                const sel = $('#id_sucursal');
+                sel.innerHTML = '<option value="">-- Seleccionar sucursal --</option>';
+                (data || []).forEach(s => {
+                    const o = document.createElement('option');
+                    o.value = s.id_sucursal;
+                    o.textContent = s.nombre;
+                    sel.appendChild(o);
+                });
+            } catch (e) { console.error(e); }
+        }
+
+        async function onProveedorChange() {
+            const prov = $('#proveedor').value;
+            const selFac = $('#factura_ref');
+            $('#factInfo').textContent = '';
+            selFac.innerHTML = '<option value="">Cargando…</option>';
+            detalle = []; renderDetalle();
+
+            if (!prov) { selFac.innerHTML = '<option value="">-- Seleccione proveedor primero --</option>'; return; }
+
+            try {
+                const url = `${RUTAS.facturasProv}?id_proveedor=${encodeURIComponent(prov)}&estado=Registrada`;
+                const r = await fetch(url);
+                const arr = await r.json();
+                selFac.innerHTML = '<option value="">-- Seleccione factura --</option>';
+                (arr || []).forEach(f => {
+                    const o = document.createElement('option');
+                    o.value = f.id_factura;
+                    o.textContent = `#${f.id_factura} · ${f.numero_documento} · ${f.fecha_emision} · saldo ${fmt(f.saldo)}`;
+                    o.dataset.saldo = f.saldo;
+                    selFac.appendChild(o);
+                });
+            } catch (e) {
+                selFac.innerHTML = '<option value="">(Error cargando)</option>';
+                showToast('Error cargando facturas', 'error');
+            }
+        }
+
+        async function onFacturaChange() {
+            const id_fact = $('#factura_ref').value;
+            $('#factInfo').textContent = '';
+            detalle = []; renderDetalle();
+            if (!id_fact) return;
+            await cargarItemsFactura();
+        }
+
+        async function cargarItemsFactura() {
+            const id_fact = $('#factura_ref').value;
+            if (!id_fact) return;
+            try {
+                const r = await fetch(`${RUTAS.facturaItems}?id_factura=${encodeURIComponent(id_fact)}`);
+                const j = await r.json();
+                if (!Array.isArray(j)) throw new Error('Formato inválido');
+                itemsFactura = j;
+                renderTablaFactura();
+                $('#factInfo').textContent = `${j.length} ítems`;
+            } catch (e) {
+                itemsFactura = [];
+                renderTablaFactura();
+                showToast('No se pudieron cargar los ítems de la factura', 'error');
+            }
+        }
+
+        function abrirModal() {
+            if (!$('#factura_ref').value) { alert('Seleccione una factura de referencia'); return; }
+            $('#md-backdrop').style.display = 'flex';
+            renderTablaFactura();
+        }
+        function cerrarModal() { $('#md-backdrop').style.display = 'none'; }
+
+        function abrirModalAjuste() { $('#md-ajuste').style.display = 'flex'; }
+        function cerrarModalAjuste() { $('#md-ajuste').style.display = 'none'; }
+
+        function onFiltroChange() {
+            clearTimeout(filtroTimer);
+            filtroTimer = setTimeout(renderTablaFactura, 200);
+        }
+
+        function renderTablaFactura() {
+            const tb = $('#tablaFactura tbody');
+            tb.innerHTML = '';
+            const q = ($('#filtroProd').value || '').toLowerCase();
+            itemsFactura
+                .filter(x => !q || (x.producto || '').toLowerCase().includes(q))
+                .forEach((it, idx) => {
+                    const disp = Number(it.disponible || 0);
+                    const disabled = disp <= 0 ? 'disabled' : '';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+            <td><input type="checkbox" ${disabled} data-i="${idx}" class="chk-it"></td>
+            <td>${it.id_producto}</td>
+            <td>${esc(it.producto)}</td>
+            <td class="right">${Number(it.cantidad_facturada || 0)}</td>
+            <td class="right">${Number(it.cantidad_devuelta_previa || 0)}</td>
+            <td class="right">${disp}</td>
+            <td class="right">${fmt(it.precio_unitario_base || 0)}</td>
+            <td>${esc(it.tipo_iva || '10%')}</td>
+            <td class="right">
+              <input type="number" min="0" step="0.01" ${disabled}
+                     value="${disp > 0 ? disp : 0}" style="width:120px" class="cant-it" data-i="${idx}">
+            </td>
+          `;
+                    tb.appendChild(tr);
+                });
+        }
+
+        function agregarSeleccionados() {
+            const chks = Array.from(document.querySelectorAll('.chk-it'));
+            const mapaCant = {};
+            document.querySelectorAll('.cant-it').forEach(inp => {
+                mapaCant[inp.dataset.i] = Math.max(0, +inp.value || 0);
+            });
+            let agregados = 0;
+
+            chks.forEach(chk => {
+                if (!chk.checked) return;
+                const i = chk.dataset.i;
+                const it = itemsFactura[i];
+                const cant = Math.min(mapaCant[i] ?? 0, Number(it.disponible || 0));
+                if (cant <= 0) return;
+
+                detalle.push({
+                    id_producto: it.id_producto,
+                    descripcion: it.producto,
+                    cantidad: cant,
+                    precio: Number(it.precio_unitario_base || 0),
+                    iva: normIVA(it.tipo_iva || '10%')
+                });
+                agregados++;
+            });
+
+            if (agregados > 0) {
+                renderDetalle();
+                cerrarModal();
+            } else {
+                showToast('No hay ítems válidos para agregar', 'error');
+            }
+        }
+
+        function abrirEditar(i) {
+            const l = detalle[i];
+            const cant = prompt('Cantidad:', l.cantidad);
+            if (cant === null) return;
+            const n = Math.max(0, +cant || 0);
+            if (n <= 0) { alert('Cantidad inválida'); return; }
+            l.cantidad = n;
+
+            const prec = prompt('Precio unitario (base sin IVA):', l.precio);
+            if (prec === null) return;
+            const p = Math.max(0, +prec || 0);
+            l.precio = p;
+
+            const iva = prompt("IVA ('10%', '5%' o 'Exento'):", l.iva);
+            if (iva === null) return;
+            l.iva = normIVA(iva);
+
+            renderDetalle();
+        }
+
+        function borrarLinea(i) {
+            if (!confirm('¿Quitar esta línea?')) return;
+            detalle.splice(i, 1);
+            renderDetalle();
+        }
+
+
+
+        function agregarAjuste() {
+            const desc = $('#aj_desc').value.trim();
+            const monto = Math.max(0, +($('#aj_monto').value || 0));
+            const iva = normIVA($('#aj_iva').value || '10%');
+
+            if (!desc) { alert('Ingrese una descripción'); return; }
+            if (!(monto > 0)) { alert('Monto inválido'); return; }
+
+            detalle.push({
+                id_producto: null,
+                descripcion: desc,
+                cantidad: 1,
+                precio: monto,
+                iva: iva
+            });
+            $('#aj_desc').value = ''; $('#aj_monto').value = '0'; $('#aj_iva').value = '10%';
+            cerrarModalAjuste();
+            renderDetalle();
+        }
+
+        function normIVA(v) {
+            const s = String(v || '').toUpperCase().trim();
+            if (s.startsWith('10')) return '10%';
+            if (s.startsWith('5')) return '5%';
+            return 'Exento';
+        }
+
+        function renderDetalle() {
+            const tb = $('#tabla tbody');
+            tb.innerHTML = '';
+            let total = 0;
+
+            detalle.forEach((l, idx) => {
+                const base = l.cantidad * l.precio;
+                let ivaMonto = 0;
+                if (l.iva === '10%') ivaMonto = base * 0.10;
+                else if (l.iva === '5%') ivaMonto = base * 0.05;
+                const lineaTotal = base + ivaMonto;
+                total += lineaTotal;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td>${l.id_producto ?? '—'}</td>
+          <td>${esc(l.descripcion || '')}</td>
+          <td class="right">${Number(l.cantidad)}</td>
+          <td class="right">${fmt(l.precio)}</td>
+          <td>${l.iva}</td>
+          <td class="right">${fmt(lineaTotal)}</td>
+          <td>
+            <button class="btn" onclick="abrirEditar(${idx})">Editar</button>
+            <button class="btn" style="margin-left:6px" onclick="borrarLinea(${idx})">Quitar</button>
+          </td>
+        `;
+                tb.appendChild(tr);
+            });
+
+            $('#total').textContent = fmt(total);
+        }
+
+        async function guardarNota() {
+            const tipo = $('#tipo').value;
+            const clase = $('#clase').value; // informativo
+            const id_proveedor = $('#proveedor').value;
+            const id_factura_ref = $('#factura_ref').value;
+            const id_sucursal = $('#id_sucursal').value;
+            const fecha_emision = $('#fecha_emision').value;
+            const numero_documento = $('#numero_documento').value.trim();
+            const timbrado_numero = $('#timbrado_numero').value.trim();
+            const observacion = $('#observacion').value.trim();
+
+            if (!id_proveedor) { alert('Seleccione proveedor'); return; }
+            if (!id_factura_ref) { alert('Seleccione la factura de referencia'); return; }
+            if (!fecha_emision) { alert('Fecha requerida'); return; }
+            if (!numero_documento) { alert('Nº Documento requerido'); return; }
+            if (detalle.length === 0) { alert('Agregue al menos una línea'); return; }
+
+            if (timbrado_numero && !/^\d+$/.test(timbrado_numero)) {
+                $('#timbrado_error').textContent = 'El timbrado debe contener solo números';
+                $('#timbrado_error').style.display = 'inline';
+                alert('El timbrado debe contener solo números');
+                return;
+            } else {
+                $('#timbrado_error').style.display = 'none';
+                $('#timbrado_error').textContent = '';
+            }
+
+            const fd = new FormData();
+            fd.append('tipo', tipo);
+            fd.append('clase', clase);
+            fd.append('id_proveedor', id_proveedor);
+            fd.append('id_factura_ref', id_factura_ref);
+            fd.append('fecha_emision', fecha_emision);
+            fd.append('numero_documento', numero_documento);
+            if (id_sucursal) fd.append('id_sucursal', id_sucursal);
+            if (timbrado_numero) fd.append('timbrado_numero', timbrado_numero);
+            if (observacion) fd.append('observacion', observacion);
+
+            // Detalle
+            detalle.forEach(l => {
+                fd.append('id_producto[]', l.id_producto ?? '');
+                fd.append('descripcion[]', l.descripcion ?? '');
+                fd.append('cantidad[]', l.cantidad);
+                fd.append('precio_unitario[]', l.precio);
+                fd.append('tipo_iva[]', l.iva);
+            });
+
+            try {
+                const resp = await fetch(RUTAS.guardarNota, { method: 'POST', body: fd });
+                const j = await resp.json();
+                if (!resp.ok || !j.ok) throw new Error(j.error || 'No se pudo guardar');
+
+                // Armar resumen para el toast
+                const r = j.resumen || {};
+                const stockMsg = r.stock?.movido ? `Stock: salida x ${r.stock.salidas_cant}` : 'Stock: sin movimiento';
+                const cxpMsg = r.cxp
+                    ? `CxP: ${r.cxp.estado} (${fmt(r.cxp.saldo_antes)} → ${fmt(r.cxp.saldo_despues)})`
+                    : 'CxP: —';
+                const libroMsg = r.libro
+                    ? `Libro: ${(r.libro.signo === -1 ? 'NC' : 'ND')} ${fmt(Math.abs(r.libro.total_mov || 0))}`
+                    : 'Libro: —';
+
+                showToast(`✅ Nota ${j.tipo} #${j.id_nota} · ${stockMsg} · ${cxpMsg} · ${libroMsg}`, 'ok');
+
+                // reset mínimo
+                detalle = []; renderDetalle();
+                $('#numero_documento').value = '';
+                $('#timbrado_numero').value = '';
+                $('#observacion').value = '';
+                $('#factura_ref').value = '';
+                $('#factInfo').textContent = '';
+            } catch (e) {
+                console.error(e);
+                showToast(e.message || 'Error al guardar la nota', 'error');
+            }
+        }
+
+
+        // Utils
+        function fmt(n) { return Number(n || 0).toLocaleString('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+        function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function showToast(msg, type = 'ok') {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            const cls = type === 'error' ? 'is-error' : 'ok';
+            t.className = 'toast ' + cls + ' show';
+            setTimeout(() => { t.className = 'toast ' + cls; }, 3500);
+        }
+
+        // Exponer funciones usadas inline
+        window.cerrarModal = cerrarModal;
+        window.cerrarModalAjuste = cerrarModalAjuste;
+        window.abrirEditar = abrirEditar;
+        window.borrarLinea = borrarLinea;
+    </script>
+</body>
+
+</html>

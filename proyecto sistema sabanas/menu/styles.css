@@ -191,27 +191,42 @@ body {
 /* ===========================
    Notificaciones flotantes (toast)
    =========================== */
+
 .toast {
   position: fixed;
   top: 20px;
   right: 20px;
-  background: #2c3e50; /* fondo oscuro como tu navbar */
-  color: #ecf0f1;       /* texto claro */
+
+  /* blindaje contra reglas globales */
+  display: inline-block;
+  width: auto;
+  max-width: min(420px, 90vw);
+  height: auto;
+  max-height: 40vh;
+  overflow: auto;
+
+  background: #2c3e50;      /* fondo oscuro como tu navbar */
+  color: #ecf0f1;            /* texto claro */
   padding: 12px 20px;
   border-radius: 6px;
   box-shadow: 0 4px 8px rgba(0,0,0,.3);
-  opacity: 0;
-  transform: translateY(-20px);
-  transition: all 0.4s ease;
-  z-index: 9999;
   font-family: 'Montserrat', sans-serif;
   font-size: 14px;
+
+  opacity: 0;
+  transform: translateY(-20px);
+  transition: opacity .4s ease, transform .4s ease;
+  pointer-events: none;      /* que no bloquee clicks cuando está oculto */
+  z-index: 9999;
+
+  /* reset defensivo */
+  left: auto; bottom: auto;
 }
 
-/* Cuando se muestra */
 .toast.show {
   opacity: 1;
   transform: translateY(0);
+  pointer-events: auto;
 }
 
 /* Colores por tipo */
@@ -219,6 +234,7 @@ body {
   border-left: 5px solid #2ecc71; /* verde */
 }
 
-.toast.error {
+/* Usá is-error para no chocar con .error global del HTML */
+.toast.is-error {
   border-left: 5px solid #e74c3c; /* rojo */
 }
