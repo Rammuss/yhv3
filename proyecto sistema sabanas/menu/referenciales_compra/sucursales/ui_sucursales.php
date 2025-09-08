@@ -125,7 +125,7 @@ if (isset($_GET['action']) || isset($_POST['action'])) {
 <head>
 <meta charset="utf-8">
 <title>Referencial de Sucursales</title>
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="../../styles.css">
 <style>
   body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
   .wrap{max-width:1000px; margin:auto}
@@ -307,6 +307,6 @@ async function toggleEstado(id, to){
 
 function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 </script>
-<script src="navbar.js"></script>
+<script src="../../navbar.js"></script>
 </body>
 </html>

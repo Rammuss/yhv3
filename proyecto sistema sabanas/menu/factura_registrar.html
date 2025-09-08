@@ -1,122 +1,32 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="utf-8" />
   <title>Registrar Factura de Compra</title>
   <link rel="stylesheet" href="styles.css">
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f7f7f7;
-      margin: 20px
-    }
-
-    .wrap {
-      max-width: 1100px;
-      margin: auto
-    }
-
-    h1 {
-      margin: 0 0 12px
-    }
-
-    .row {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      margin-bottom: 12px;
-      flex-wrap: wrap
-    }
-
-    select,
-    input,
-    button,
-    textarea {
-      padding: 8px
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 8px
-    }
-
-    th,
-    td {
-      border: 1px solid #eaeaea;
-      padding: 8px;
-      text-align: left
-    }
-
-    th {
-      background: #fafafa
-    }
-
-    .right {
-      text-align: right
-    }
-
-    .muted {
-      color: #777
-    }
-
-    .btn {
-      padding: 8px 12px;
-      border: 1px solid #ddd;
-      background: #fff;
-      cursor: pointer;
-      border-radius: 6px
-    }
-
-    .btn:hover {
-      background: #f3f3f3
-    }
-
-    .badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border: 1px solid #ddd;
-      border-radius: 12px;
-      font-size: 12px;
-      background: #fff
-    }
-
-    .grid {
-      display: grid;
-      gap: 10px
-    }
-
-    .grid.cols-4 {
-      grid-template-columns: repeat(4, minmax(160px, 1fr))
-    }
-
-    .grid.cols-3 {
-      grid-template-columns: repeat(3, minmax(160px, 1fr))
-    }
-
-    .cuota-item {
-      display: flex;
-      gap: 8px;
-      align-items: center
-    }
-
-    .cuota-item input[type="date"] {
-      padding: 6px
-    }
-
-    label {
-      font-size: 12px;
-      color: #444
-    }
-
-    .error {
-      color: #b00020;
-      font-size: 12px
-    }
+    body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
+    .wrap{max-width:1100px; margin:auto}
+    h1{margin:0 0 12px}
+    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
+    select,input,button,textarea{padding:8px}
+    table{width:100%; border-collapse:collapse; margin-top:8px}
+    th,td{border:1px solid #eaeaea; padding:8px; text-align:left}
+    th{background:#fafafa}
+    .right{text-align:right}
+    .muted{color:#777}
+    .btn{padding:8px 12px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
+    .btn:hover{background:#f3f3f3}
+    .badge{display:inline-block;padding:2px 6px;border:1px solid #ddd;border-radius:12px;font-size:12px;background:#fff}
+    .grid{display:grid; gap:10px}
+    .grid.cols-4{grid-template-columns:repeat(4, minmax(160px,1fr))}
+    .grid.cols-3{grid-template-columns:repeat(3, minmax(160px,1fr))}
+    .cuota-item{display:flex; gap:8px; align-items:center}
+    .cuota-item input[type="date"]{padding:6px}
+    label{font-size:12px; color:#444}
+    .error{color:#b00020; font-size:12px}
   </style>
 </head>
-
 <body>
   <div id="navbar-container"></div>
   <div class="wrap">
@@ -220,9 +130,9 @@
   <script>
     const RUTAS = {
       proveedores: 'proveedores_options.php',
-      preparar: 'factura_preparar.php',
-      guardar: 'factura_guardar.php',
-      sucursales: '../menu/referenciales_compra/sucursales/sucursales_options.php?estado=ACTIVO'
+      preparar:    'factura_preparar.php',
+      guardar:     'factura_guardar.php',
+      sucursales:  '../menu/referenciales_compra/sucursales/sucursales_options.php?estado=ACTIVO'
     };
 
     const $ = s => document.querySelector(s);
@@ -243,7 +153,7 @@
       $('#editarFechas').addEventListener('change', toggleEditarFechas);
       $('#btnPreview').addEventListener('click', previewCuotas);
 
-      // TIMBRADO: solo dígitos, sin límite de longitud
+      // TIMBRADO: solo dígitos
       const timb = $('#timbrado_numero');
       const timbErr = $('#timbrado_error');
       timb.addEventListener('input', () => {
@@ -257,78 +167,83 @@
       onCondicionChange(); // set defaults
     });
 
-    function setFechaHoy() {
-      const hoy = new Date().toISOString().slice(0, 10);
+    function setFechaHoy(){
+      const hoy = new Date().toISOString().slice(0,10);
       $('#fecha_emision').value = hoy;
     }
 
-    async function cargarProveedores() {
-      try {
+    async function cargarProveedores(){
+      try{
         const r = await fetch(RUTAS.proveedores);
         const data = await r.json();
         const sel = $('#proveedor');
         sel.innerHTML = '<option value="">Seleccione proveedor</option>';
-        (data || []).forEach(p => {
+        (data || []).forEach(p=>{
           const o = document.createElement('option');
           o.value = p.id_proveedor;
           o.textContent = p.nombre;
           sel.appendChild(o);
         });
-      } catch (e) { alert('Error cargando proveedores'); }
+      }catch(e){
+        console.error(e);
+        showToast('Error cargando proveedores','error');
+      }
     }
 
-    async function cargarSucursales() {
-      try {
+    async function cargarSucursales(){
+      try{
         const r = await fetch(RUTAS.sucursales);
         const data = await r.json();
         const sel = $('#id_sucursal');
         sel.innerHTML = '<option value="">-- Seleccionar sucursal --</option>';
-        (data || []).forEach(s => {
+        (data || []).forEach(s=>{
           const o = document.createElement('option');
           o.value = s.id_sucursal;
           o.textContent = s.nombre;
           sel.appendChild(o);
         });
-      } catch (e) {
+      }catch(e){
         console.error(e);
+        // opcional: showToast('No se pudieron cargar sucursales','error');
       }
     }
 
-    async function cargarPendientes() {
+    async function cargarPendientes(){
       const prov = $('#proveedor').value;
-      if (!prov) { alert('Seleccione proveedor'); return; }
+      if(!prov){ alert('Seleccione proveedor'); return; }
       const ped = $('#numero_pedido').value.trim();
       let url = `${RUTAS.preparar}?id_proveedor=${encodeURIComponent(prov)}`;
       if (ped) url += `&numero_pedido=${encodeURIComponent(ped)}`;
 
       $('#infoPend').textContent = 'Cargando...';
-      try {
+      try{
         const r = await fetch(url);
         const j = await r.json();
-        if (!j.ok) throw new Error(j.error || 'Error');
+        if(!j.ok) throw new Error(j.error || 'Error');
         lineas = (j.data || []).map(x => ({
-          id_oc: +x.id_oc,
-          id_oc_det: +x.id_oc_det,
-          id_producto: +x.id_producto,
-          producto: x.producto,
-          pendiente: +x.pendiente,
-          cantidad: +x.pendiente, // por defecto facturar todo
-          precio: 0,
-          iva: '10%'
+          id_oc:+x.id_oc,
+          id_oc_det:+x.id_oc_det,
+          id_producto:+x.id_producto,
+          producto:x.producto,
+          pendiente:+x.pendiente,
+          cantidad:+x.pendiente,
+          precio:0,
+          iva:'10%'
         }));
         renderTabla();
         $('#infoPend').textContent = `${lineas.length} ítems con pendiente`;
-      } catch (e) {
+        showToast('Pendientes cargados','ok');
+      }catch(e){
         console.error(e);
-        alert('Error cargando pendientes');
+        showToast('Error cargando pendientes','error');
         $('#infoPend').textContent = '';
       }
     }
 
-    function renderTabla() {
+    function renderTabla(){
       const tb = $('#tabla tbody');
       tb.innerHTML = '';
-      lineas.forEach((l, idx) => {
+      lineas.forEach((l,idx)=>{
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td>${l.id_oc}</td>
@@ -346,12 +261,12 @@
           </td>
           <td>
             <select onchange="onIva(${idx}, this.value)">
-              <option value="10%" ${l.iva === '10%' ? 'selected' : ''}>10%</option>
-              <option value="5%"  ${l.iva === '5%' ? 'selected' : ''}>5%</option>
-              <option value="Exento" ${l.iva === 'Exento' ? 'selected' : ''}>Exento</option>
+              <option value="10%" ${l.iva==='10%'?'selected':''}>10%</option>
+              <option value="5%"  ${l.iva==='5%'?'selected':''}>5%</option>
+              <option value="Exento" ${l.iva==='Exento'?'selected':''}>Exento</option>
             </select>
           </td>
-          <td class="right" id="rowTotal-${idx}">${fmt(l.cantidad * l.precio)}</td>
+          <td class="right" id="rowTotal-${idx}">${fmt(l.cantidad*l.precio)}</td>
         `;
         tb.appendChild(tr);
       });
@@ -359,102 +274,96 @@
       previewCuotas();
     }
 
-    function onCant(i, v) {
-      const n = Math.max(1, Math.min(+v || 0, lineas[i].pendiente));
+    function onCant(i, v){
+      const n = Math.max(1, Math.min(+v||0, lineas[i].pendiente));
       lineas[i].cantidad = n;
-      $('#rowTotal-' + i).textContent = fmt(n * lineas[i].precio);
+      $('#rowTotal-'+i).textContent = fmt(n*lineas[i].precio);
       recalcularTotal();
     }
-    function onPrecio(i, v) {
-      const n = Math.max(0, +v || 0);
+    function onPrecio(i, v){
+      const n = Math.max(0, +v||0);
       lineas[i].precio = n;
-      $('#rowTotal-' + i).textContent = fmt(n * lineas[i].cantidad);
+      $('#rowTotal-'+i).textContent = fmt(n*lineas[i].cantidad);
       recalcularTotal();
     }
-    function onIva(i, v) { lineas[i].iva = v; }
+    function onIva(i,v){ lineas[i].iva = v; }
 
-    function recalcularTotal() {
-      const t = lineas.reduce((acc, l) => acc + (l.cantidad * l.precio), 0);
+    function recalcularTotal(){
+      const t = lineas.reduce((acc,l)=> acc + (l.cantidad*l.precio), 0);
       $('#total').textContent = fmt(t);
     }
 
-    function fmt(n) { return Number(n || 0).toLocaleString('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-    function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+    function fmt(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
 
     // ==== CUOTAS UI ====
-    function onCondicionChange() {
+    function onCondicionChange(){
       const cond = $('#condicion').value;
-      if (cond === 'CONTADO') {
+      if(cond === 'CONTADO'){
         $('#cuotas').value = 1;
         $('#dias_plazo').value = 0;
       }
       previewCuotas();
     }
+    function toggleEditarFechas(){ previewCuotas(); }
 
-    function toggleEditarFechas() {
-      previewCuotas();
-    }
-
-    function previewCuotas() {
+    function previewCuotas(){
       const box = $('#cuotasBox');
       const cond = $('#condicion').value;
-      const cuotas = Math.max(1, +($('#cuotas').value || 1));
-      const dias1 = Math.max(0, +($('#dias_plazo').value || 0));
-      const inter = Math.max(1, +($('#intervalo_dias').value || 30));
+      const cuotas = Math.max(1, +($('#cuotas').value||1));
+      const dias1  = Math.max(0, +($('#dias_plazo').value||0));
+      const inter  = Math.max(1, +($('#intervalo_dias').value||30));
       const editable = $('#editarFechas').checked;
 
-      box.style.display = (cond === 'CREDITO' || cuotas > 1 || editable) ? 'grid' : 'none';
+      box.style.display = (cond === 'CREDITO' || cuotas>1 || editable) ? 'grid' : 'none';
       box.innerHTML = '';
 
-      const base = new Date($('#fecha_emision').value || new Date().toISOString().slice(0, 10));
+      const base = new Date($('#fecha_emision').value || new Date().toISOString().slice(0,10));
       let cur = new Date(base);
       cur.setDate(cur.getDate() + dias1);
 
-      for (let n = 1; n <= cuotas; n++) {
-        if (n > 1) {
-          cur = new Date(cur);
-          cur.setDate(cur.getDate() + inter);
-        }
-        const iso = cur.toISOString().slice(0, 10);
+      for(let n=1; n<=cuotas; n++){
+        if(n>1){ cur = new Date(cur); cur.setDate(cur.getDate() + inter); }
+        const iso = cur.toISOString().slice(0,10);
         const div = document.createElement('div');
         div.className = 'cuota-item';
         div.innerHTML = `
           <span style="width:70px">Cuota ${n}</span>
-          <input type="date" ${editable ? '' : 'disabled'} value="${iso}" data-cuota="${n}" class="fecha-cuota">
+          <input type="date" ${editable?'':'disabled'} value="${iso}" data-cuota="${n}" class="fecha-cuota">
         `;
         box.appendChild(div);
       }
     }
 
-    async function guardar() {
+    async function guardar(){
       const id_proveedor = $('#proveedor')?.value;
       const fecha_emision = $('#fecha_emision')?.value;
       const numero_documento = $('#numero_documento')?.value.trim();
       const observacion = $('#observacion')?.value.trim();
       const id_sucursal = $('#id_sucursal')?.value;
 
-      // TIMBRADO (opcional, solo dígitos)
+      // TIMBRADO
       const timbrado_numero = $('#timbrado_numero')?.value.trim();
       const timbErr = $('#timbrado_error');
 
-      if (!id_proveedor) { alert('Proveedor requerido'); return; }
-      if (!fecha_emision) { alert('Fecha requerida'); return; }
-      if (!numero_documento) { alert('Nº Documento requerido'); return; }
-      if (lineas.length === 0) { alert('No hay líneas'); return; }
+      if(!id_proveedor){ alert('Proveedor requerido'); return; }
+      if(!fecha_emision){ alert('Fecha requerida'); return; }
+      if(!numero_documento){ alert('Nº Documento requerido'); return; }
+      if(lineas.length===0){ alert('No hay líneas'); return; }
 
       if (timbrado_numero && !/^\d+$/.test(timbrado_numero)) {
         timbErr.textContent = 'El timbrado debe contener solo números';
         timbErr.style.display = 'inline';
-        alert('El timbrado debe contener solo números');
+        showToast('El timbrado debe contener solo números','error');
         return;
       } else {
         timbErr.style.display = 'none';
         timbErr.textContent = '';
       }
 
-      for (const l of lineas) {
-        if (l.cantidad <= 0 || l.cantidad > l.pendiente) { alert('Cantidad inválida en alguna línea'); return; }
-        if (l.precio < 0) { alert('Precio inválido'); return; }
+      for(const l of lineas){
+        if(l.cantidad<=0 || l.cantidad>l.pendiente){ alert('Cantidad inválida en alguna línea'); return; }
+        if(l.precio<0){ alert('Precio inválido'); return; }
       }
 
       const fd = new FormData();
@@ -462,37 +371,39 @@
       fd.append('fecha_emision', fecha_emision);
       fd.append('numero_documento', numero_documento);
       fd.append('observacion', observacion);
-
       if (id_sucursal) fd.append('id_sucursal', id_sucursal);
       if (timbrado_numero) fd.append('timbrado_numero', timbrado_numero);
 
       const condicion = $('#condicion').value;
-      const cuotas = Math.max(1, +($('#cuotas').value || 1));
-      const dias_plazo = Math.max(0, +($('#dias_plazo').value || 0));
-      const intervalo_dias = Math.max(1, +($('#intervalo_dias').value || 30));
+      const cuotas = Math.max(1, +($('#cuotas').value||1));
+      const dias_plazo = Math.max(0, +($('#dias_plazo').value||0));
+      const intervalo_dias = Math.max(1, +($('#intervalo_dias').value||30));
       fd.append('condicion', condicion);
       fd.append('cuotas', cuotas);
       fd.append('dias_plazo', dias_plazo);
       fd.append('intervalo_dias', intervalo_dias);
 
-      if ($('#editarFechas').checked) {
-        document.querySelectorAll('.fecha-cuota').forEach(inp => {
+      if($('#editarFechas').checked){
+        document.querySelectorAll('.fecha-cuota').forEach(inp=>{
           fd.append('fechas_cuota[]', inp.value);
         });
       }
 
-      lineas.forEach(l => {
+      lineas.forEach(l=>{
         fd.append('id_oc_det[]', l.id_oc_det);
         fd.append('cantidad[]', l.cantidad);
         fd.append('precio_unitario[]', l.precio);
         fd.append('tipo_iva[]', l.iva);
       });
 
-      try {
-        const r = await fetch(RUTAS.guardar, { method: 'POST', body: fd });
+      try{
+        const r = await fetch(RUTAS.guardar,{method:'POST', body: fd});
         const j = await r.json();
-        if (!r.ok || !j.ok) { alert('Error: ' + (j.error || 'Desconocido')); return; }
-        alert(`Factura guardada #${j.id_factura} — Total ${fmt(j.total_factura)}${j.timbrado_numero ? ` — Timbrado ${j.timbrado_numero}` : ''}`);
+        if(!r.ok || !j.ok){
+          showToast('Error: ' + (j.error||'Desconocido'), 'error');
+          return;
+        }
+        showToast(`✅ Factura #${j.id_factura} registrada — Total ${fmt(j.total_factura)}${j.timbrado_numero ? ` — Timbrado ${j.timbrado_numero}` : ''}`, 'ok');
 
         // reset mínimo
         lineas = [];
@@ -507,31 +418,30 @@
         $('#intervalo_dias').value = 30;
         $('#editarFechas').checked = false;
         previewCuotas();
-      } catch (e) {
+      }catch(e){
         console.error(e);
-        alert('Error al guardar la factura');
+        showToast('Error al guardar la factura','error');
       }
     }
 
+    // Exponer handlers
     window.onCant = onCant;
     window.onPrecio = onPrecio;
     window.onIva = onIva;
-  </script>
-  <script src="navbar.js"></script>
-  <div id="toast" class="toast"></div>
-  <script>
-    function showToast(msg, type = 'ok') {
+
+    // Toast util (usa clases definidas en styles.css)
+    function showToast(msg, type='ok'){
       const t = document.getElementById('toast');
       t.textContent = msg;
       t.className = 'toast ' + type + ' show';
-      setTimeout(() => { t.className = 'toast ' + type; }, 4000);
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(()=>{ t.className = 'toast ' + type; }, 4000);
     }
-
-    // Ejemplos:
-    showToast("✅ Factura registrada correctamente", "ok");
-    showToast("❌ Error al guardar factura", "error");
-
   </script>
-</body>
 
+  <script src="navbar.js"></script>
+
+  <!-- contenedor del toast -->
+  <div id="toast" class="toast"></div>
+</body>
 </html>
