@@ -45,6 +45,14 @@
       </select>
 
       <button class="btn" id="btnCargar">Cargar OCs con pendientes</button>
+
+      <!-- NUEVO: selector de OC y limpiar -->
+      <label>Orden de Compra:</label>
+      <select id="oc_selector" disabled>
+        <option value="">-- Seleccionar OC --</option>
+      </select>
+      <button class="btn" id="btnLimpiarOC" style="display:none">Limpiar OC</button>
+
       <span class="badge" id="infoPend"></span>
     </div>
 
@@ -137,6 +145,7 @@
 
     const $ = s => document.querySelector(s);
     let lineas = []; // {id_oc,id_oc_det,id_producto,producto,pendiente, cantidad, precio, iva}
+    let ocSeleccionada = null; // NUEVO
 
     document.addEventListener('DOMContentLoaded', () => {
       setFechaHoy();
@@ -144,6 +153,10 @@
       cargarSucursales();
       $('#btnCargar').addEventListener('click', cargarPendientes);
       $('#btnGuardar').addEventListener('click', guardar);
+
+      // NUEVO: listeners del selector de OC
+      $('#oc_selector').addEventListener('change', onSelectOC);
+      $('#btnLimpiarOC').addEventListener('click', limpiarOC);
 
       // cuotas UI
       $('#condicion').addEventListener('change', onCondicionChange);
@@ -208,9 +221,13 @@
       }
     }
 
+    // =========================
+    // LISTA/DETALLE de OCs
+    // =========================
     async function cargarPendientes(){
       const prov = $('#proveedor').value;
       if(!prov){ alert('Seleccione proveedor'); return; }
+
       const ped = $('#numero_pedido').value.trim();
       let url = `${RUTAS.preparar}?id_proveedor=${encodeURIComponent(prov)}`;
       if (ped) url += `&numero_pedido=${encodeURIComponent(ped)}`;
@@ -220,19 +237,48 @@
         const r = await fetch(url);
         const j = await r.json();
         if(!j.ok) throw new Error(j.error || 'Error');
-        lineas = (j.data || []).map(x => ({
-          id_oc:+x.id_oc,
-          id_oc_det:+x.id_oc_det,
-          id_producto:+x.id_producto,
-          producto:x.producto,
-          pendiente:+x.pendiente,
-          cantidad:+x.pendiente,
-          precio:0,
-          iva:'10%'
-        }));
-        renderTabla();
-        $('#infoPend').textContent = `${lineas.length} ítems con pendiente`;
-        showToast('Pendientes cargados','ok');
+
+        if (j.mode === 'list') {
+          // MODO LISTA: poblar selector, no tocamos 'lineas'
+          poblarSelectorOCs(j.ocs || []);
+          lineas = [];
+          ocSeleccionada = null;
+          renderTabla();
+          $('#infoPend').textContent = `${(j.ocs||[]).length} OC(s) con pendientes`;
+          showToast('Elegí una OC del selector','ok');
+
+        } else {
+          // MODO DETAIL (cuando viene por número de pedido)
+          lineas = (j.data || []).map(x => ({
+            id_oc:+x.id_oc,
+            id_oc_det:+x.id_oc_det,
+            id_producto:+x.id_producto,
+            producto:x.producto,
+            pendiente:+x.pendiente,
+            cantidad:+x.pendiente,
+            precio:0,
+            iva:'10%'
+          }));
+          // Setear ocSeleccionada si todas las líneas comparten la misma OC
+          const ocSet = new Set(lineas.map(l=>l.id_oc));
+          ocSeleccionada = ocSet.size === 1 ? [...ocSet][0] : null;
+
+          renderTabla();
+
+          // Si fue detail por pedido, también cargamos la lista de OCs para el selector
+          const r2 = await fetch(`${RUTAS.preparar}?id_proveedor=${encodeURIComponent(prov)}`);
+          const j2 = await r2.json();
+          if (j2.ok && j2.mode === 'list') {
+            poblarSelectorOCs(j2.ocs || []);
+            if (ocSeleccionada) {
+              $('#oc_selector').value = String(ocSeleccionada);
+              $('#btnLimpiarOC').style.display = 'inline-block';
+            }
+          }
+
+          $('#infoPend').textContent = `${lineas.length} ítems con pendiente`;
+          showToast('Pendientes cargados','ok');
+        }
       }catch(e){
         console.error(e);
         showToast('Error cargando pendientes','error');
@@ -240,6 +286,89 @@
       }
     }
 
+    function poblarSelectorOCs(ocs){
+      const sel = $('#oc_selector');
+      sel.innerHTML = '<option value="">-- Seleccionar OC --</option>';
+
+      (ocs || []).forEach(oc => {
+        const opt = document.createElement('option');
+        const etiqueta = [
+          `OC #${oc.id_oc}`,
+          oc.numero_pedido ? `Pedido ${oc.numero_pedido}` : null,
+          oc.fecha_oc ? `${oc.fecha_oc}` : null,
+          `Ítems ${oc.cant_items}`,
+          `Pend. ${fmt(oc.pendiente_total)}`
+        ].filter(Boolean).join(' · ');
+
+        opt.value = oc.id_oc;
+        opt.textContent = etiqueta;
+        sel.appendChild(opt);
+      });
+
+      sel.disabled = !(ocs && ocs.length);
+      $('#btnLimpiarOC').style.display = 'none';
+    }
+
+    async function onSelectOC(){
+      const id = $('#oc_selector').value;
+      if(!id){
+        ocSeleccionada = null;
+        lineas = [];
+        renderTabla();
+        $('#btnLimpiarOC').style.display = 'none';
+        $('#infoPend').textContent = 'Sin OC seleccionada';
+        return;
+      }
+
+      ocSeleccionada = +id;
+      const prov = $('#proveedor').value;
+      if(!prov){ alert('Seleccione proveedor'); return; }
+
+      const url = `${RUTAS.preparar}?id_proveedor=${encodeURIComponent(prov)}&id_oc=${encodeURIComponent(ocSeleccionada)}`;
+      $('#infoPend').textContent = 'Cargando items de la OC...';
+      try{
+        const r = await fetch(url);
+        const j = await r.json();
+        if(!j.ok) throw new Error(j.error || 'Error');
+
+        if (j.mode === 'detail') {
+          lineas = (j.data || []).map(x => ({
+            id_oc:+x.id_oc,
+            id_oc_det:+x.id_oc_det,
+            id_producto:+x.id_producto,
+            producto:x.producto,
+            pendiente:+x.pendiente,
+            cantidad:+x.pendiente,
+            precio:0,
+            iva:'10%'
+          }));
+          renderTabla();
+          $('#btnLimpiarOC').style.display = 'inline-block';
+          $('#infoPend').textContent = `OC #${ocSeleccionada}: ${lineas.length} ítems cargados`;
+          showToast(`OC #${ocSeleccionada} cargada`, 'ok');
+        } else {
+          showToast('No se recibieron líneas de detalle','error');
+          $('#infoPend').textContent = '';
+        }
+      }catch(e){
+        console.error(e);
+        showToast('Error cargando la OC seleccionada','error');
+        $('#infoPend').textContent = '';
+      }
+    }
+
+    function limpiarOC(){
+      $('#oc_selector').value = '';
+      ocSeleccionada = null;
+      lineas = [];
+      renderTabla();
+      $('#btnLimpiarOC').style.display = 'none';
+      $('#infoPend').textContent = 'Sin OC seleccionada';
+    }
+
+    // =========================
+    // Tabla y totales
+    // =========================
     function renderTabla(){
       const tb = $('#tabla tbody');
       tb.innerHTML = '';
@@ -335,6 +464,9 @@
       }
     }
 
+    // =========================
+    // Guardar
+    // =========================
     async function guardar(){
       const id_proveedor = $('#proveedor')?.value;
       const fecha_emision = $('#fecha_emision')?.value;
@@ -389,6 +521,11 @@
         });
       }
 
+      // NUEVO: enviar id_oc si hay selección (opcional, no cambia tu BD)
+      if (ocSeleccionada) {
+        fd.append('id_oc', ocSeleccionada);
+      }
+
       lineas.forEach(l=>{
         fd.append('id_oc_det[]', l.id_oc_det);
         fd.append('cantidad[]', l.cantidad);
@@ -417,6 +554,9 @@
         $('#dias_plazo').value = 30;
         $('#intervalo_dias').value = 30;
         $('#editarFechas').checked = false;
+        $('#oc_selector').value = '';
+        $('#btnLimpiarOC').style.display = 'none';
+        ocSeleccionada = null;
         previewCuotas();
       }catch(e){
         console.error(e);
