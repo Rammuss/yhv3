@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Notas de Crédito/Débito - Gestión</title>
+  <link rel="stylesheet" href="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/menu/styles.css">
+  <style>
+    body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
+    .wrap{max-width:1180px; margin:auto}
+    h1{margin:0 0 12px}
+    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
+    select,input,button{padding:8px}
+    table{width:100%; border-collapse:collapse}
+    th,td{border:1px solid #eaeaea; padding:8px; text-align:left}
+    th{background:#fafafa}
+    .right{text-align:right}
+    .btn{padding:6px 10px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
+    .btn:hover{background:#f3f3f3}
+    .muted{color:#777}
+    .pill{display:inline-block;padding:2px 8px;border-radius:12px;border:1px solid #ddd;font-size:12px}
+    .pill.ok{background:#eafaf0; border-color:#2ecc71}
+    .pill.bad{background:#fdecea; border-color:#e74c3c}
+    .pill.mid{background:#eef5ff; border-color:#3498db}
+    .pagination{display:flex; gap:6px; align-items:center}
+    .modal{position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; z-index:9998}
+    .modal .card{background:#fff; width:min(880px, 95vw); max-height:80vh; overflow:auto; border-radius:8px; padding:16px; box-shadow:0 8px 24px rgba(0,0,0,.25)}
+    .modal h3{margin:0 0 10px}
+    .actions{display:flex; gap:6px}
+  </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+  <div class="wrap">
+    <h1>Notas de Crédito / Débito</h1>
+
+    <!-- Filtros -->
+    <div class="row">
+      <label>Desde:</label><input type="date" id="f_desde">
+      <label>Hasta:</label><input type="date" id="f_hasta">
+
+      <label>Proveedor:</label><select id="id_proveedor"></select>
+      <label>Sucursal:</label><select id="id_sucursal"></select>
+
+      <label>Tipo:</label>
+      <select id="tipo">
+        <option value="">Todos</option>
+        <option value="NC">NC (Crédito)</option>
+        <option value="ND">ND (Débito)</option>
+      </select>
+
+      <label>Estado:</label>
+      <select id="estado">
+        <option value="">Todos</option>
+        <option>Registrada</option>
+        <option>Aplicada</option>
+        <option>Aplicada Parcial</option>
+        <option>Anulada</option>
+      </select>
+
+      <input type="text" id="q" placeholder="ID / Nº doc / Timbrado" style="width:220px">
+      <button class="btn" id="btnBuscar">Buscar</button>
+      <span id="resumen" class="muted"></span>
+    </div>
+
+    <!-- Tabla -->
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Fecha</th>
+          <th>Tipo</th>
+          <th>Clase</th>
+          <th>Proveedor</th>
+          <th>Sucursal</th>
+          <th>Nº Doc</th>
+          <th>Timbrado</th>
+          <th class="right">Total</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <!-- Footer tabla -->
+    <div class="row" style="justify-content:space-between">
+      <div class="muted" id="meta"></div>
+      <div class="pagination">
+        <button class="btn" id="prev">&lt;</button>
+        <span id="pageInfo" class="muted"></span>
+        <button class="btn" id="next">&gt;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Detalle -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center">
+        <h3 id="m_titulo">Detalle</h3>
+        <button class="btn" onclick="closeModal()">Cerrar</button>
+      </div>
+      <div id="m_cab" class="muted" style="margin-bottom:8px"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>ID Prod</th>
+            <th>Producto</th>
+            <th>Descripción</th>
+            <th class="right">Cant</th>
+            <th class="right">P.Unit</th>
+            <th>IVA</th>
+            <th class="right">Subtotal</th>
+          </tr>
+        </thead>
+        <tbody id="m_det"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const RUTAS = {
+      proveedores: 'proveedores_options.php',
+      sucursales:  '../menu/referenciales_compra/sucursales/sucursales_options.php?estado=ACTIVO',
+      listar:      'notas_compra_listar.php',
+      detalle:     'notas_compra_detalle.php',
+      pdf:         'nota_compra_pdf.php' // opcional si generás PDF
+      // anular:   'notas_compra_anular.php' // si luego querés anular
+    };
+
+    const $ = s => document.querySelector(s);
+    let page = 1, pages = 1, limit = 20;
+
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      // fechas por defecto últimos 30 días
+      const hoy = new Date(); const d30 = new Date(hoy); d30.setDate(hoy.getDate()-30);
+      $('#f_desde').value = d30.toISOString().slice(0,10);
+      $('#f_hasta').value = hoy.toISOString().slice(0,10);
+
+      await cargarProveedores();
+      await cargarSucursales();
+
+      $('#btnBuscar').addEventListener('click', ()=>{ page=1; buscar(false); });
+      $('#prev').addEventListener('click', ()=>{ if(page>1){ page--; buscar(false); }});
+      $('#next').addEventListener('click', ()=>{ if(page<pages){ page++; buscar(false); }});
+
+      $('#toast').addEventListener('click', ()=> hideToast());
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape'){ hideToast(); closeModal(); }});
+
+      // primer load silencioso
+      buscar(true);
+    });
+
+    async function cargarProveedores(){
+      try{
+        const r = await fetch(RUTAS.proveedores);
+        const data = await r.json();
+        const sel = $('#id_proveedor');
+        sel.innerHTML = '<option value="">Todos</option>';
+        (data||[]).forEach(p=>{
+          const o = document.createElement('option');
+          o.value = p.id_proveedor; o.textContent = p.nombre;
+          sel.appendChild(o);
+        });
+      }catch(e){ /* silent */ }
+    }
+    async function cargarSucursales(){
+      try{
+        const r = await fetch(RUTAS.sucursales);
+        const data = await r.json();
+        const sel = $('#id_sucursal');
+        sel.innerHTML = '<option value="">Todas</option>';
+        (data||[]).forEach(s=>{
+          const o = document.createElement('option');
+          o.value = s.id_sucursal; o.textContent = s.nombre;
+          sel.appendChild(o);
+        });
+      }catch(e){ /* silent */ }
+    }
+
+    async function buscar(silent=false){
+      const fd = $('#f_desde').value;
+      const fh = $('#f_hasta').value;
+      if(fd && fh && fd>fh){ if(!silent) showToast('Rango de fechas inválido','is-error'); return; }
+
+      const params = new URLSearchParams({
+        page, limit,
+        fecha_desde: fd || '',
+        fecha_hasta: fh || '',
+        id_proveedor: $('#id_proveedor').value || 0,
+        id_sucursal: $('#id_sucursal').value || 0,
+        tipo: $('#tipo').value || '',
+        estado: $('#estado').value || '',
+        q: $('#q').value.trim() || ''
+      });
+
+      try{
+        const r = await fetch(`${RUTAS.listar}?`+params.toString());
+        const j = await r.json();
+        if(!j.ok) throw new Error(j.error||'Error');
+        renderTabla(j.data||[]);
+        pages = j.meta?.pages || 1;
+        page = Math.min(Math.max(1,page), pages);
+        $('#pageInfo').textContent = `Página ${page} de ${pages}`;
+        $('#meta').textContent = `Total: ${j.meta?.total||0} — Importe en rango: ${fmt(j.meta?.sum_total_importe||0)}`;
+        $('#resumen').textContent = `${(j.data||[]).length} resultado(s) en esta página`;
+        if(!silent) showToast('Listado actualizado','ok');
+      }catch(e){
+        console.error(e);
+        if(!silent) showToast('Error al listar','is-error');
+      }
+    }
+
+    function renderTabla(rows){
+      const tb = $('#tabla tbody');
+      tb.innerHTML = '';
+      rows.forEach(r=>{
+        const tr = document.createElement('tr');
+
+        let pillTipo = r.tipo==='NC' ? '<span class="pill mid">NC</span>' : '<span class="pill mid">ND</span>';
+        let pillEstado = (r.estado==='Anulada')
+          ? '<span class="pill bad">Anulada</span>'
+          : (r.estado==='Registrada' ? '<span class="pill ok">Registrada</span>' : `<span class="pill">${esc(r.estado)}</span>`);
+
+        tr.innerHTML = `
+          <td>${r.id_nota}</td>
+          <td>${r.fecha_emision||''}</td>
+          <td>${pillTipo}</td>
+          <td>${esc(r.clase||'')}</td>
+          <td>${esc(r.proveedor||'')}</td>
+          <td>${esc(r.sucursal||'')}</td>
+          <td>${esc(r.numero_documento||'')}</td>
+          <td>${esc(r.timbrado_numero||'')}</td>
+          <td class="right">${fmt(r.total_nota||0)}</td>
+          <td>${pillEstado}</td>
+          <td class="actions">
+            <button class="btn" onclick="verDetalle(${r.id_nota})">Ver</button>
+            <button class="btn" onclick="descargarPDF(${r.id_nota})">PDF</button>
+            <!-- Para anular, descomentá y creá notas_compra_anular.php
+            <button class="btn" ${r.estado==='Anulada'?'disabled':''} onclick="anular(${r.id_nota})">Anular</button>
+            -->
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+    }
+
+    async function verDetalle(id){
+      try{
+        const r = await fetch(`${RUTAS.detalle}?id_nota=${id}`);
+        const j = await r.json();
+        if(!j.ok) throw new Error(j.error||'Error');
+
+        const c = j.cab;
+        $('#m_titulo').textContent = `Nota #${id} — ${c.tipo} (${c.clase || 's/clase'}) — ${c.estado}`;
+        $('#m_cab').textContent =
+          `Fecha ${c.fecha_emision} | Prov: ${c.proveedor} | Suc: ${c.sucursal || '-'} | Nº Doc: ${c.numero_documento}` +
+          (c.timbrado_numero ? ` | Timbrado: ${c.timbrado_numero}` : '') +
+          (c.nro_factura_ref ? ` | Fact ref: ${c.nro_factura_ref}` : '') +
+          (c.observacion ? ` | Obs: ${c.observacion}` : '');
+
+        const tb = $('#m_det'); tb.innerHTML = '';
+        (j.det||[]).forEach((d,i)=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${i+1}</td>
+            <td>${d.id_producto ?? ''}</td>
+            <td>${esc(d.producto ?? '')}</td>
+            <td>${esc(d.descripcion ?? '')}</td>
+            <td class="right">${fmt(d.cantidad)}</td>
+            <td class="right">${fmt(d.precio_unitario)}</td>
+            <td>${esc(d.tipo_iva ?? '')}</td>
+            <td class="right">${fmt(d.subtotal)}</td>
+          `;
+          tb.appendChild(tr);
+        });
+        openModal();
+      }catch(e){
+        console.error(e);
+        showToast('Error cargando detalle','is-error');
+      }
+    }
+
+    function descargarPDF(id){
+      if (!RUTAS.pdf){ showToast('PDF no implementado','is-error'); return; }
+      window.open(`${RUTAS.pdf}?id_nota=${id}`, '_blank');
+    }
+
+    // Si implementás anular:
+    /*
+    async function anular(id){
+      if(!confirm(`¿Anular la Nota #${id}?`)) return;
+      const motivo = prompt('Motivo de anulación (opcional):','');
+      const fd = new FormData();
+      fd.append('id_nota', id);
+      if(motivo) fd.append('motivo', motivo);
+      try{
+        const r = await fetch(RUTAS.anular, {method:'POST', body: fd});
+        const j = await r.json();
+        if(!j.ok) throw new Error(j.error||'Error');
+        showToast('Nota anulada','ok');
+        buscar(false);
+      }catch(e){
+        console.error(e);
+        showToast('No se pudo anular','is-error');
+      }
+    }
+    */
+
+    function openModal(){ const m=$('#modal'); m.style.display='flex'; m.setAttribute('aria-hidden','false'); }
+    function closeModal(){ const m=$('#modal'); m.style.display='none'; m.setAttribute('aria-hidden','true'); }
+
+    // Toast helpers (usa tu CSS existente)
+    function showToast(msg, type='ok', ms=3000){
+      const t = $('#toast');
+      const cssType = (type==='error'||type==='is-error') ? 'is-error' : (type||'ok');
+      t.textContent = msg;
+      t.className = 'toast ' + cssType;
+      void t.offsetWidth;
+      t.classList.add('show');
+      clearTimeout(showToast._to);
+      showToast._to = setTimeout(()=> hideToast(), ms);
+    }
+    function hideToast(){ $('#toast').classList.remove('show'); }
+
+    function fmt(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+  </script>
+  <script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/menu/navbar.js"></script>
+</body>
+</html>

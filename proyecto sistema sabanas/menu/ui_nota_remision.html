@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Registrar Nota de Remisión (Ingreso)</title>
+  <link rel="stylesheet" href="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/menu/styles.css">
+  <style>
+    body{font-family:Arial, sans-serif; background:#f7f7f7; margin:20px}
+    .wrap{max-width:1100px; margin:auto}
+    h1{margin:0 0 12px}
+    .row{display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap}
+    select,input,button,textarea{padding:8px}
+    table{width:100%; border-collapse:collapse; margin-top:8px}
+    th,td{border:1px solid #eaeaea; padding:8px; text-align:left}
+    th{background:#fafafa}
+    .right{text-align:right}
+    .btn{padding:8px 12px; border:1px solid #ddd; background:#fff; cursor:pointer; border-radius:6px}
+    .btn:hover{background:#f3f3f3}
+    .badge{display:inline-block;padding:2px 6px;border:1px solid #ddd;border-radius:12px;font-size:12px;background:#fff}
+    label{font-size:12px; color:#444}
+  </style>
+</head>
+<body>
+  <div id="navbar-container"></div>
+  <div class="wrap">
+    <h1>Registrar Nota de Remisión (Ingreso)</h1>
+
+    <!-- Fila 1: Proveedor / filtros / buscar -->
+    <div class="row">
+      <label>Proveedor:</label>
+      <select id="proveedor"></select>
+
+      <label>Desde:</label>
+      <input type="date" id="f_desde">
+      <label>Hasta:</label>
+      <input type="date" id="f_hasta">
+      <input type="text" id="buscar_doc" placeholder="Buscar Nº documento (opcional)" style="width:220px">
+      <button class="btn" id="btnBuscarFacturas">Buscar facturas</button>
+      <span class="badge" id="infoPend"></span>
+    </div>
+
+    <!-- Fila 2: Factura / sucursal -->
+    <div class="row">
+      <label>Factura:</label>
+      <select id="factura_selector" disabled>
+        <option value="">-- Seleccionar factura --</option>
+      </select>
+
+      <label>Sucursal destino:</label>
+      <select id="id_sucursal">
+        <option value="">-- Seleccionar sucursal --</option>
+      </select>
+
+      <label>Fecha remisión:</label>
+      <input type="date" id="fecha_remision">
+    </div>
+
+    <!-- Fila 3: Datos logísticos -->
+    <div class="row">
+      <label>Nº Remisión (Proveedor):</label>
+      <input type="text" id="nro_remision_prov" placeholder="(opcional)">
+      <label>Transportista:</label>
+      <input type="text" id="transportista" placeholder="(opcional)">
+      <label>Chofer:</label>
+      <input type="text" id="chofer" placeholder="(opcional)">
+      <label>Vehículo:</label>
+      <input type="text" id="vehiculo" placeholder="(opcional)">
+    </div>
+
+    <!-- Fila 4: Observación -->
+    <div class="row">
+      <label>Observación:</label>
+      <input type="text" id="observacion" style="min-width:420px">
+    </div>
+
+    <!-- Grilla -->
+    <table id="tabla">
+      <thead>
+        <tr>
+          <th>ID Fact Det</th>
+          <th>ID Producto</th>
+          <th>Producto</th>
+          <th class="right">Facturado</th>
+          <th class="right">Ya remitido</th>
+          <th class="right">Pendiente</th>
+          <th class="right">Cant a remitir</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+      <tfoot>
+        <tr>
+          <th colspan="6" class="right">Total a remitir</th>
+          <th class="right" id="total">0</th>
+        </tr>
+      </tfoot>
+    </table>
+
+    <div class="row">
+      <button class="btn" id="btnGuardar">Guardar Nota de Remisión</button>
+    </div>
+  </div>
+
+  <!-- Contenedor del toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const RUTAS = {
+      proveedores: 'proveedores_options.php',
+      sucursales:  '../menu/referenciales_compra/sucursales/sucursales_options.php?estado=ACTIVO',
+      preparar:    'nota_remision_preparar.php',
+      guardar:     'nota_remision_guardar.php'
+    };
+
+    const $ = s => document.querySelector(s);
+    let lineas = []; // {id_factura_det,id_producto,producto,facturado,ya_remitido,pendiente,cantidad}
+    let idFactura = null;
+
+    document.addEventListener('DOMContentLoaded', ()=>{
+      setHoy();
+      cargarProveedores();
+      cargarSucursales();
+
+      // UX: fechas por defecto últimos 30 días
+      const hoy = new Date();
+      const d30 = new Date(hoy); d30.setDate(hoy.getDate()-30);
+      $('#f_desde').value = d30.toISOString().slice(0,10);
+      $('#f_hasta').value = hoy.toISOString().slice(0,10);
+
+      $('#btnBuscarFacturas').addEventListener('click', listarFacturasDelProveedor);
+      $('#proveedor').addEventListener('change', ()=>{ limpiarFacturaYGrilla(); });
+      $('#factura_selector').addEventListener('change', onSelectFactura);
+      $('#btnGuardar').addEventListener('click', guardar);
+
+      // Cerrar toast al click y con ESC
+      $('#toast').addEventListener('click', ()=> hideToast());
+      document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideToast(); });
+    });
+
+    // ====== TOAST ======
+    function showToast(msg, type='ok', ms=3500){
+      const t = $('#toast');
+      // mapear 'error' -> 'is-error' por tu CSS
+      const cssType = (type==='error' || type==='is-error') ? 'is-error' : (type || 'ok');
+      t.textContent = msg;
+      t.className = 'toast ' + cssType;
+      // forza reflow para reiniciar animación si ya estaba visible
+      // eslint-disable-next-line no-unused-expressions
+      void t.offsetWidth;
+      t.classList.add('show');
+      clearTimeout(showToast._to);
+      showToast._to = setTimeout(()=> hideToast(), ms);
+    }
+    function hideToast(){
+      const t = $('#toast');
+      t.classList.remove('show');
+    }
+
+    function setHoy(){
+      const hoy = new Date().toISOString().slice(0,10);
+      $('#fecha_remision').value = hoy;
+    }
+
+    async function cargarProveedores(){
+      try{
+        const r = await fetch(RUTAS.proveedores);
+        const data = await r.json();
+        const sel = $('#proveedor');
+        sel.innerHTML = '<option value="">Seleccione proveedor</option>';
+        (data || []).forEach(p=>{
+          const o = document.createElement('option');
+          o.value = p.id_proveedor;
+          o.textContent = p.nombre;
+          sel.appendChild(o);
+        });
+      }catch(e){
+        console.error(e);
+        showToast('Error cargando proveedores','is-error');
+      }
+    }
+
+    async function cargarSucursales(){
+      try{
+        const r = await fetch(RUTAS.sucursales);
+        const data = await r.json();
+        const sel = $('#id_sucursal');
+        sel.innerHTML = '<option value="">-- Seleccionar sucursal --</option>';
+        (data || []).forEach(s=>{
+          const o = document.createElement('option');
+          o.value = s.id_sucursal;
+          o.textContent = s.nombre;
+          sel.appendChild(o);
+        });
+      }catch(e){
+        console.error(e);
+        showToast('No se pudieron cargar sucursales','is-error');
+      }
+    }
+
+    function limpiarFacturaYGrilla(){
+      idFactura = null;
+      lineas = [];
+      renderTabla();
+      $('#infoPend').textContent = '';
+      const selFac = $('#factura_selector');
+      selFac.innerHTML = '<option value="">-- Seleccionar factura --</option>';
+      selFac.disabled = true;
+    }
+
+    async function listarFacturasDelProveedor(){
+      const prov = $('#proveedor').value;
+      if(!prov){ showToast('Seleccione proveedor','is-error'); return; }
+
+      const fd = $('#f_desde').value;
+      const fh = $('#f_hasta').value;
+      if (fd && fh && fd > fh) { showToast('El rango de fechas es inválido','is-error'); return; }
+
+      const q  = $('#buscar_doc').value.trim();
+
+      const params = new URLSearchParams({ id_proveedor: prov });
+      if (fd) params.append('fecha_desde', fd);
+      if (fh) params.append('fecha_hasta', fh);
+      if (q)  params.append('q', q);
+
+      $('#infoPend').textContent = 'Buscando...';
+
+      try{
+        const r = await fetch(`${RUTAS.preparar}?` + params.toString());
+        const j = await r.json();
+        if(!j.ok) throw new Error(j.error||'Error');
+
+        const selFac = $('#factura_selector');
+        selFac.innerHTML = '<option value="">-- Seleccionar factura --</option>';
+
+        if (j.mode === 'list') {
+          (j.facturas || []).forEach(f=>{
+            const opt = document.createElement('option');
+            const etiqueta = [
+              `#${f.id_factura}`,
+              f.numero_documento || null,
+              f.fecha_emision || null,
+              `Pend. ${fmt(f.pendiente_total)}`,
+              `Ítems ${f.cant_items}`
+            ].filter(Boolean).join(' · ');
+            opt.value = f.id_factura;
+            opt.textContent = etiqueta;
+            selFac.appendChild(opt);
+          });
+          selFac.disabled = !(j.facturas && j.facturas.length);
+          const cant = (j.facturas||[]).length;
+          $('#infoPend').textContent = `${cant} factura(s) encontradas`;
+          if(cant===0) showToast('No se encontraron facturas con pendiente en ese rango','is-error');
+          else showToast('Facturas cargadas','ok');
+        } else {
+          selFac.disabled = true;
+          $('#infoPend').textContent = 'Sin resultados';
+          showToast('Sin resultados','is-error');
+        }
+      }catch(e){
+        console.error(e);
+        showToast('Error listando facturas','is-error');
+        $('#infoPend').textContent = '';
+      }
+    }
+
+    async function onSelectFactura(){
+      const prov = $('#proveedor').value;
+      const id = $('#factura_selector').value;
+      idFactura = null;
+      lineas = [];
+      renderTabla();
+      if(!prov || !id) return;
+
+      $('#infoPend').textContent = 'Cargando detalle...';
+
+      try{
+        const r = await fetch(`${RUTAS.preparar}?id_proveedor=${encodeURIComponent(prov)}&id_factura=${encodeURIComponent(id)}`);
+        const j = await r.json();
+        if(!j.ok) throw new Error(j.error||'Error');
+
+        if (j.mode === 'detail') {
+          idFactura = +id;
+          lineas = (j.data || []).map(x => ({
+            id_factura_det:+x.id_factura_det,
+            id_producto:+x.id_producto,
+            producto:x.producto,
+            facturado:+x.facturado,
+            ya_remitido:+x.ya_remitido,
+            pendiente:+x.pendiente,
+            cantidad:+x.pendiente
+          }));
+          renderTabla();
+          const tot = lineas.reduce((a,b)=> a + (+b.cantidad||0), 0);
+          $('#infoPend').textContent = `Factura #${idFactura}: ${lineas.length} ítems — Total a remitir ${fmt(tot)}`;
+          showToast(`Factura #${idFactura} cargada`,'ok');
+        } else {
+          $('#infoPend').textContent = 'Sin detalle disponible';
+          showToast('Sin detalle disponible','is-error');
+        }
+      }catch(e){
+        console.error(e);
+        showToast('Error cargando detalle','is-error');
+        $('#infoPend').textContent = '';
+      }
+    }
+
+    // ===== Grilla =====
+    function renderTabla(){
+      const tb = $('#tabla tbody');
+      tb.innerHTML = '';
+      lineas.forEach((l,idx)=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${l.id_factura_det}</td>
+          <td>${l.id_producto}</td>
+          <td>${esc(l.producto)}</td>
+          <td class="right">${fmt(l.facturado)}</td>
+          <td class="right">${fmt(l.ya_remitido)}</td>
+          <td class="right">${fmt(l.pendiente)}</td>
+          <td class="right">
+            <input type="number" min="0" max="${l.pendiente}" value="${l.cantidad}" step="0.01" style="width:120px"
+                   oninput="onCant(${idx}, this.value)">
+          </td>
+        `;
+        tb.appendChild(tr);
+      });
+      recalcularTotal();
+    }
+
+    function onCant(i, v){
+      let n = +v||0;
+      if (n < 0) n = 0;
+      if (n > lineas[i].pendiente) n = lineas[i].pendiente;
+      lineas[i].cantidad = n;
+      recalcularTotal();
+    }
+
+    function recalcularTotal(){
+      const t = lineas.reduce((acc,l)=> acc + (+l.cantidad||0), 0);
+      $('#total').textContent = fmt(t);
+    }
+
+    function fmt(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function esc(s){ return String(s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+    // ===== Guardar =====
+    async function guardar(){
+      const id_proveedor = $('#proveedor').value;
+      const id_sucursal  = $('#id_sucursal').value;
+      const fecha        = $('#fecha_remision').value;
+      const nro_rem      = $('#nro_remision_prov').value.trim();
+      const transportista= $('#transportista').value.trim();
+      const chofer       = $('#chofer').value.trim();
+      const vehiculo     = $('#vehiculo').value.trim();
+      const observacion  = $('#observacion').value.trim();
+
+      if(!id_proveedor){ showToast('Proveedor requerido','is-error'); return; }
+      if(!idFactura){ showToast('Seleccioná una factura','is-error'); return; }
+      if(!fecha){ showToast('Fecha requerida','is-error'); return; }
+      if(lineas.length===0){ showToast('No hay líneas','is-error'); return; }
+
+      for(const l of lineas){
+        const q = +l.cantidad||0;
+        if(q < 0 || q > (+l.pendiente||0)){
+          showToast(`Cantidad inválida en línea ${l.id_factura_det} (pendiente ${fmt(l.pendiente)})`,'is-error');
+          return;
+        }
+      }
+
+      const fd = new FormData();
+      fd.append('id_proveedor', id_proveedor);
+      fd.append('id_factura',   idFactura);
+      if (id_sucursal) fd.append('id_sucursal', id_sucursal);
+      fd.append('fecha_remision', fecha);
+      if (nro_rem)      fd.append('nro_remision_prov', nro_rem);
+      if (transportista)fd.append('transportista', transportista);
+      if (chofer)       fd.append('chofer', chofer);
+      if (vehiculo)     fd.append('vehiculo', vehiculo);
+      if (observacion)  fd.append('observacion', observacion);
+
+      lineas.forEach(l=>{
+        const q = +l.cantidad||0;
+        if (q > 0) {
+          fd.append('id_factura_det[]', l.id_factura_det);
+          fd.append('cantidad[]', q);
+        }
+      });
+
+      try{
+        const r = await fetch(RUTAS.guardar,{method:'POST', body: fd});
+        const j = await r.json();
+        if(!r.ok || !j.ok){
+          showToast('Error: ' + (j.error||'Desconocido'),'is-error');
+          return;
+        }
+        showToast(`✅ Nota de Remisión #${j.id_nota_remision} registrada — Total ${fmt(j.total_remitido)}`,'ok');
+
+        // Reset básico
+        lineas = [];
+        renderTabla();
+        idFactura = null;
+        $('#factura_selector').value = '';
+        $('#proveedor').value = '';
+        $('#id_sucursal').value = '';
+        setHoy();
+        $('#nro_remision_prov').value = '';
+        $('#transportista').value = '';
+        $('#chofer').value = '';
+        $('#vehiculo').value = '';
+        $('#observacion').value = '';
+        $('#buscar_doc').value = '';
+        const hoy = new Date(); const d30 = new Date(hoy); d30.setDate(hoy.getDate()-30);
+        $('#f_desde').value = d30.toISOString().slice(0,10);
+        $('#f_hasta').value = hoy.toISOString().slice(0,10);
+        $('#infoPend').textContent = '';
+        const selFac = $('#factura_selector');
+        selFac.innerHTML = '<option value="">-- Seleccionar factura --</option>';
+        selFac.disabled = true;
+
+      }catch(e){
+        console.error(e);
+        showToast('Error al guardar la nota de remisión','is-error');
+      }
+    }
+
+    // Exponer handler
+    window.onCant = onCant;
+  </script>
+
+  <script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/menu/navbar.js"></script>
+</body>
+</html>
