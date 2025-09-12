@@ -9,6 +9,7 @@ session_start();
 <meta charset="utf-8" />
 <title>Facturación</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
 <style>
   :root { --gap:12px; --pad:8px; }
   body{font-family:system-ui,Arial,sans-serif;margin:20px;color:#222}
@@ -40,6 +41,7 @@ session_start();
 </style>
 </head>
 <body>
+  <div id="navbar-container"></div>
 <h1>Facturación</h1>
 
 <!-- CLIENTE -->
@@ -108,24 +110,6 @@ session_start();
       </select>
     </div>
 
-    <!-- Cobro contado -->
-    <div id="boxCobro" style="display:flex;gap:12px">
-      <div>
-        <label>Medio de pago</label><br/>
-        <select id="medio">
-          <option>Efectivo</option>
-          <option>Transferencia</option>
-          <option>Tarjeta</option>
-          <option>Cheque</option>
-          <option>Billetera</option>
-        </select>
-      </div>
-      <div>
-        <label>Referencia</label><br/>
-        <input id="ref" type="text" placeholder="N° transf / cupón / etc."/>
-      </div>
-    </div>
-
     <div style="flex:1">
       <label>Observación</label><br/>
       <input id="obs" type="text" style="width:100%" placeholder="(opcional)"/>
@@ -149,7 +133,7 @@ session_start();
     <div>
       <label>Primer vencimiento</label><br/>
       <input id="primerVto" type="date"/>
-      <div class="mini muted">Por defecto: +30 días</div>
+      <div class="mini muted">Si NO calculás plan, se toma como único vencimiento.</div>
     </div>
     <div>
       <label>Anticipo (seña)</label><br/>
@@ -161,6 +145,7 @@ session_start();
     </div>
     <div style="align-self:end">
       <button id="btnCalcularPlan" class="btn small">Calcular plan</button>
+      <button id="btnLimpiarPlan" class="btn small" type="button">Usar 1 vencimiento</button>
     </div>
   </div>
 
@@ -227,7 +212,7 @@ let clienteSel = null;
 let pedidoSel  = null;
 let totales = {grav10:0,iva10:0,grav5:0,iva5:0,exentas:0,total:0};
 let timbrado = null;
-let planCuotas = []; // ← para enviar al backend en crédito
+let planCuotas = []; // para enviar al backend en crédito
 
 // ===== Helpers =====
 function daysDiff(a, b){ const MS=24*60*60*1000; return Math.floor((b.getTime()-a.getTime())/MS); }
@@ -271,7 +256,6 @@ $('btnRefrescarTimbrado').addEventListener('click', cargarTimbrado);
 // ===== Condición =====
 $('condicion').addEventListener('change', ()=>{
   const c = $('condicion').value;
-  $('boxCobro').style.display = (c==='Contado') ? 'flex' : 'none';
   $('boxCredito').style.display = (c==='Credito') ? 'flex' : 'none';
   $('planWrap').style.display = (c==='Credito' && planCuotas.length) ? 'block' : 'none';
 });
@@ -332,10 +316,8 @@ $('btnEstirar').addEventListener('click', async ()=>{
     const j=await r.json(); if(!j.success) throw new Error(j.error||'No se pudo estirar el pedido');
     if(!clienteSel){
       clienteSel={ id_cliente:j.pedido.id_cliente, nombre_completo:(j.pedido.nombre||'')+' '+(j.pedido.apellido||''), ruc_ci:j.pedido.ruc_ci };
-      $('cliente').value=clienteSel.nombre_completo; $('ruc').value=clienteSel.ruc_ci||'';
-    }
-    pintarGrilla(j.items||[]);
-    $('status').textContent='Pedido '+j.pedido.id_pedido+' listo para facturar';
+      $('cliente').value=clienteSel.nombre_completo; $('ruc').value=clienteSel.ruc_ci||''; }
+    pintarGrilla(j.items||[]); $('status').textContent='Pedido '+j.pedido.id_pedido+' listo para facturar';
     // Resetear plan si cambia total
     planCuotas=[]; $('planWrap').style.display='none';
   }catch(e){ alert(e.message); }
@@ -411,7 +393,13 @@ $('btnCalcularPlan').addEventListener('click', ()=>{
   }
   renderPlan(planCuotas, principal, anticipo, i, n, frec, primerVto);
 });
+$('btnLimpiarPlan').addEventListener('click', ()=>{
+  planCuotas=[]; $('plan').querySelector('tbody').innerHTML='';
+  $('sumCap').textContent='0'; $('sumInt').textContent='0'; $('sumTot').textContent='0';
+  $('planMeta').textContent=''; $('planWrap').style.display='none';
+});
 
+// Pintado del plan
 function renderPlan(plan, principal, anticipo, i, n, frec, primerVto){
   const tb=$('plan').querySelector('tbody'); tb.innerHTML='';
   let sumCap=0,sumInt=0,sumTot=0,saldo=principal;
@@ -454,17 +442,16 @@ $('btnEmitir').addEventListener('click', async ()=>{
     observacion: $('obs').value||''
   };
 
-  if (condicion==='Contado'){
-    payload.medio_pago = $('medio').value;
-    payload.referencia_pago = $('ref').value||null;
-  } else {
-    // Crédito exige plan de cuotas
-    if (!planCuotas.length){
-      alert('Calculá el plan de cuotas antes de emitir.');
-      return;
+  if (condicion==='Credito'){
+    if (planCuotas.length){
+      payload.plan_cuotas = planCuotas; // múltiple
+    } else {
+      const vto = $('primerVto').value;
+      if(!vto){ alert('Ingresá el primer vencimiento o calculá el plan.'); return; }
+      payload.fecha_vencimiento = vto; // 1 sola cuota
     }
-    payload.plan_cuotas = planCuotas; // ← va al backend
   }
+  // Contado: no enviamos medios de pago (se cobrará en UI de Cobros)
 
   $('btnEmitir').disabled=true; $('status').textContent='Emitiendo factura...';
   try{
@@ -487,5 +474,6 @@ window.addEventListener('DOMContentLoaded', ()=>{
   cargarTimbrado();
 });
 </script>
+<script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
 </html>

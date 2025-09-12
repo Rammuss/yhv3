@@ -88,6 +88,7 @@ $res = pg_query_params($conn, $sql, $params);
 <meta charset="utf-8">
 <title>Listado de pedidos</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
 <style>
   :root{--bg:#f6f7fb;--surface:#fff;--text:#1f2937;--muted:#6b7280;--primary:#2563eb;--danger:#ef4444;--radius:14px;--shadow:0 10px 24px rgba(0,0,0,.08);}
   body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto}
@@ -115,6 +116,7 @@ $res = pg_query_params($conn, $sql, $params);
 </style>
 </head>
 <body>
+  <div id="navbar-container"></div>
 <div class="wrap">
 
   <div class="card">
@@ -253,5 +255,6 @@ async function anular(id){
   }
 }
 </script>
+<script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
 </html>

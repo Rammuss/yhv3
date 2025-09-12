@@ -11,6 +11,7 @@ if (empty($_SESSION['nombre_usuario'])) {
 <meta charset="utf-8">
 <title>Nuevo Pedido</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
 <style>
   :root{
     --bg:#f6f7fb; --surface:#fff; --text:#1f2937; --muted:#6b7280;
@@ -53,6 +54,7 @@ if (empty($_SESSION['nombre_usuario'])) {
 </style>
 </head>
 <body>
+  <div id="navbar-container"></div>
 <div class="wrap">
   <div class="card">
     <h1>Nuevo Pedido</h1>
@@ -394,5 +396,6 @@ formPedido.addEventListener('submit', async (e)=>{
 // Render inicial
 render();
 </script>
+<script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
 </html>

@@ -1,5 +1,8 @@
 <?php
-// facturar_pedido.php
+// facturar_pedido.php — versión sin generación de cobros (Contado/Crédito)
+// Emite la factura, mueve stock, consume reservas, registra libro_ventas,
+// y (solo si es Crédito) crea CxC/cuotas. NO crea recibos ni movimientos de caja/banco.
+
 session_start();
 require_once __DIR__ . '/../../conexion/configv2.php';
 header('Content-Type: application/json; charset=utf-8');
@@ -13,57 +16,47 @@ try {
     echo json_encode(['success'=>false,'error'=>'Método no permitido']); exit;
   }
 
-  // .... arriba quedan los requires/session/headers y helpers
+  $in = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 
-$in = json_decode(file_get_contents('php://input'), true) ?? $_POST;
+  $id_pedido  = isset($in['id_pedido']) ? (int)$in['id_pedido'] : 0;
+  $condicion  = isset($in['condicion_venta']) ? trim($in['condicion_venta']) : '';
+  // (Eliminado) $medioPago / $refPago — NO se usan aquí
+  $vto        = isset($in['fecha_vencimiento']) ? trim($in['fecha_vencimiento']) : null;
+  $obs        = isset($in['observacion']) ? trim($in['observacion']) : null;
+  $fecha_emision = (isset($in['fecha_emision']) && is_iso_date($in['fecha_emision']))
+                   ? $in['fecha_emision'] : date('Y-m-d');
 
-$id_pedido  = isset($in['id_pedido']) ? (int)$in['id_pedido'] : 0;
-$condicion  = isset($in['condicion_venta']) ? trim($in['condicion_venta']) : '';
-$medioPago  = isset($in['medio_pago']) ? trim($in['medio_pago']) : null;
-$refPago    = isset($in['referencia_pago']) ? trim($in['referencia_pago']) : null;
-$vto        = isset($in['fecha_vencimiento']) ? trim($in['fecha_vencimiento']) : null;
-$obs        = isset($in['observacion']) ? trim($in['observacion']) : null;
-$fecha_emision = (isset($in['fecha_emision']) && is_iso_date($in['fecha_emision']))
-                 ? $in['fecha_emision'] : date('Y-m-d');
+  // Plan de cuotas opcional para Crédito
+  $plan = (isset($in['plan_cuotas']) && is_array($in['plan_cuotas'])) ? $in['plan_cuotas'] : [];
 
-// NUEVO: leer plan de cuotas (si viene desde la UI)
-$plan = (isset($in['plan_cuotas']) && is_array($in['plan_cuotas'])) ? $in['plan_cuotas'] : [];
+  if ($id_pedido <= 0) { throw new Exception('id_pedido inválido'); }
+  if (!in_array($condicion, ['Contado','Credito'], true)) { throw new Exception('condicion_venta inválida'); }
 
-if ($id_pedido <= 0) { throw new Exception('id_pedido inválido'); }
-if (!in_array($condicion, ['Contado','Credito'], true)) { throw new Exception('condicion_venta inválida'); }
-
-if ($condicion === 'Contado') {
-  if (empty($medioPago)) { throw new Exception('medio_pago es requerido para Contado'); }
-} else {
-  // CREDITO:
-  if (count($plan) > 0) {
-    // Validación mínima del plan (opcional pero recomendado)
-    foreach ($plan as $i => $c) {
-      if (empty($c['vencimiento']) || !is_iso_date($c['vencimiento'])) {
-        throw new Exception("Plan de cuotas: vencimiento inválido en cuota ".($i+1));
+  if ($condicion === 'Credito') {
+    if (count($plan) > 0) {
+      foreach ($plan as $i => $c) {
+        if (empty($c['vencimiento']) || !is_iso_date($c['vencimiento'])) {
+          throw new Exception("Plan de cuotas: vencimiento inválido en cuota ".($i+1));
+        }
+        if (!isset($c['nro']) || !isset($c['total'])) {
+          throw new Exception("Plan de cuotas: datos incompletos (nro/total) en cuota ".($i+1));
+        }
+        if ((float)$c['total'] <= 0) {
+          throw new Exception("Plan de cuotas: total de cuota inválido en cuota ".($i+1));
+        }
       }
-      if (!isset($c['nro']) || !isset($c['total'])) {
-        throw new Exception("Plan de cuotas: datos incompletos (nro/total) en cuota ".($i+1));
+      // si hay plan, no exigimos $vto
+      $vto = null;
+    } else {
+      // modo simple: 1 vencimiento
+      if (empty($vto) || !is_iso_date($vto)) {
+        throw new Exception('fecha_vencimiento requerida (YYYY-MM-DD) para Crédito');
       }
-      if ((float)$c['total'] <= 0) {
-        throw new Exception("Plan de cuotas: total de cuota inválido en cuota ".($i+1));
-      }
+      if ($vto < $fecha_emision) { throw new Exception('La fecha de vencimiento no puede ser anterior a la emisión'); }
     }
-    // Si hay plan, NO exigimos $vto
-    $vto = null;
-  } else {
-    // Modo simple: exigir fecha_vencimiento única
-    if (empty($vto) || !is_iso_date($vto)) {
-      throw new Exception('fecha_vencimiento requerida (YYYY-MM-DD) para Crédito');
-    }
-    if ($vto < $fecha_emision) { throw new Exception('La fecha de vencimiento no puede ser anterior a la emisión'); }
   }
-}
 
-// ... y el resto del archivo queda como lo tenías
-
-
-  // TX
+  // ===== TX =====
   pg_query($conn, 'BEGIN');
 
   // 1) Pedido + Cliente (lock)
@@ -119,7 +112,7 @@ if ($condicion === 'Contado') {
   $total_descuento  = 0.0;
   $total_neto       = $total;
 
-  // 3) Timbrado vigente para la FECHA EMISIÓN
+  // 3) Timbrado (para la FECHA EMISIÓN) y reservar correlativo
   $sqlTim = "
     SELECT id_timbrado, numero_timbrado, establecimiento, punto_expedicion, nro_actual, nro_hasta,
            fecha_inicio, fecha_fin
@@ -144,7 +137,7 @@ if ($condicion === 'Contado') {
   $num_tim  = $tim['numero_timbrado'];
   $numero_doc = $establec . '-' . $punto . '-' . lpad7($nro_actual);
 
-  // 4) Validar reservas activas suficientes (6A)
+  // 4) Validar reservas activas suficientes
   $sqlCheckReserva = "
     WITH req AS (
       SELECT d.id_producto, SUM(d.cantidad)::numeric(14,2) AS qty_requerida
@@ -237,7 +230,7 @@ if ($condicion === 'Contado') {
   $okStock = pg_query_params($conn, $sqlStock, [$fecha_emision.' 00:00:00', $numero_doc, $id_pedido]);
   if ($okStock === false) { throw new Exception('No se pudo registrar movimiento de stock'); }
 
-  // 8) Consumir reservas del pedido (6B)
+  // 8) Consumir reservas del pedido
   $sqlConsumirReserva = "
     UPDATE public.reserva_stock
     SET estado = 'consumida',
@@ -248,108 +241,46 @@ if ($condicion === 'Contado') {
   $okCons = pg_query_params($conn, $sqlConsumirReserva, [$id_pedido]);
   if ($okCons === false) { throw new Exception('No se pudo consumir las reservas del pedido'); }
 
-  
-  // 9) Cobro contado o CxC (cuotas múltiples si viene plan_cuotas)
-if ($condicion === 'Contado') {
-  // ======== CONTADO (sin cambios) ========
-  $sqlRec = "
-    INSERT INTO public.recibo_cobranza_cab(fecha, id_cliente, total_recibo, estado, observacion)
-    VALUES ($1::date, $2, $3, 'Registrado', $4)
-    RETURNING id_recibo
-  ";
-  $rRec = pg_query_params($conn, $sqlRec, [$fecha_emision, $id_cliente, $total, 'Cobro contado Fact. '.$numero_doc]);
-  if (!$rRec) { throw new Exception('No se pudo crear el recibo'); }
-  $id_recibo = (int)pg_fetch_result($rRec, 0, 0);
-
-  $okAplic = pg_query_params(
-    $conn,
-    "INSERT INTO public.recibo_cobranza_det_aplic(id_recibo, id_factura, monto_aplicado) VALUES ($1,$2,$3)",
-    [$id_recibo, $id_factura, $total]
-  );
-  if (!$okAplic) { throw new Exception('No se pudo aplicar el recibo a la factura'); }
-
-  $okPago = pg_query_params(
-    $conn,
-    "INSERT INTO public.recibo_cobranza_det_pago(id_recibo, medio_pago, referencia, importe_bruto, comision, fecha_acredit)
-     VALUES ($1,$2,$3,$4,0,$5::date)",
-    [$id_recibo, $medioPago, $refPago, $total, $fecha_emision]
-  );
-  if (!$okPago) { throw new Exception('No se pudo registrar el medio de pago'); }
-
-  if (strcasecmp($medioPago, 'Efectivo') === 0) {
-    $okCaja = pg_query_params(
-      $conn,
-      "INSERT INTO public.movimiento_caja(fecha, tipo, concepto, importe, id_recibo, observacion)
-       VALUES ($1::date,'Ingreso',$2,$3,$4,$5)",
-      [$fecha_emision, 'Cobro contado Fact. '.$numero_doc, $total, $id_recibo, $medioPago]
-    );
-    if (!$okCaja) { throw new Exception('No se pudo registrar movimiento de caja'); }
-  } else {
-    $okBanco = pg_query_params(
-      $conn,
-      "INSERT INTO public.movimiento_banco(fecha, tipo, banco, referencia, importe, id_recibo, observacion)
-       VALUES ($1::date,'Ingreso',NULL,$2,$3,$4,$5)",
-      [$fecha_emision, $refPago ?: ('Cobro '.$medioPago), $total, $id_recibo, 'Cobro contado Fact. '.$numero_doc]
-    );
-    if (!$okBanco) { throw new Exception('No se pudo registrar movimiento bancario'); }
-  }
-
-} else {
-  // ======== CRÉDITO ========
-  $plan = $in['plan_cuotas'] ?? null;
-
-  if (is_array($plan) && count($plan) > 0) {
-    // Modo cuotas múltiples (recomendado)
-    // Validar que el total de cuotas = total factura (tolerancia por redondeo)
-    $sumPlan = 0.0;
-    foreach ($plan as $c) {
-      if (empty($c['vencimiento']) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $c['vencimiento'])) {
-        throw new Exception('Plan de cuotas: vencimiento inválido');
+  // 9) SIN COBROS AQUÍ
+  // Contado: no hace nada (quedará pendiente de cobro en UI de Cobros → Facturas)
+  // Crédito: crear CxC (simple o por cuotas) SIN pagos aquí.
+  if ($condicion === 'Credito') {
+    if (count($plan) > 0) {
+      // cuotas múltiples
+      $sumPlan = 0.0;
+      foreach ($plan as $c) { $sumPlan += (float)$c['total']; }
+      if (abs($sumPlan - $total) > 0.05) {
+        throw new Exception('El total del plan de cuotas no coincide con el total de la factura');
       }
-      if (!isset($c['nro']) || !isset($c['total'])) {
-        throw new Exception('Plan de cuotas: datos incompletos (nro/total)');
+      foreach ($plan as $c) {
+        $nro      = (int)$c['nro'];
+        $venc     = (string)$c['vencimiento'];
+        $cap      = isset($c['capital']) ? (float)$c['capital'] : 0.0;
+        $int      = isset($c['interes']) ? (float)$c['interes'] : 0.0;
+        $totalCu  = (float)$c['total'];
+
+        $okCxc = pg_query_params(
+          $conn,
+          "INSERT INTO public.cuenta_cobrar
+             (id_cliente, id_factura, fecha_origen,
+              monto_origen, saldo_actual, fecha_vencimiento,
+              estado, nro_cuota, capital, interes)
+           VALUES ($1,$2,$3::date,$4,$4,$5::date,'Abierta',$6,$7,$8)",
+          [$id_cliente, $id_factura, $fecha_emision, $totalCu, $venc, $nro, $cap, $int]
+        );
+        if (!$okCxc) { throw new Exception('No se pudo crear la cuota de CxC'); }
       }
-      $sumPlan += (float)$c['total'];
-    }
-    if (abs($sumPlan - $total) > 0.05) {
-      throw new Exception('El total del plan de cuotas no coincide con el total de la factura');
-    }
-
-    // Insertar 1 CxC por cuota
-    foreach ($plan as $c) {
-      $nro      = (int)$c['nro'];
-      $venc     = (string)$c['vencimiento'];
-      $cap      = isset($c['capital']) ? (float)$c['capital'] : 0.0;
-      $int      = isset($c['interes']) ? (float)$c['interes'] : 0.0;
-      $totalCu  = (float)$c['total'];
-
+    } else {
+      // 1 sola CxC
       $okCxc = pg_query_params(
         $conn,
-        "INSERT INTO public.cuenta_cobrar
-           (id_cliente, id_factura, fecha_origen,
-            monto_origen, saldo_actual, fecha_vencimiento,
-            estado, nro_cuota, capital, interes)
-         VALUES ($1,$2,$3::date,$4,$4,$5::date,'Abierta',$6,$7,$8)",
-        [$id_cliente, $id_factura, $fecha_emision, $totalCu, $venc, $nro, $cap, $int]
+        "INSERT INTO public.cuenta_cobrar(id_cliente, id_factura, fecha_origen, monto_origen, saldo_actual, fecha_vencimiento, estado)
+         VALUES ($1,$2,$3::date,$4,$4,$5::date,'Abierta')",
+        [$id_cliente, $id_factura, $fecha_emision, $total, $vto]
       );
-      if (!$okCxc) { throw new Exception('No se pudo crear la cuota de CxC'); }
+      if (!$okCxc) { throw new Exception('No se pudo crear la cuenta por cobrar'); }
     }
-
-  } else {
-    // Modo simple: 1 sola CxC con fecha_vencimiento
-    if (empty($vto) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $vto)) {
-      throw new Exception('fecha_vencimiento requerida (o enviar plan_cuotas) para Crédito');
-    }
-    $okCxc = pg_query_params(
-      $conn,
-      "INSERT INTO public.cuenta_cobrar(id_cliente, id_factura, fecha_origen, monto_origen, saldo_actual, fecha_vencimiento, estado)
-       VALUES ($1,$2,$3::date,$4,$4,$5::date,'Abierta')",
-      [$id_cliente, $id_factura, $fecha_emision, $total, $vto]
-    );
-    if (!$okCxc) { throw new Exception('No se pudo crear la cuenta por cobrar'); }
   }
-}
-
 
   // 10) Libro Ventas
   $okLibro = pg_query_params(

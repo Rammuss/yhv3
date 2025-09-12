@@ -342,7 +342,7 @@ function canAccess($roles, $current)
 
                 <!-- Ventas (admin o venta) -->
                 <?php if (canAccess(['admin', 'venta'], $rol)): ?>
-                    <a class="card" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v2/ui_apertura_cierre_caja.php">
+                    <a class="card" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/pedido/ui_pedido_nuevo.php">
                         <div class="icon"><i class="ico i-bag"></i></div>
                         <div class="module-title">Módulo de Ventas</div>
                         <div class="muted">Pedidos, facturas, caja</div>
