@@ -50,9 +50,10 @@ try {
       GROUP BY id_producto
     ),
     reservado AS (
-      SELECT id_producto, SUM(cantidad)::numeric AS reservado_activo
+      SELECT id_producto,
+             COALESCE(SUM(cantidad),0)::numeric AS reservado_activo
       FROM public.reserva_stock
-      WHERE LOWER(estado) = 'activa'
+      WHERE LOWER(estado) NOT IN ('consumida','cancelada')  -- <<< acá el ajuste
       GROUP BY id_producto
     )
     SELECT
