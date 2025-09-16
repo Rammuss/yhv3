@@ -42,6 +42,47 @@ $rd = pg_query_params($conn, $sqlD, [$id]);
 $estado = strtolower($F['estado'] ?? '');
 $esAnulada = ($estado === 'anulada');
 $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
+$esCredito = (strcasecmp($F['condicion_venta'] ?? '', 'Credito') === 0);
+
+// --- CONTADO: calcular saldo pendiente (por si no se pagó todavía)
+$pendienteContado = null;
+if (!$esCredito) {
+  $rp = pg_query_params($conn, "
+    WITH aplic AS (
+      SELECT SUM(monto_aplicado)::numeric(14,2) AS aplicado
+      FROM public.recibo_cobranza_det_aplic
+      WHERE id_factura = $1
+    )
+    SELECT (f.total_neto - COALESCE(ap.aplicado,0))::numeric(14,2) AS pendiente
+    FROM public.factura_venta_cab f
+    LEFT JOIN aplic ap ON TRUE
+    WHERE f.id_factura = $1
+  ", [$id]);
+  if ($rp) {
+    $pendienteContado = (float)pg_fetch_result($rp, 0, 0);
+  }
+}
+
+// --- CREDITO: traer plan de cuotas (o único vencimiento)
+$cuotas = [];
+if ($esCredito) {
+  $rCxc = pg_query_params($conn, "
+    SELECT
+      COALESCE(nro_cuota,1) AS nro_cuota,
+      fecha_vencimiento,
+      COALESCE(capital,0)::numeric(14,2)   AS capital,
+      COALESCE(interes,0)::numeric(14,2)   AS interes,
+      monto_origen::numeric(14,2)          AS total_cuota,
+      saldo_actual::numeric(14,2)          AS saldo,
+      estado
+    FROM public.cuenta_cobrar
+    WHERE id_factura = $1
+    ORDER BY COALESCE(nro_cuota,1)
+  ", [$id]);
+  if ($rCxc) {
+    while($x = pg_fetch_assoc($rCxc)){ $cuotas[] = $x; }
+  }
+}
 ?>
 <!doctype html>
 <html lang="es">
@@ -51,7 +92,7 @@ $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
 <style>
-  :root{ --text:#111827; --muted:#6b7280; --em:#2563eb; --danger:#b91c1c; }
+  :root{ --text:#111827; --muted:#6b7280; --em:#2563eb; --danger:#b91c1c; --ok:#166534; --warn:#9a6700; }
   body{ margin:0; color:var(--text); font: 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto; background:#fff; }
   .sheet{ width:210mm; min-height:297mm; margin:0 auto; padding:16mm 14mm; box-sizing:border-box; position:relative; }
   .head{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-bottom:2px solid #eee; padding-bottom:10px; }
@@ -71,6 +112,8 @@ $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
   .muted{ color:var(--muted); }
   .badge{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #e5e7eb; }
   .badge.anulada{ color:#b91c1c; border-color:#fecaca; background:#fef2f2; }
+  .badge.ok{ color:#166534; border-color:#bbf7d0; background:#f0fdf4; }
+  .badge.warn{ color:#9a6700; border-color:#fde68a; background:#fef9c3; }
 
   /* Marca de agua ANULADA */
   .watermark{
@@ -104,6 +147,14 @@ $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
   <?php else: ?>
     <span class="badge">Estado: <?= e($F['estado']) ?></span>
   <?php endif; ?>
+
+  <?php if(!$esCredito && !$esAnulada && $pendienteContado !== null): ?>
+    <?php if ($pendienteContado <= 0.01): ?>
+      <span class="badge ok">Contado: PAGADA</span>
+    <?php else: ?>
+      <span class="badge warn">Contado: Saldo pendiente Gs <?= n($pendienteContado,0) ?></span>
+    <?php endif; ?>
+  <?php endif; ?>
 </div>
 
 <div class="sheet">
@@ -114,7 +165,7 @@ $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
       <h2>Tu Empresa</h2>
       <small class="muted">
         RUC: 80000000-1 · Tel: (021) 000-000 · Asunción, PY<br>
-        <!-- Podés reemplazar/traer estos datos desde tu tabla de empresa -->
+        <!-- Traé estos datos desde tu tabla de empresa si la tenés -->
         Email: ventas@tuempresa.com
       </small>
     </div>
@@ -150,6 +201,20 @@ $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
       <div>Pedido: <?= $F['id_pedido'] ? '#'.e($F['id_pedido']) : '-' ?></div>
       <?php if (!empty($F['observacion'])): ?>
         <div class="muted">Obs.: <?= e($F['observacion']) ?></div>
+      <?php endif; ?>
+
+      <?php if($esCredito && !$esAnulada): ?>
+        <?php if (count($cuotas) <= 1): ?>
+          <?php $c = $cuotas[0] ?? null; ?>
+          <div style="margin-top:6px; padding:6px; border:1px dashed #e5e7eb; border-radius:8px;">
+            <strong>Vencimiento:</strong> <?= e($c['fecha_vencimiento'] ?? '-') ?><br>
+            <strong>Total a crédito:</strong> Gs <?= n($c['total_cuota'] ?? $F['total_neto'], 0) ?>
+          </div>
+        <?php else: ?>
+          <div style="margin-top:6px; padding:6px; border:1px dashed #e5e7eb; border-radius:8px;">
+            <strong>Plan de cuotas:</strong> <?= count($cuotas) ?> cuotas
+          </div>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   </div>
@@ -216,6 +281,49 @@ $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
     </tfoot>
   </table>
 
+  <?php if($esCredito && count($cuotas) > 1): ?>
+    <?php
+      $sumCap=0; $sumInt=0; $sumTot=0;
+      foreach($cuotas as $c){ $sumCap+=(float)$c['capital']; $sumInt+=(float)$c['interes']; $sumTot+=(float)$c['total_cuota']; }
+    ?>
+    <h3 style="margin:14px 0 6px 0">Plan de cuotas</h3>
+    <table style="width:100%; border-collapse:collapse" border="1" cellpadding="6">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Vencimiento</th>
+          <th style="text-align:right">Capital</th>
+          <th style="text-align:right">Interés</th>
+          <th style="text-align:right">Total cuota</th>
+          <th style="text-align:right">Saldo</th>
+          <th>Estado</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach($cuotas as $c): ?>
+          <tr>
+            <td><?= e($c['nro_cuota']) ?></td>
+            <td><?= e($c['fecha_vencimiento']) ?></td>
+            <td style="text-align:right"><?= n($c['capital'],0) ?></td>
+            <td style="text-align:right"><?= n($c['interes'],0) ?></td>
+            <td style="text-align:right"><?= n($c['total_cuota'],0) ?></td>
+            <td style="text-align:right"><?= n($c['saldo'],0) ?></td>
+            <td><?= e($c['estado']) ?></td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="2" style="text-align:right"><strong>Totales</strong></td>
+          <td style="text-align:right"><strong><?= n($sumCap,0) ?></strong></td>
+          <td style="text-align:right"><strong><?= n($sumInt,0) ?></strong></td>
+          <td style="text-align:right"><strong><?= n($sumTot,0) ?></strong></td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+    </table>
+  <?php endif; ?>
+
   <p class="muted" style="margin-top:8px">
     *Documento generado por sistema — Usuario: <?= e($_SESSION['nombre_usuario'] ?? '') ?>.
     <?php if ($esAnulada): ?> <strong style="color:var(--danger)">Factura ANULADA</strong> <?php endif; ?>
@@ -223,5 +331,16 @@ $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
 </div>
 
 <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js" class="no-print"></script>
+<script>
+// Auto-print si viene ?auto=1
+(function(){
+  try{
+    const p = new URLSearchParams(location.search);
+    if (p.get('auto') === '1') {
+      window.addEventListener('load', ()=> setTimeout(()=> window.print(), 300));
+    }
+  }catch(e){}
+})();
+</script>
 </body>
 </html>

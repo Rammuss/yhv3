@@ -38,6 +38,9 @@ session_start();
   .badge.danger{background:#ffebee;border:1px solid #ffcdd2;color:#b71c1c}
   .hint{font-size:12px;color:#666}
   .mini{font-size:12px}
+  .total-box{font-weight:700;padding:6px 10px;border:1px dashed #ddd;border-radius:6px}
+  .sum-ok{color:#256029}
+  .sum-bad{color:#b71c1c}
 </style>
 </head>
 <body>
@@ -198,6 +201,43 @@ session_start();
     </table>
   </div>
 
+  <!-- CONTADO: COBRAR AHORA -->
+  <div id="contadoWrap" style="display:none; border-top:1px dashed #e5e7eb; margin-top:8px; padding-top:8px">
+    <div class="row" style="align-items:center">
+      <label><input type="checkbox" id="cobrarAhora" /> Cobrar ahora (Contado)</label>
+      <span class="muted mini">Si lo activás, se emitirá la factura y se cobrará en la misma operación.</span>
+    </div>
+
+    <div id="pagosWrap" style="display:none">
+      <div class="row" style="justify-content:space-between; align-items:center">
+        <strong>Medios de pago</strong>
+        <div>
+          <button type="button" class="btn small" id="btnAddPago">Agregar medio</button>
+          <button type="button" class="btn small" id="btnCompletarTotal">Completar total</button>
+        </div>
+      </div>
+      <table id="tablaPagos">
+        <thead>
+          <tr>
+            <th style="width:160px">Medio</th>
+            <th>Referencia</th>
+            <th style="width:140px" class="right">Importe</th>
+            <th style="width:60px"></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="2" class="right">Suma pagos</td>
+            <td class="right"><span id="sumaPagos" class="total-box">0</span></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+      <div class="hint">La suma de pagos debe ser igual al TOTAL para cobrar ahora.</div>
+    </div>
+  </div>
+
   <div class="row">
     <button id="btnEmitir" class="btn primary">Emitir Factura</button>
     <span id="status" class="muted" style="align-self:center"></span>
@@ -206,6 +246,20 @@ session_start();
 
 <script>
 const $ = (id)=>document.getElementById(id);
+
+/* ========= PRINT SEGURO (anti pop-up block) ========= */
+const PRINT_URL = 'factura_print.php'; // <-- CAMBIAR si el print está en otra ruta
+function abrirImpresionFactura(idFactura, auto=true){
+  const url = `${PRINT_URL}?id=${encodeURIComponent(idFactura)}${auto ? '&auto=1' : ''}`;
+  let w = window.open('', '_blank');
+  if (w && !w.closed) {
+    try { w.opener = null; w.location.replace(url); }
+    catch(e){ location.href = url; }
+  } else {
+    location.href = url;
+  }
+}
+/* ==================================================== */
 
 // ===== Estado =====
 let clienteSel = null;
@@ -223,6 +277,7 @@ function addDays(date, days){ const d=new Date(date); d.setDate(d.getDate()+days
 function addMonths(date, months){ const d=new Date(date); d.setMonth(d.getMonth()+months); return d; }
 function fmtISO(d){ const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${d.getFullYear()}-${m}-${day}`; }
 function toNum(v){ return Number(v||0); }
+function money(v,dec=2){ return Number(v||0).toFixed(dec); }
 
 // ===== Timbrado =====
 async function cargarTimbrado(){
@@ -254,10 +309,18 @@ async function cargarTimbrado(){
 $('btnRefrescarTimbrado').addEventListener('click', cargarTimbrado);
 
 // ===== Condición =====
-$('condicion').addEventListener('change', ()=>{
+$('condicion').addEventListener('change', onCondicionChange);
+function onCondicionChange(){
   const c = $('condicion').value;
-  $('boxCredito').style.display = (c==='Credito') ? 'flex' : 'none';
-  $('planWrap').style.display = (c==='Credito' && planCuotas.length) ? 'block' : 'none';
+  const isCredito = (c==='Credito');
+  $('boxCredito').style.display = isCredito ? 'flex' : 'none';
+  $('planWrap').style.display = (isCredito && planCuotas.length) ? 'block' : 'none';
+  $('contadoWrap').style.display = (!isCredito) ? 'block' : 'none';
+  $('pagosWrap').style.display   = (!isCredito && $('cobrarAhora').checked) ? 'block' : 'none';
+}
+$('cobrarAhora').addEventListener('change', ()=>{
+  const show = $('cobrarAhora').checked && $('condicion').value==='Contado';
+  $('pagosWrap').style.display = show ? 'block' : 'none';
 });
 
 // ===== Fecha =====
@@ -266,7 +329,10 @@ function validarFechaContraTimbrado(){
   const f=$('fecha').value; const warn=$('fechaWarn'); warn.textContent='';
   if (!timbrado || !f) return;
   const d=parseISO(f), ini=parseISO(timbrado.fecha_inicio), fin=parseISO(timbrado.fecha_fin);
-  if (d<ini || d>fin){ warn.textContent=`⚠ La fecha está fuera de la vigencia del timbrado (${timbrado.fecha_inicio} a ${timbrado.fecha_fin}).`; }
+  if (d<ini || d>fin){
+    // FIX: referencia correcta a timbrado.fecha_fin
+    warn.textContent=`⚠ La fecha está fuera de la vigencia del timbrado (${timbrado.fecha_inicio} a ${timbrado.fecha_fin}).`;
+  }
 }
 $('fecha').addEventListener('change', validarFechaContraTimbrado);
 
@@ -320,6 +386,8 @@ $('btnEstirar').addEventListener('click', async ()=>{
     pintarGrilla(j.items||[]); $('status').textContent='Pedido '+j.pedido.id_pedido+' listo para facturar';
     // Resetear plan si cambia total
     planCuotas=[]; $('planWrap').style.display='none';
+    // Preparar pagos (reset)
+    resetPagosTabla();
   }catch(e){ alert(e.message); }
 });
 
@@ -349,9 +417,10 @@ function pintarGrilla(items){
   $('exentas').textContent=ex.toFixed(2);
   $('total').textContent=total.toFixed(2);
   totales={grav10:g10,iva10:i10,grav5:g5,iva5:i5,exentas:ex,total};
+  onCondicionChange();
 }
 
-// ===== Crédito: cálculo plan (método francés, cuota fija) =====
+// ===== Crédito: cálculo plan =====
 $('btnCalcularPlan').addEventListener('click', ()=>{
   const n = Math.max(1, parseInt(($('cuotas').value||'1'),10));
   const tasaMensual = Math.max(0, toNum($('tasa').value))/100.0;
@@ -368,7 +437,6 @@ $('btnCalcularPlan').addEventListener('click', ()=>{
 
   const frec = $('frecuencia').value;
 
-  // cuota fija
   const i = tasaMensual;
   const cuota = i>0 ? (principal * (i / (1 - Math.pow(1+i, -n)))) : (principal / n);
 
@@ -377,7 +445,6 @@ $('btnCalcularPlan').addEventListener('click', ()=>{
     const interes = i>0 ? (saldo * i) : 0;
     const capital = Math.max(0, cuota - interes);
     saldo = Math.max(0, saldo - capital);
-    // fecha vto k
     let vtoDate = parseISO(primerVto);
     if (frec==='mensual') vtoDate = addMonths(vtoDate, k-1);
     else if (frec==='quincenal') vtoDate = addDays(vtoDate, 15*(k-1));
@@ -399,7 +466,6 @@ $('btnLimpiarPlan').addEventListener('click', ()=>{
   $('planMeta').textContent=''; $('planWrap').style.display='none';
 });
 
-// Pintado del plan
 function renderPlan(plan, principal, anticipo, i, n, frec, primerVto){
   const tb=$('plan').querySelector('tbody'); tb.innerHTML='';
   let sumCap=0,sumInt=0,sumTot=0,saldo=principal;
@@ -422,56 +488,150 @@ function renderPlan(plan, principal, anticipo, i, n, frec, primerVto){
   $('planWrap').style.display='block';
 }
 
+// ===== Contado: medios de pago =====
+const medios = ['Efectivo','Tarjeta','Transferencia','Cheque'];
+$('btnAddPago').addEventListener('click', ()=> addPagoRow());
+$('btnCompletarTotal').addEventListener('click', completarTotal);
+
+function resetPagosTabla(){
+  const tb = $('tablaPagos').querySelector('tbody');
+  tb.innerHTML='';
+  addPagoRow('Efectivo', totales.total);
+  actualizarSumaPagos();
+}
+
+function addPagoRow(medioInit='', importeInit=0, refInit=''){
+  const tb = $('tablaPagos').querySelector('tbody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>
+      <select class="medio" style="width:100%">
+        ${medios.map(m=>`<option ${m===medioInit?'selected':''}>${m}</option>`).join('')}
+      </select>
+    </td>
+    <td><input class="ref" type="text" placeholder="Ref. / N° voucher / nota" style="width:100%"/></td>
+    <td class="right"><input class="imp" type="number" step="0.01" min="0" value="${Number(importeInit||0).toFixed(2)}" style="width:120px; text-align:right"/></td>
+    <td class="right"><button type="button" class="btn small btnDel">✕</button></td>
+  `;
+  tb.appendChild(tr);
+  tr.querySelector('.ref').value = refInit;
+  tr.querySelector('.imp').addEventListener('input', actualizarSumaPagos);
+  tr.querySelector('.btnDel').addEventListener('click', ()=>{ tr.remove(); actualizarSumaPagos(); });
+  actualizarSumaPagos();
+}
+
+function getPagos(){
+  const rows = Array.from($('tablaPagos').querySelectorAll('tbody tr'));
+  return rows.map(tr=>{
+    const medio = tr.querySelector('.medio').value;
+    const importe = Number(tr.querySelector('.imp').value || 0);
+    const referencia = tr.querySelector('.ref').value.trim();
+    return { medio, importe, referencia };
+  }).filter(p=>p.importe>0);
+}
+
+function actualizarSumaPagos(){
+  const suma = getPagos().reduce((acc,p)=>acc+p.importe, 0);
+  const el = $('sumaPagos');
+  el.textContent = money(suma);
+  const total = Number(totales.total||0);
+  const ok = Math.abs(suma-total) <= 0.01;
+  el.classList.toggle('sum-ok', ok);
+  el.classList.toggle('sum-bad', !ok);
+}
+
+function completarTotal(){
+  const total = Number(totales.total||0);
+  const pagos = getPagos();
+  if (!pagos.length){ addPagoRow('Efectivo', total); return; }
+  const ya = pagos.slice(1).reduce((acc,p)=>acc+p.importe, 0);
+  const restante = Math.max(0, total - ya);
+  const firstImp = $('tablaPagos').querySelector('tbody tr .imp');
+  firstImp.value = money(restante);
+  actualizarSumaPagos();
+}
+
 // ===== Emitir =====
 $('btnEmitir').addEventListener('click', async ()=>{
   if(!pedidoSel){ alert('Seleccioná un pedido y estiralo a la grilla'); return; }
   if(!timbrado){ alert('No hay timbrado vigente. No se puede emitir.'); return; }
   const fecha = $('fecha').value; if(!fecha){ alert('Ingresá la fecha de emisión'); return; }
 
-  // Aviso si fecha fuera de vigencia
   if (timbrado){
     const d=parseISO(fecha), ini=parseISO(timbrado.fecha_inicio), fin=parseISO(timbrado.fecha_fin);
     if (d<ini || d>fin){ if(!confirm('La fecha está fuera de la vigencia del timbrado. ¿Continuar igualmente?')) return; }
   }
 
   const condicion=$('condicion').value;
-  const payload={
-    id_pedido: pedidoSel,
-    condicion_venta: condicion,
-    fecha_emision: fecha,
-    observacion: $('obs').value||''
-  };
+  const cobrarAhora = $('cobrarAhora').checked && condicion==='Contado';
 
-  if (condicion==='Credito'){
-    if (planCuotas.length){
-      payload.plan_cuotas = planCuotas; // múltiple
-    } else {
-      const vto = $('primerVto').value;
-      if(!vto){ alert('Ingresá el primer vencimiento o calculá el plan.'); return; }
-      payload.fecha_vencimiento = vto; // 1 sola cuota
-    }
-  }
-  // Contado: no enviamos medios de pago (se cobrará en UI de Cobros)
+  $('btnEmitir').disabled=true; $('status').textContent= cobrarAhora ? 'Emitiendo y cobrando...' : 'Emitiendo factura...';
 
-  $('btnEmitir').disabled=true; $('status').textContent='Emitiendo factura...';
   try{
-    const r=await fetch('facturar_pedido.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-    const j=await r.json();
-    if(!j.success) throw new Error(j.error||'No se pudo emitir');
-    alert('Factura emitida: '+j.numero_documento+' | Total: '+j.total);
-    $('status').textContent='Factura emitida: '+j.numero_documento;
-    cargarTimbrado(); // refrescar correlativo
-  }catch(e){ alert(e.message); $('status').textContent='Error: '+e.message; }
-  finally{ $('btnEmitir').disabled=false; }
+    if (condicion==='Credito' || !cobrarAhora){
+      const payload={
+        id_pedido: pedidoSel,
+        condicion_venta: condicion,
+        fecha_emision: fecha,
+        observacion: $('obs').value||''
+      };
+      if (condicion==='Credito'){
+        if (planCuotas.length){
+          payload.plan_cuotas = planCuotas;
+        } else {
+          const vto = $('primerVto').value;
+          if(!vto){ throw new Error('Ingresá el primer vencimiento o calculá el plan.'); }
+          payload.fecha_vencimiento = vto;
+        }
+      }
+      const r=await fetch('facturar_pedido.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const j=await r.json();
+      if(!j.success) throw new Error(j.error||'No se pudo emitir');
+      alert('Factura emitida: '+j.numero_documento+' | Total: '+Number(j.total).toFixed(2));
+      $('status').textContent='Factura emitida: '+j.numero_documento;
+      cargarTimbrado();
+      abrirImpresionFactura(j.id_factura, true);
+    } else {
+      const pagos = getPagos();
+      if (!pagos.length) throw new Error('Agregá al menos un medio de pago.');
+      const suma = pagos.reduce((acc,p)=>acc+p.importe,0);
+      const total = Number(totales.total||0);
+      if (Math.abs(suma-total) > 0.01) throw new Error('La suma de pagos debe ser igual al TOTAL.');
+
+      const payload = {
+        id_pedido: pedidoSel,
+        fecha_emision: fecha,
+        observacion: $('obs').value||'',
+        pagos
+      };
+      const r=await fetch('facturar_y_cobrar_contado.php',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(payload)
+      });
+      const j=await r.json();
+      if(!j.success) throw new Error(j.error||'No se pudo emitir y cobrar');
+
+      alert('Factura emitida y cobrada: '+j.numero_documento);
+      $('status').textContent='Factura cobrada: '+j.numero_documento;
+      abrirImpresionFactura(j.id_factura, true);
+      cargarTimbrado();
+    }
+  }catch(e){
+    alert(e.message); $('status').textContent='Error: '+e.message;
+  }finally{
+    $('btnEmitir').disabled=false;
+  }
 });
 
 // ===== Init =====
 window.addEventListener('DOMContentLoaded', ()=>{
   setFechaHoyPorDefecto();
-  // Por defecto: primer vto = fecha + 30 días
   const f=$('fecha').value || hoyISO();
   $('primerVto').value = fmtISO(addMonths(parseISO(f),1));
   cargarTimbrado();
+  onCondicionChange();
+  resetPagosTabla();
 });
 </script>
 <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
