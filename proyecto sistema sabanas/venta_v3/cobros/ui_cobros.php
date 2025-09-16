@@ -31,11 +31,19 @@ if (empty($_SESSION['nombre_usuario'])) {
   .list{line-height:1.8}
   .warn{color:#b45309}
   .mini{font-size:12px}
+  .pill{display:inline-block;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:2px 8px;font-size:12px;margin-left:8px}
+  .pill.red{background:#fee2e2;border-color:#fecaca;color:#b91c1c}
+  .pill.green{background:#dcfce7;border-color:#bbf7d0;color:#14532d}
 </style>
 </head>
 <body>
   <div id="navbar-container"></div>
 <h1>Cobros</h1>
+
+<!-- Aviso del banco por defecto -->
+<div class="card" id="boxBancoDefault" style="display:none">
+  <span id="badgeBanco" class="pill"></span>
+</div>
 
 <div class="tabs">
   <div id="tabFac" class="tab active">Cobro de Facturas</div>
@@ -67,7 +75,9 @@ if (empty($_SESSION['nombre_usuario'])) {
         <div><strong>Factura:</strong> <span id="f_num"></span></div>
         <div><strong>Cliente:</strong> <span id="f_cli"></span></div>
         <div><strong>Total:</strong> Gs. <span id="f_tot"></span></div>
-        <div><strong>Pendiente:</strong> Gs. <span id="f_pen"></span></div>
+        <div><strong>Pendiente:</strong> Gs. <span id="f_pen"></span>
+          <span class="pill" id="f_pill"></span>
+        </div>
       </div>
       <div>
         <label>Fecha cobro</label><br/>
@@ -82,7 +92,7 @@ if (empty($_SESSION['nombre_usuario'])) {
           <th>Medio</th>
           <th>Importe</th>
           <th>Referencia</th>
-          <th>Cuenta (si es transferencia)</th>
+          <th>Cuenta</th>
           <th></th>
         </tr>
       </thead>
@@ -92,6 +102,7 @@ if (empty($_SESSION['nombre_usuario'])) {
           <td colspan="5">
             <button id="addPagoFac" class="btn">+ Agregar medio</button>
             <span class="muted" style="margin-left:8px">Suma pagos: Gs. <span id="sumaPagosFac">0</span></span>
+            <span class="muted" style="margin-left:16px">Falta: Gs. <span id="faltaPagosFac">0</span></span>
           </td>
         </tr>
       </tfoot>
@@ -148,6 +159,7 @@ if (empty($_SESSION['nombre_usuario'])) {
         <tr>
           <td colspan="7" class="right">
             A pagar total: Gs. <span id="sumaCuo">0</span>
+            <span class="pill red">Falta: Gs. <span id="faltaPagosCuo">0</span></span>
           </td>
         </tr>
       </tfoot>
@@ -160,7 +172,7 @@ if (empty($_SESSION['nombre_usuario'])) {
           <th>Medio</th>
           <th>Importe</th>
           <th>Referencia</th>
-          <th>Cuenta (si es transferencia)</th>
+          <th>Cuenta</th>
           <th></th>
         </tr>
       </thead>
@@ -170,6 +182,7 @@ if (empty($_SESSION['nombre_usuario'])) {
           <td colspan="5">
             <button id="addPagoCuo" class="btn">+ Agregar medio</button>
             <span class="muted" style="margin-left:8px">Suma pagos: Gs. <span id="sumaPagosCuo">0</span></span>
+            <span class="muted" style="margin-left:16px">Falta: Gs. <span id="faltaPagosCuo2">0</span></span>
           </td>
         </tr>
       </tfoot>
@@ -184,74 +197,108 @@ if (empty($_SESSION['nombre_usuario'])) {
 </div>
 
 <script>
-const $=id=>document.getElementById(id);
+/* ===== Helpers básicos ===== */
+const $ = id => document.getElementById(id);
+const money = n => Number(n||0).toLocaleString();
 function hoyISO(){ const d=new Date(); return d.toISOString().slice(0,10); }
+function setMoney(id,num){ $(id).textContent = money(num); }
+function getSumPagos(tableId){
+  let s=0; document.querySelectorAll('#'+tableId+' .importe').forEach(i=>s+=Number(i.value||0));
+  return s;
+}
 
-/* ===== Cuentas bancarias ===== */
-let cuentasCache=null;
-async function cargarCuentasBancarias(){
-  if(cuentasCache) return cuentasCache;
+/* ===== Banco por defecto (nuevo) ===== */
+let BANCO_DEFAULT = null; // { id, label }
+async function cargarBancoDefault(){
   try{
-    const r=await fetch('../banco/cuentas_bancarias_list.php');
-    const j=await r.json();
-    if(!j.success) throw new Error(j.error||'Error cargando cuentas');
-    cuentasCache=j.cuentas||[];
+    const r = await fetch('../banco/get_banco_cobro_default.php');
+    const j = await r.json();
+    const box = $('boxBancoDefault');
+    const badge = $('badgeBanco');
+
+    if(!j.success){
+      box.style.display='block';
+      badge.className = 'pill red';
+      badge.textContent = 'Error obteniendo banco por defecto';
+      BANCO_DEFAULT = null;
+      return null;
+    }
+
+    if(!j.id_cuenta_bancaria){
+      box.style.display='block';
+      badge.className = 'pill red';
+      badge.textContent = 'Sin banco por defecto configurado (Transferencias deshabilitadas)';
+      BANCO_DEFAULT = null;
+      return null;
+    }
+
+    const c = j.cuenta || {};
+    const label = `${c.banco || 'Banco'} · ${c.numero_cuenta || 's/n'} (${c.moneda || ''} ${c.tipo || ''})`.trim();
+    BANCO_DEFAULT = { id: j.id_cuenta_bancaria, label };
+    box.style.display='block';
+    badge.className = 'pill green';
+    badge.textContent = `Banco por defecto: ${label}`;
+    return BANCO_DEFAULT;
   }catch(e){
-    alert('No se pudieron cargar las cuentas bancarias: '+e.message);
-    cuentasCache=[];
+    const box = $('boxBancoDefault');
+    const badge = $('badgeBanco');
+    box.style.display='block';
+    badge.className = 'pill red';
+    badge.textContent = 'No se pudo cargar el banco por defecto';
+    BANCO_DEFAULT = null;
+    return null;
   }
-  return cuentasCache;
-}
-async function buildCuentaSelect(){
-  const cuentas=await cargarCuentasBancarias();
-  const sel=document.createElement('select');
-  sel.className='cuenta';
-  sel.innerHTML='<option value="">-- Seleccioná cuenta --</option>';
-  cuentas.forEach(c=>{
-    const opt=document.createElement('option');
-    opt.value=c.id_cuenta_bancaria;
-    opt.textContent=c.label;
-    sel.appendChild(opt);
-  });
-  return sel;
 }
 
-/* ===== Helpers pagos (fila editable) ===== */
-function addPagoRow(tbodyId,sumaLblId){
+/* ===== Fila de pago reutilizable (usa banco por defecto en Transferencia) ===== */
+function addPagoRow(tbodyId, sumaLblId, onChangeCb){
   const tb=document.querySelector('#'+tbodyId+' tbody');
   const tr=document.createElement('tr');
   tr.innerHTML=`
-    <td><select class="medio">
-      <option>Efectivo</option>
-      <option>Transferencia</option>
-      <option>Tarjeta</option>
-      <option>Cheque</option>
-      <option>Billetera</option>
-    </select></td>
+    <td>
+      <select class="medio">
+        <option>Efectivo</option>
+        <option>Transferencia</option>
+        <option>Tarjeta</option>
+        <option>Cheque</option>
+        <option>Billetera</option>
+      </select>
+    </td>
     <td><input type="number" class="importe" min="0" step="0.01" value="0"/></td>
     <td><input type="text" class="ref" placeholder="N° cupón / transf"/></td>
     <td class="cuentaWrap"><span class="mini muted">—</span></td>
     <td><button class="btn del">x</button></td>`;
-  tr.querySelector('.importe').oninput=()=>sumaPagos(tbodyId,sumaLblId);
-  tr.querySelector('.del').onclick=()=>{ tr.remove(); sumaPagos(tbodyId,sumaLblId); };
-  const medioSel=tr.querySelector('.medio');
-  const cuentaCell=tr.querySelector('.cuentaWrap');
-  medioSel.addEventListener('change',async()=>{
+
+  const onAnyChange=()=>{
+    setMoney(sumaLblId, getSumPagos(tbodyId));
+    if (typeof onChangeCb==='function') onChangeCb();
+  };
+
+  // eventos
+  tr.querySelector('.importe').oninput = onAnyChange;
+  tr.querySelector('.del').onclick = ()=>{ tr.remove(); onAnyChange(); };
+
+  const medioSel = tr.querySelector('.medio');
+  const cuentaCell = tr.querySelector('.cuentaWrap');
+
+  const pintarCuentaDefault = () => {
     if(medioSel.value==='Transferencia'){
-      cuentaCell.innerHTML='Cargando...';
-      const sel=await buildCuentaSelect();
-      cuentaCell.innerHTML=''; cuentaCell.appendChild(sel);
+      if(BANCO_DEFAULT && BANCO_DEFAULT.id){
+        cuentaCell.innerHTML = `<span class="mini">${BANCO_DEFAULT.label}</span>`;
+      }else{
+        cuentaCell.innerHTML = `<span class="mini muted">Configurar banco por defecto</span>`;
+      }
     }else{
-      cuentaCell.innerHTML='<span class="mini muted">—</span>';
+      cuentaCell.innerHTML = '<span class="mini muted">—</span>';
     }
-  });
+  };
+
+  medioSel.addEventListener('change', ()=>{ pintarCuentaDefault(); onAnyChange(); });
+
+  // inicial
   tb.appendChild(tr);
-  sumaPagos(tbodyId,sumaLblId);
-}
-function sumaPagos(tbodyId,sumaLblId){
-  let s=0; document.querySelectorAll('#'+tbodyId+' .importe').forEach(i=>s+=Number(i.value||0));
-  $(sumaLblId).textContent=s.toLocaleString();
-  return s;
+  pintarCuentaDefault();
+  onAnyChange();
 }
 
 /* ===== Tabs ===== */
@@ -260,16 +307,23 @@ $('tabCuo').onclick=()=>{ $('tabCuo').classList.add('active'); $('tabFac').class
 
 /* ===== FACTURAS ===== */
 let facturaSel=null;
+function updateFaltaFac(){
+  const objetivo = Number(facturaSel?.pendiente || 0);
+  const suma = getSumPagos('tabPagosFac');
+  const falta = Math.max(0, objetivo - suma);
+  setMoney('faltaPagosFac', falta);
+  $('f_pill').textContent = `Objetivo: Gs. ${money(objetivo)} · Pagos: Gs. ${money(suma)} · Falta: Gs. ${money(falta)}`;
+}
 $('btnBuscarFac').onclick=async()=>{
-  const nf=$('qFactura').value.trim(),qc=$('qClienteFac').value.trim();
+  const nf=$('qFactura').value.trim(), qc=$('qClienteFac').value.trim();
   const r=await fetch('buscar_facturas.php?num='+encodeURIComponent(nf)+'&cli='+encodeURIComponent(qc));
   const j=await r.json();
   const box=$('resFacturas'); box.innerHTML='';
-  if(!j.success||!j.facturas?.length){ box.textContent='Sin resultados'; return; }
+  if(!j.success || !j.facturas?.length){ box.textContent='Sin resultados'; return; }
   j.facturas.forEach(f=>{
     const a=document.createElement('a'); a.href='#';
-    a.textContent=`${f.numero_documento} | ${f.cliente} | Pend.: ${Number(f.pendiente).toLocaleString()}`;
-    a.onclick=(e)=>{e.preventDefault(); selFactura(f);};
+    a.textContent = `${f.numero_documento} | ${f.cliente} | Pend.: ${Number(f.pendiente).toLocaleString()}`;
+    a.onclick=(e)=>{ e.preventDefault(); selFactura(f); };
     box.appendChild(a); box.appendChild(document.createElement('br'));
   });
 };
@@ -277,17 +331,19 @@ function selFactura(f){
   facturaSel=f;
   $('f_num').textContent=f.numero_documento;
   $('f_cli').textContent=f.cliente;
-  $('f_tot').textContent=Number(f.total).toLocaleString();
-  $('f_pen').textContent=Number(f.pendiente).toLocaleString();
+  $('f_tot').textContent=money(f.total);
+  $('f_pen').textContent=money(f.pendiente);
   $('fechaCobroFac').value=hoyISO();
   $('boxCobroFac').style.display='block';
   document.querySelector('#tabPagosFac tbody').innerHTML='';
-  addPagoRow('tabPagosFac','sumaPagosFac');
+  addPagoRow('tabPagosFac','sumaPagosFac',updateFaltaFac);
+  updateFaltaFac();
 }
-$('addPagoFac').onclick=()=>addPagoRow('tabPagosFac','sumaPagosFac');
+$('addPagoFac').onclick=()=>addPagoRow('tabPagosFac','sumaPagosFac',updateFaltaFac);
+
 $('btnCobrarFac').onclick=async()=>{
-  if(!facturaSel){alert('Seleccioná una factura');return;}
-  const fecha=$('fechaCobroFac').value; if(!fecha){alert('Fecha requerida');return;}
+  if(!facturaSel){ alert('Seleccioná una factura'); return; }
+  const fecha=$('fechaCobroFac').value; if(!fecha){ alert('Fecha requerida'); return; }
   const pagos=[];
   document.querySelectorAll('#tabPagosFac tbody tr').forEach(tr=>{
     const medio=tr.querySelector('.medio').value;
@@ -295,46 +351,59 @@ $('btnCobrarFac').onclick=async()=>{
     const referencia=tr.querySelector('.ref').value||null;
     let id_cuenta_bancaria=null;
     if(medio==='Transferencia'){
-      const sel=tr.querySelector('.cuentaWrap .cuenta');
-      id_cuenta_bancaria=sel&&sel.value?parseInt(sel.value,10):null;
+      id_cuenta_bancaria = BANCO_DEFAULT && BANCO_DEFAULT.id ? BANCO_DEFAULT.id : null;
     }
     if(importe>0) pagos.push({medio,importe,referencia,id_cuenta_bancaria});
   });
+  // Validación de banco por defecto cuando hay transferencias
   for(const p of pagos){
-    if(p.medio==='Transferencia'&&!p.id_cuenta_bancaria){
-      alert('Seleccioná la cuenta bancaria para la transferencia.'); return;
+    if(p.medio==='Transferencia' && !p.id_cuenta_bancaria){
+      alert('No hay banco por defecto configurado. Configuralo antes de registrar transferencias.'); return;
     }
   }
-  const totalPagos=pagos.reduce((a,b)=>a+b.importe,0);
-  if(totalPagos-Number(facturaSel.pendiente)>0.01){
+  const totalPagos = pagos.reduce((a,b)=>a+b.importe,0);
+  if(totalPagos - Number(facturaSel.pendiente) > 0.01){
     alert('La suma de pagos supera el pendiente'); return;
   }
   $('btnCobrarFac').disabled=true; $('statusFac').textContent='Registrando cobro...';
   try{
     const r=await fetch('cobrar_factura_multi.php',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id_factura:facturaSel.id_factura,fecha,pagos})});
+      body:JSON.stringify({id_factura:facturaSel.id_factura, fecha, pagos})});
     const j=await r.json(); if(!j.success) throw new Error(j.error||'No se pudo cobrar');
     alert('Cobro registrado. Recibo #'+j.id_recibo);
     $('statusFac').textContent='OK';
-  }catch(e){alert(e.message);$('statusFac').textContent='Error: '+e.message;}
-  finally{$('btnCobrarFac').disabled=false;}
+  }catch(e){ alert(e.message); $('statusFac').textContent='Error: '+e.message; }
+  finally{ $('btnCobrarFac').disabled=false; }
 };
 
 /* ===== CUOTAS ===== */
 let clienteCuotas=null, cuotas=[];
+function getSumaCuotas(){
+  let s=0; document.querySelectorAll('#tabCuotas .apagar').forEach(i=>s+=Number(i.value||0));
+  return s;
+}
+function pintaSumaCuotasYFalta(){
+  const objetivo = getSumaCuotas();
+  setMoney('sumaCuo', objetivo);
+  const sumaPagos = getSumPagos('tabPagosCuo');
+  const falta = Math.max(0, objetivo - sumaPagos);
+  setMoney('faltaPagosCuo', falta);
+  setMoney('faltaPagosCuo2', falta);
+}
 $('btnBuscarCuo').onclick=async()=>{
   const q=$('qClienteCuo').value.trim();
-  if(q.length<2){alert('Ingresá al menos 2 caracteres');return;}
+  if(q.length<2){ alert('Ingresá al menos 2 caracteres'); return; }
   const r=await fetch('buscar_cuotas.php?q='+encodeURIComponent(q));
   const j=await r.json();
   const box=$('resCuotas'); box.innerHTML='';
-  if(!j.success||!j.cuotas?.length){ box.textContent='Sin resultados'; $('boxCobroCuo').style.display='none'; return;}
+  if(!j.success || !j.cuotas?.length){ box.textContent='Sin resultados'; $('boxCobroCuo').style.display='none'; return; }
   clienteCuotas=j.cliente; cuotas=j.cuotas;
-  $('c_cli').textContent=`${clienteCuotas.nombre} (${clienteCuotas.ruc_ci||'s/d'})`;
+  $('c_cli').textContent = `${clienteCuotas.nombre} (${clienteCuotas.ruc_ci||'s/d'})`;
   $('fechaCobroCuo').value=hoyISO();
   renderCuotas(); $('boxCobroCuo').style.display='block';
   document.querySelector('#tabPagosCuo tbody').innerHTML='';
-  addPagoRow('tabPagosCuo','sumaPagosCuo');
+  addPagoRow('tabPagosCuo','sumaPagosCuo',pintaSumaCuotasYFalta);
+  pintaSumaCuotasYFalta();
 };
 function renderCuotas(){
   const tb=$('tabCuotas').querySelector('tbody'); tb.innerHTML='';
@@ -342,8 +411,7 @@ function renderCuotas(){
   cuotas.forEach(c=>{
     if(c.numero_documento!==lastFactura){
       const hdr=document.createElement('tr');
-      hdr.innerHTML=`<td colspan="7" style="background:#f7f7f8;font-weight:700;border-top:2px solid #e5e7eb">
-        Factura: ${c.numero_documento}</td>`;
+      hdr.innerHTML=`<td colspan="7" style="background:#f7f7f8;font-weight:700;border-top:2px solid #e5e7eb">Factura: ${c.numero_documento}</td>`;
       tb.appendChild(hdr); lastFactura=c.numero_documento;
     }
     const tr=document.createElement('tr');
@@ -356,32 +424,32 @@ function renderCuotas(){
       <td class="right">${Number(c.saldo).toLocaleString()}</td>
       <td class="right"><input type="number" class="apagar" min="0" step="0.01" value="0"/></td>`;
     const chk=tr.querySelector('.pick'); const inp=tr.querySelector('.apagar');
-    chk.onchange=()=>{ if(chk.checked && Number(inp.value)<=0) inp.value=c.saldo; sumaCuotas(); };
-    inp.oninput=()=>{ if(Number(inp.value)>c.saldo) inp.value=c.saldo; if(Number(inp.value)<0) inp.value=0;
-      chk.checked = Number(inp.value)>0; sumaCuotas(); };
+    chk.onchange=()=>{ if(chk.checked && Number(inp.value)<=0) inp.value=c.saldo; pintaSumaCuotasYFalta(); };
+    inp.oninput=()=>{
+      if(Number(inp.value)>c.saldo) inp.value=c.saldo;
+      if(Number(inp.value)<0) inp.value=0;
+      chk.checked = Number(inp.value)>0;
+      pintaSumaCuotasYFalta();
+    };
     tb.appendChild(tr);
   });
-  sumaCuotas();
+  pintaSumaCuotasYFalta();
 }
-function sumaCuotas(){
-  let s=0; document.querySelectorAll('#tabCuotas .apagar').forEach(i=>s+=Number(i.value||0));
-  $('sumaCuo').textContent=s.toLocaleString(); return s;
-}
-$('addPagoCuo').onclick=()=>addPagoRow('tabPagosCuo','sumaPagosCuo');
+$('addPagoCuo').onclick=()=>addPagoRow('tabPagosCuo','sumaPagosCuo',pintaSumaCuotasYFalta);
+
 $('btnCobrarCuo').onclick=async()=>{
   if(!clienteCuotas){ alert('Buscá un cliente con cuotas pendientes'); return; }
   const fecha=$('fechaCobroCuo').value; if(!fecha){ alert('Fecha requerida'); return; }
 
-  // cuotas seleccionadas
+  // cuotas seleccionadas (saltando headers)
   const sel=[]; const rows=$('tabCuotas').querySelectorAll('tbody tr');
-  // saltar filas de encabezado (las que tienen colspan) y mapear por índice de cuotas[]
   let idxCuota=0;
   rows.forEach(tr=>{
     const pick=tr.querySelector('.pick');
     const inp=tr.querySelector('.apagar');
-    if(!pick || !inp) return; // es un header
-    const checked=pick.checked; const imp=Number(inp.value||0);
-    if(checked && imp>0){
+    if(!pick || !inp) return; // header
+    const imp=Number(inp.value||0);
+    if(pick.checked && imp>0){
       const c=cuotas[idxCuota];
       sel.push({id_cuota:c.id_cuota, pagar: imp});
     }
@@ -398,17 +466,17 @@ $('btnCobrarCuo').onclick=async()=>{
     const referencia=tr.querySelector('.ref').value||null;
     let id_cuenta_bancaria=null;
     if(medio==='Transferencia'){
-      const sel=tr.querySelector('.cuentaWrap .cuenta');
-      id_cuenta_bancaria=sel&&sel.value?parseInt(sel.value,10):null;
+      id_cuenta_bancaria = BANCO_DEFAULT && BANCO_DEFAULT.id ? BANCO_DEFAULT.id : null;
     }
     if(importe>0) pagos.push({medio,importe,referencia,id_cuenta_bancaria});
   });
+  // Validación de banco por defecto cuando hay transferencias
   for(const p of pagos){
-    if(p.medio==='Transferencia'&&!p.id_cuenta_bancaria){
-      alert('Seleccioná la cuenta bancaria para la transferencia.'); return;
+    if(p.medio==='Transferencia' && !p.id_cuenta_bancaria){
+      alert('No hay banco por defecto configurado. Configuralo antes de registrar transferencias.'); return;
     }
   }
-  const sumaPag=pagos.reduce((a,b)=>a+b.importe,0);
+  const sumaPag = pagos.reduce((a,b)=>a+b.importe,0);
   if(Math.abs(sumaPag - sumaSel) > 0.01){
     alert('La suma de pagos debe igualar la suma “A pagar total”'); return;
   }
@@ -428,8 +496,7 @@ $('btnCobrarCuo').onclick=async()=>{
 window.addEventListener('DOMContentLoaded', async ()=>{
   $('fechaCobroFac').value=hoyISO();
   $('fechaCobroCuo').value=hoyISO();
-  // precargar cuentas para que el primer cambio a "Transferencia" sea rápido
-  await cargarCuentasBancarias();
+  await cargarBancoDefault(); // <- carga y pinta el banco por defecto
 });
 </script>
 <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
