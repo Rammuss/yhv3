@@ -36,16 +36,18 @@ try {
   $whereName = $q !== '' ? "AND LOWER(p.nombre) LIKE LOWER($1)" : "";
 
   // si no es debug, mostramos solo con disponible > 0
-  $having = $showAll ? '' : "AND (COALESCE(f.stock_fisico,0) - COALESCE(r.reservado_activo,0)) > 0";
+  $whereDisponible = $showAll ? '' : "AND (COALESCE(f.stock_fisico,0) - COALESCE(r.reservado_activo,0)) > 0";
 
   $sql = "
     WITH fisico AS (
       SELECT id_producto,
-             SUM(CASE LOWER($col)
-                   WHEN 'entrada' THEN cantidad::numeric
-                   WHEN 'salida'  THEN -cantidad::numeric
-                   ELSE 0::numeric
-                 END) AS stock_fisico
+             SUM(
+               CASE TRIM(LOWER($col))
+                 WHEN 'entrada' THEN ABS(cantidad)::numeric
+                 WHEN 'salida'  THEN -ABS(cantidad)::numeric
+                 ELSE 0::numeric
+               END
+             ) AS stock_fisico
       FROM public.movimiento_stock
       GROUP BY id_producto
     ),
@@ -53,7 +55,7 @@ try {
       SELECT id_producto,
              COALESCE(SUM(cantidad),0)::numeric AS reservado_activo
       FROM public.reserva_stock
-      WHERE LOWER(estado) NOT IN ('consumida','cancelada')  -- <<< acá el ajuste
+      WHERE TRIM(LOWER(estado)) = 'activa'      -- <<< SOLO reservas activas
       GROUP BY id_producto
     )
     SELECT
@@ -67,9 +69,9 @@ try {
     FROM public.producto p
     LEFT JOIN fisico   f ON f.id_producto = p.id_producto
     LEFT JOIN reservado r ON r.id_producto = p.id_producto
-    WHERE LOWER(p.estado) = 'activo'
+    WHERE TRIM(LOWER(p.estado)) = 'activo'
       $whereName
-      $having
+      $whereDisponible
     ORDER BY p.nombre ASC
   ";
 

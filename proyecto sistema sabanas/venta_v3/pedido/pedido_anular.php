@@ -61,7 +61,7 @@ try {
   $updRes = pg_query_params(
     $conn,
     "UPDATE public.reserva_stock
-        SET estado = 'anulada',
+        SET estado = 'cancelada',
             actualizado_en = NOW()
       WHERE id_pedido = $1
         AND LOWER(estado)='activa'",

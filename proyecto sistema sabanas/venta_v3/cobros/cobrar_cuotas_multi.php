@@ -42,6 +42,7 @@ try {
         cxc.saldo_actual::numeric(14,2) AS saldo,
         cxc.monto_origen::numeric(14,2) AS total,
         cxc.nro_cuota,
+        cxc.id_factura,  -- NUEVO: para marcar la factura como Cancelada si queda en 0
         (SELECT COUNT(*) FROM public.cuenta_cobrar z WHERE z.id_factura = cxc.id_factura) AS cantidad_cuotas,
         f.numero_documento
       FROM public.cuenta_cobrar cxc
@@ -68,6 +69,7 @@ try {
       'saldo'            => $saldo,
       'nro_cuota'        => (int)$row['nro_cuota'],
       'cant_cuotas'      => (int)$row['cantidad_cuotas'],
+      'id_factura'       => (int)$row['id_factura'], // NUEVO
       'numero_documento' => $row['numero_documento']
     ];
     $totalAPagar += $pagar;
@@ -139,6 +141,35 @@ try {
       if (!$okBanco) throw new Exception('No se pudo mover banco');
     }
   }
+
+  // ===== NUEVO: Marcar facturas como Cancelada si quedó saldo total = 0 =====
+  $facturasAfectadas = [];
+  foreach ($detCuotas as $c) {
+    $facturasAfectadas[$c['id_factura']] = true; // set único
+  }
+
+  foreach (array_keys($facturasAfectadas) as $id_factura) {
+    $rSaldo = pg_query_params($conn, "
+      SELECT COALESCE(SUM(saldo_actual),0)::numeric(14,2) AS saldo
+      FROM public.cuenta_cobrar
+      WHERE id_factura = $1
+        AND COALESCE(estado,'') <> 'Anulada'
+    ", [$id_factura]);
+    if (!$rSaldo) throw new Exception('No se pudo calcular saldo de la factura '.$id_factura);
+
+    $saldo = (float)pg_fetch_result($rSaldo, 0, 'saldo');
+
+    if ($saldo <= 0.01) {
+      $okFac = pg_query_params($conn, "
+        UPDATE public.factura_venta_cab
+           SET estado = 'Cancelada'
+         WHERE id_factura = $1
+           AND estado <> 'Anulada'   -- no pisar anuladas
+      ", [$id_factura]);
+      if (!$okFac) throw new Exception('No se pudo marcar factura #'.$id_factura.' como Cancelada');
+    }
+  }
+  // ===== FIN NUEVO =====
 
   pg_query($conn, 'COMMIT');
   echo json_encode(['success' => true, 'id_recibo' => $id_recibo, 'monto' => $totalAPagar]);

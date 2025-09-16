@@ -8,7 +8,8 @@ try{
   $num = trim($_GET['num'] ?? '');
   $cli = trim($_GET['cli'] ?? '');
 
-  $where = "WHERE f.condicion_venta = 'Contado'"; // ✅ Solo contado
+  // ✅ Solo contado + SOLO facturas EMITIDAS
+  $where = "WHERE f.condicion_venta = 'Contado' AND f.estado = 'Emitida'"; // FIX: agregar estado
   $params=[]; $i=1;
 
   if($num!==''){ 
@@ -34,7 +35,11 @@ try{
       f.numero_documento,
       (c.nombre||' '||c.apellido) AS cliente,
       f.total_neto::numeric(14,2) AS total,
-      (f.total_neto - COALESCE(ap.aplicado,0))::numeric(14,2) AS pendiente
+      -- FIX: si no está Emitida (por cualquier motivo), pendiente = 0
+      CASE WHEN f.estado = 'Emitida'
+           THEN (f.total_neto - COALESCE(ap.aplicado,0))::numeric(14,2)
+           ELSE 0::numeric(14,2)
+      END AS pendiente
     FROM public.factura_venta_cab f
     JOIN public.clientes c ON c.id_cliente = f.id_cliente
     LEFT JOIN aplic ap ON ap.id_factura = f.id_factura
