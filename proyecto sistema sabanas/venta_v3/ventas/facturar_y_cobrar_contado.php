@@ -7,6 +7,21 @@ header('Content-Type: application/json; charset=utf-8');
 function lpad7($n){ return str_pad((string)$n, 7, '0', STR_PAD_LEFT); }
 function is_iso_date($s){ return is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/',$s); }
 
+/** Detecta la columna del tipo de movimiento en movimiento_stock */
+function stock_tipo_col($conn){
+  $col = null;
+  $q1 = pg_query_params($conn, "SELECT 1 FROM information_schema.columns
+           WHERE table_schema='public' AND table_name='movimiento_stock' AND column_name='tipo_movimiento' LIMIT 1", []);
+  if ($q1 && pg_num_rows($q1)>0) $col = 'tipo_movimiento';
+  if (!$col){
+    $q2 = pg_query_params($conn, "SELECT 1 FROM information_schema.columns
+             WHERE table_schema='public' AND table_name='movimiento_stock' AND column_name='tipo' LIMIT 1", []);
+    if ($q2 && pg_num_rows($q2)>0) $col = 'tipo';
+  }
+  if (!$col) throw new Exception("No se encontró la columna de tipo ('tipo_movimiento' o 'tipo') en movimiento_stock");
+  return $col;
+}
+
 try {
   if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -76,6 +91,7 @@ try {
     FROM base;
   ";
   $rTot = pg_query_params($conn, $sqlTot, [$id_pedido]);
+  if (!$rTot) { throw new Exception('No se pudieron obtener los totales del pedido'); }
   $tot = pg_fetch_assoc($rTot);
   $grav10  = (float)$tot['total_grav10'];
   $iva10   = (float)$tot['total_iva10'];
@@ -190,8 +206,9 @@ try {
   if (!$okDet) { throw new Exception('No se pudo insertar el detalle de la factura'); }
 
   // 7) Movimiento de stock (solo productos) — 'salida' (SIN redondear)
-  $okStock = pg_query_params($conn, "
-    INSERT INTO public.movimiento_stock(fecha, id_producto, tipo_movimiento, cantidad, observacion)
+  $colTipo = stock_tipo_col($conn);
+  $sqlMov = "
+    INSERT INTO public.movimiento_stock(fecha, id_producto, {$colTipo}, cantidad, observacion)
     SELECT
       $1::timestamp,
       d.id_producto,
@@ -202,7 +219,8 @@ try {
     JOIN public.producto p ON p.id_producto = d.id_producto
     WHERE d.id_pedido = $3
       AND COALESCE(p.tipo_item,'P') = 'P'
-  ", [$fecha_emision.' 00:00:00', $numero_doc, $id_pedido]);
+  ";
+  $okStock = pg_query_params($conn, $sqlMov, [$fecha_emision.' 00:00:00', $numero_doc, $id_pedido]);
   if ($okStock === false) { throw new Exception('No se pudo registrar movimiento de stock'); }
 
   // 8) Consumir reservas del pedido
@@ -213,12 +231,12 @@ try {
   ", [$id_pedido]);
   if ($okCons === false) { throw new Exception('No se pudo consumir las reservas del pedido'); }
 
-  // 9) Libro Ventas
+  // 9) Libro Ventas (ya cancelada porque cobramos ahora)
   $okLibro = pg_query_params($conn, "
     INSERT INTO public.libro_ventas(
       fecha_emision, id_factura, numero_documento, timbrado_numero, id_cliente, condicion_venta,
       grav10, iva10, grav5, iva5, exentas, total, estado_doc
-    ) VALUES ($1::date,$2,$3,$4,$5,'Contado',$6,$7,$8,$9,$10,$11,'Emitida')
+    ) VALUES ($1::date,$2,$3,$4,$5,'Contado',$6,$7,$8,$9,$10,$11,'Cancelada')
   ", [$fecha_emision, $id_factura, $numero_doc, $num_tim, $id_cliente,
       $grav10, $iva10, $grav5, $iva5, $exentas, $total]);
   if (!$okLibro) { throw new Exception('No se pudo registrar en Libro Ventas'); }
@@ -238,12 +256,15 @@ try {
   if (!$okTim) { throw new Exception('No se pudo avanzar numeración del timbrado'); }
 
   // ===== COBRO CONTADO (recibo + pagos + caja/banco + aplicación a factura) =====
+  // Observación del recibo (combina tu obs + referencia)
+  $obsRec = trim(($obs ? ($obs.' · ') : '') . ('Cobro contado fact. '.$numero_doc));
+
   // Recibo
   $rRec = pg_query_params($conn, "
     INSERT INTO public.recibo_cobranza_cab(fecha, id_cliente, total_recibo, estado, observacion)
     VALUES ($1::date, $2, $3, 'Registrado', $4)
     RETURNING id_recibo
-  ", [$fecha_emision, $id_cliente, $sumPag, 'Cobro contado fact. '.$numero_doc]);
+  ", [$fecha_emision, $id_cliente, $sumPag, $obsRec]);
   if (!$rRec) throw new Exception('No se pudo crear el recibo');
   $id_recibo = (int)pg_fetch_result($rRec, 0, 0);
 
@@ -298,7 +319,8 @@ try {
     'success'=> true,
     'id_factura'=> $id_factura,
     'numero_documento'=> $numero_doc,
-    'id_recibo'=> $id_recibo
+    'id_recibo'=> $id_recibo,
+    'total'=> (float)$total
   ]);
 
 } catch (Throwable $e) {

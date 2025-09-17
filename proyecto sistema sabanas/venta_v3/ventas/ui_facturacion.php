@@ -247,19 +247,27 @@ session_start();
 <script>
 const $ = (id)=>document.getElementById(id);
 
-/* ========= PRINT SEGURO (anti pop-up block) ========= */
-const PRINT_URL = 'factura_print.php'; // <-- CAMBIAR si el print está en otra ruta
-function abrirImpresionFactura(idFactura, auto=true){
-  const url = `${PRINT_URL}?id=${encodeURIComponent(idFactura)}${auto ? '&auto=1' : ''}`;
+/* ========= PRINT SEGURO ========= */
+const FACTURA_PRINT_URL = 'factura_print.php';  // ajustá rutas si es necesario
+const RECIBO_PRINT_URL  = 'recibo_print.php';
+
+function abrirImpresion(url, auto=true){
+  const final = `${url}${auto ? (url.includes('?') ? '&auto=1' : '?auto=1') : ''}`;
   let w = window.open('', '_blank');
   if (w && !w.closed) {
-    try { w.opener = null; w.location.replace(url); }
-    catch(e){ location.href = url; }
+    try { w.opener = null; w.location.replace(final); }
+    catch(e){ location.href = final; }
   } else {
-    location.href = url;
+    location.href = final;
   }
 }
-/* ==================================================== */
+function abrirImpresionFactura(id, auto=true){
+  abrirImpresion(`${FACTURA_PRINT_URL}?id=${encodeURIComponent(id)}`, auto);
+}
+function abrirImpresionRecibo(id, auto=true){
+  abrirImpresion(`${RECIBO_PRINT_URL}?id=${encodeURIComponent(id)}`, auto);
+}
+/* ================================= */
 
 // ===== Estado =====
 let clienteSel = null;
@@ -330,7 +338,6 @@ function validarFechaContraTimbrado(){
   if (!timbrado || !f) return;
   const d=parseISO(f), ini=parseISO(timbrado.fecha_inicio), fin=parseISO(timbrado.fecha_fin);
   if (d<ini || d>fin){
-    // FIX: referencia correcta a timbrado.fecha_fin
     warn.textContent=`⚠ La fecha está fuera de la vigencia del timbrado (${timbrado.fecha_inicio} a ${timbrado.fecha_fin}).`;
   }
 }
@@ -505,9 +512,7 @@ function addPagoRow(medioInit='', importeInit=0, refInit=''){
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>
-      <select class="medio" style="width:100%">
-        ${medios.map(m=>`<option ${m===medioInit?'selected':''}>${m}</option>`).join('')}
-      </select>
+      <select class="medio" style="width:100%">${medios.map(m=>`<option ${m===medioInit?'selected':''}>${m}</option>`).join('')}</select>
     </td>
     <td><input class="ref" type="text" placeholder="Ref. / N° voucher / nota" style="width:100%"/></td>
     <td class="right"><input class="imp" type="number" step="0.01" min="0" value="${Number(importeInit||0).toFixed(2)}" style="width:120px; text-align:right"/></td>
@@ -557,6 +562,7 @@ $('btnEmitir').addEventListener('click', async ()=>{
   if(!timbrado){ alert('No hay timbrado vigente. No se puede emitir.'); return; }
   const fecha = $('fecha').value; if(!fecha){ alert('Ingresá la fecha de emisión'); return; }
 
+  // Validación vigencia timbrado
   if (timbrado){
     const d=parseISO(fecha), ini=parseISO(timbrado.fecha_inicio), fin=parseISO(timbrado.fecha_fin);
     if (d<ini || d>fin){ if(!confirm('La fecha está fuera de la vigencia del timbrado. ¿Continuar igualmente?')) return; }
@@ -569,6 +575,7 @@ $('btnEmitir').addEventListener('click', async ()=>{
 
   try{
     if (condicion==='Credito' || !cobrarAhora){
+      // Emitir solo factura
       const payload={
         id_pedido: pedidoSel,
         condicion_venta: condicion,
@@ -590,8 +597,10 @@ $('btnEmitir').addEventListener('click', async ()=>{
       alert('Factura emitida: '+j.numero_documento+' | Total: '+Number(j.total).toFixed(2));
       $('status').textContent='Factura emitida: '+j.numero_documento;
       cargarTimbrado();
+      // Imprimir FACTURA
       abrirImpresionFactura(j.id_factura, true);
     } else {
+      // Contado + cobrar ahora
       const pagos = getPagos();
       if (!pagos.length) throw new Error('Agregá al menos un medio de pago.');
       const suma = pagos.reduce((acc,p)=>acc+p.importe,0);
@@ -614,7 +623,14 @@ $('btnEmitir').addEventListener('click', async ()=>{
 
       alert('Factura emitida y cobrada: '+j.numero_documento);
       $('status').textContent='Factura cobrada: '+j.numero_documento;
+
+      // 1) Imprimir FACTURA
       abrirImpresionFactura(j.id_factura, true);
+      // 2) Imprimir RECIBO (si backend lo devolvió)
+      if (j.id_recibo) {
+        setTimeout(()=>abrirImpresionRecibo(j.id_recibo, true), 600);
+      }
+
       cargarTimbrado();
     }
   }catch(e){

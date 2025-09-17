@@ -42,7 +42,7 @@ try {
         cxc.saldo_actual::numeric(14,2) AS saldo,
         cxc.monto_origen::numeric(14,2) AS total,
         cxc.nro_cuota,
-        cxc.id_factura,  -- NUEVO: para marcar la factura como Cancelada si queda en 0
+        cxc.id_factura,  -- importante para aplicaciones y cierre de factura
         (SELECT COUNT(*) FROM public.cuenta_cobrar z WHERE z.id_factura = cxc.id_factura) AS cantidad_cuotas,
         f.numero_documento
       FROM public.cuenta_cobrar cxc
@@ -69,7 +69,7 @@ try {
       'saldo'            => $saldo,
       'nro_cuota'        => (int)$row['nro_cuota'],
       'cant_cuotas'      => (int)$row['cantidad_cuotas'],
-      'id_factura'       => (int)$row['id_factura'], // NUEVO
+      'id_factura'       => (int)$row['id_factura'],
       'numero_documento' => $row['numero_documento']
     ];
     $totalAPagar += $pagar;
@@ -142,13 +142,29 @@ try {
     }
   }
 
-  // ===== NUEVO: Marcar facturas como Cancelada si quedó saldo total = 0 =====
-  $facturasAfectadas = [];
+  /* ===== APLICACIONES DEL RECIBO A FACTURAS (para que el print liste los documentos) ===== */
+  $porFactura = [];            // [id_factura] => ['monto'=>x, 'numero'=>'001-...']
   foreach ($detCuotas as $c) {
-    $facturasAfectadas[$c['id_factura']] = true; // set único
+    $fid = (int)$c['id_factura'];
+    if ($fid > 0 && $c['pagar'] > 0) {
+      if (!isset($porFactura[$fid])) {
+        $porFactura[$fid] = ['monto' => 0.0, 'numero' => $c['numero_documento']];
+      }
+      $porFactura[$fid]['monto'] += (float)$c['pagar'];
+    }
   }
+  foreach ($porFactura as $fid => $info) {
+    $okApl = pg_query_params($conn, "
+      INSERT INTO public.recibo_cobranza_det_aplic(id_recibo, id_factura, monto_aplicado)
+      VALUES ($1, $2, $3)
+    ", [$id_recibo, $fid, $info['monto']]);
+    if (!$okApl) throw new Exception('No se pudo registrar la aplicación del recibo a la factura '.$info['numero']);
+  }
+  /* ===== FIN APLICACIONES ===== */
 
-  foreach (array_keys($facturasAfectadas) as $id_factura) {
+  // Marcar facturas como Cancelada si quedó saldo total = 0
+  $facturasAfectadas = array_keys($porFactura);
+  foreach ($facturasAfectadas as $id_factura) {
     $rSaldo = pg_query_params($conn, "
       SELECT COALESCE(SUM(saldo_actual),0)::numeric(14,2) AS saldo
       FROM public.cuenta_cobrar
@@ -158,24 +174,34 @@ try {
     if (!$rSaldo) throw new Exception('No se pudo calcular saldo de la factura '.$id_factura);
 
     $saldo = (float)pg_fetch_result($rSaldo, 0, 'saldo');
-
     if ($saldo <= 0.01) {
       $okFac = pg_query_params($conn, "
         UPDATE public.factura_venta_cab
            SET estado = 'Cancelada'
          WHERE id_factura = $1
-           AND estado <> 'Anulada'   -- no pisar anuladas
+           AND estado <> 'Anulada'
       ", [$id_factura]);
       if (!$okFac) throw new Exception('No se pudo marcar factura #'.$id_factura.' como Cancelada');
     }
   }
-  // ===== FIN NUEVO =====
 
   pg_query($conn, 'COMMIT');
-  echo json_encode(['success' => true, 'id_recibo' => $id_recibo, 'monto' => $totalAPagar]);
+
+  // Construyo pequeño resumen para la UI (opcional)
+  $docs_aplicados = [];
+  foreach ($porFactura as $fid => $info) {
+    $docs_aplicados[] = ['id_factura' => $fid, 'numero_documento' => $info['numero'], 'monto' => $info['monto']];
+  }
+
+  echo json_encode([
+    'success'        => true,
+    'id_recibo'      => $id_recibo,
+    'monto'          => $totalAPagar,
+    'docs_aplicados' => $docs_aplicados
+  ]);
 
 } catch (Throwable $e) {
   pg_query($conn, 'ROLLBACK');
   http_response_code(400);
-  echo json_encode(['success' => false, 'error' => $e->getMessage()]);
+  echo json_encode(['success' => false, 'error' => $e->getMessage() ]);
 }

@@ -197,6 +197,21 @@ if (empty($_SESSION['nombre_usuario'])) {
 </div>
 
 <script>
+/* ========= PRINT RECIBO (anti pop-up block) ========= */
+// CAMBIAR si tu recibo_print.php está en otra carpeta
+const PRINT_RECIBO_URL = '../ventas/recibo_print.php';
+function abrirImpresionRecibo(idRecibo, auto=true){
+  const url = `${PRINT_RECIBO_URL}?id=${encodeURIComponent(idRecibo)}${auto ? '&auto=1' : ''}`;
+  let w = window.open('', '_blank');
+  if (w && !w.closed) {
+    try { w.opener = null; w.location.replace(url); }
+    catch(e){ location.href = url; }
+  } else {
+    location.href = url;
+  }
+}
+/* ===================================================== */
+
 /* ===== Helpers básicos ===== */
 const $ = id => document.getElementById(id);
 const money = n => Number(n||0).toLocaleString();
@@ -372,6 +387,8 @@ $('btnCobrarFac').onclick=async()=>{
     const j=await r.json(); if(!j.success) throw new Error(j.error||'No se pudo cobrar');
     alert('Cobro registrado. Recibo #'+j.id_recibo);
     $('statusFac').textContent='OK';
+    // Abrir impresión del recibo
+    if (j.id_recibo) abrirImpresionRecibo(j.id_recibo, true);
   }catch(e){ alert(e.message); $('statusFac').textContent='Error: '+e.message; }
   finally{ $('btnCobrarFac').disabled=false; }
 };
@@ -431,6 +448,8 @@ function renderCuotas(){
       chk.checked = Number(inp.value)>0;
       pintaSumaCuotasYFalta();
     };
+    // Guardar índice de la cuota en dataset para mapear luego
+    tr.dataset.idx = String(cuotas.indexOf(c));
     tb.appendChild(tr);
   });
   pintaSumaCuotasYFalta();
@@ -441,19 +460,21 @@ $('btnCobrarCuo').onclick=async()=>{
   if(!clienteCuotas){ alert('Buscá un cliente con cuotas pendientes'); return; }
   const fecha=$('fechaCobroCuo').value; if(!fecha){ alert('Fecha requerida'); return; }
 
-  // cuotas seleccionadas (saltando headers)
-  const sel=[]; const rows=$('tabCuotas').querySelectorAll('tbody tr');
-  let idxCuota=0;
+  // cuotas seleccionadas (saltando headers) — FIX: usar dataset.idx para evitar desalineo
+  const sel=[];
+  const rows=$('tabCuotas').querySelectorAll('tbody tr');
   rows.forEach(tr=>{
     const pick=tr.querySelector('.pick');
     const inp=tr.querySelector('.apagar');
     if(!pick || !inp) return; // header
     const imp=Number(inp.value||0);
     if(pick.checked && imp>0){
-      const c=cuotas[idxCuota];
-      sel.push({id_cuota:c.id_cuota, pagar: imp});
+      const idx = Number(tr.dataset.idx || -1);
+      if (idx>=0) {
+        const c=cuotas[idx];
+        sel.push({id_cuota:c.id_cuota, pagar: imp});
+      }
     }
-    idxCuota++;
   });
   if(!sel.length){ alert('Seleccioná al menos una cuota con importe > 0'); return; }
   const sumaSel=sel.reduce((a,b)=>a+b.pagar,0);
@@ -488,6 +509,8 @@ $('btnCobrarCuo').onclick=async()=>{
     const j=await r.json(); if(!j.success) throw new Error(j.error||'No se pudo cobrar cuotas');
     alert('Cobro registrado. Recibo #'+j.id_recibo);
     $('statusCuo').textContent='OK';
+    // Abrir impresión del recibo
+    if (j.id_recibo) abrirImpresionRecibo(j.id_recibo, true);
   }catch(e){ alert(e.message); $('statusCuo').textContent='Error: '+e.message; }
   finally{ $('btnCobrarCuo').disabled=false; }
 };
