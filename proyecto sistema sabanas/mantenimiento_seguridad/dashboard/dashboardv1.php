@@ -1,5 +1,7 @@
 <?php
 session_start();
+//echo "<pre>"; print_r($_SESSION); echo "</pre>";
+
 if (!isset($_SESSION['nombre_usuario'])) {
     // Corrección: header con Location
     header('Location: /TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/acceso/acceso.html');
