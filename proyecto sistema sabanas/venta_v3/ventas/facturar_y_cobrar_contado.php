@@ -393,21 +393,19 @@ try {
     }
 
 
-    // BANCO (solo no-efectivo) — opcional pero recomendado
+    // BANCO (solo para Tarjeta/Transferencia/Cheque) — COMPATIBLE con tu schema actual
     if (in_array($medio, ['Tarjeta', 'Transferencia', 'Cheque'], true)) {
       $okBanco = pg_query_params($conn, "
-        INSERT INTO public.movimiento_banco
-          (fecha_operacion, fecha_valor, id_cuenta_bancaria, tipo, importe, referencia,
-           ref_tipo, ref_id, observacion)
-        VALUES ($1::timestamp, $2::date, $3, 'Ingreso', $4, $5, 'Factura', $6, $7)
-      ", [
-        $fecha_emision . ' 00:00:00',
-        $fecha_emision,
-        ($id_cta ?: null),
-        $imp,
-        $ref,
-        $id_factura,
-        'Cobro ' . $medio . ' fact. ' . $numero_doc
+    INSERT INTO public.movimiento_banco(
+      fecha, tipo, id_cuenta_bancaria, referencia, importe, id_recibo, observacion
+    ) VALUES ($1::timestamp, 'Ingreso', $2, $3, $4, $5, $6)
+  ", [
+        $fecha_emision . ' 00:00:00',                    // fecha
+        ($id_cta ?: null),                             // id_cuenta_bancaria (puede ser NULL)
+        ($ref ?: ('Cobro ' . $medio . ' fact. ' . $numero_doc)), // referencia
+        $imp,                                          // importe
+        $id_recibo,                                    // id_recibo (lo acabamos de crear)
+        'Cobro ' . $medio . ' fact. ' . $numero_doc          // observacion
       ]);
       if (!$okBanco) throw new Exception('No se pudo registrar movimiento bancario');
     }
