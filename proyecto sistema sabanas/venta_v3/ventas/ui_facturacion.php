@@ -1,6 +1,7 @@
 <?php
 // facturacion.php
 session_start();
+
 // if (empty($_SESSION['nombre_usuario'])) { /* header('Location: login.php'); exit; */ }
 ?>
 <!doctype html>
