@@ -53,32 +53,51 @@ try {
     throw new Exception('Debe enviar al menos un medio de pago');
   }
 
-  // === CAJA/USUARIO: asegurar sesión válida y caja abierta (con parche) ===
-  $id_usuario = (int)($_SESSION['id_usuario'] ?? 0);
-  if ($id_usuario <= 0) {
-    throw new Exception('Sesión de usuario no válida (id_usuario vacío). Volvé a iniciar sesión.');
-  }
+// === CAJA/USUARIO: asegurar sesión válida y caja abierta (enum correcto) ===
+$id_usuario = (int)($_SESSION['id_usuario'] ?? 0);
+if ($id_usuario <= 0) {
+  throw new Exception('Sesión de usuario no válida (id_usuario vacío). Volvé a iniciar sesión.');
+}
 
-  $id_caja_sesion = (int)($_SESSION['id_caja_sesion'] ?? 0);
-  if ($id_caja_sesion <= 0) {
-    // Recuperar de BD la última sesión Abierta del usuario
-    $rq = pg_query_params(
-      $conn,
-      "SELECT id_caja_sesion
-         FROM public.caja_sesion
-        WHERE id_usuario = $1 AND estado = 'Abierta'
-        ORDER BY fecha_apertura DESC, id_caja_sesion DESC
-        LIMIT 1",
-      [$id_usuario]
-    );
-    if ($rq && pg_num_rows($rq) > 0) {
-      $id_caja_sesion = (int)pg_fetch_result($rq, 0, 0);
-      $_SESSION['id_caja_sesion'] = $id_caja_sesion; // cachear para siguientes requests
-    }
+$id_caja_sesion = (int)($_SESSION['id_caja_sesion'] ?? 0);
+
+// Valida que la sesión pertenezca al usuario y esté abierta
+function caja_sesion_valida($conn, $id_sesion, $id_usuario){
+  if ($id_sesion <= 0) return false;
+  $q = "
+    SELECT 1
+    FROM public.caja_sesion
+    WHERE id_caja_sesion = $1
+      AND id_usuario     = $2
+      AND estado = 'Abierta'::estado_sesion
+      AND fecha_cierre IS NULL
+    LIMIT 1
+  ";
+  $r = pg_query_params($conn, $q, [$id_sesion, $id_usuario]);
+  return ($r && pg_num_rows($r) > 0);
+}
+
+// Si la de sesión en memoria no es válida, buscá la última abierta del usuario
+if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
+  $rq = pg_query_params(
+    $conn,
+    "SELECT id_caja_sesion
+       FROM public.caja_sesion
+      WHERE id_usuario = $1
+        AND estado = 'Abierta'::estado_sesion
+        AND fecha_cierre IS NULL
+      ORDER BY fecha_apertura DESC, id_caja_sesion DESC
+      LIMIT 1",
+    [$id_usuario]
+  );
+  if ($rq && pg_num_rows($rq) > 0) {
+    $id_caja_sesion = (int)pg_fetch_result($rq, 0, 0);
+    $_SESSION['id_caja_sesion'] = $id_caja_sesion; // cachear para siguientes requests
+  } else {
+    throw new Exception('No hay sesión de caja abierta. Abrí tu caja antes de facturar contado.');
   }
-  if ($id_caja_sesion <= 0) throw new Exception('No hay sesión de caja abierta. Abrí tu caja antes de facturar contado.');
-  $chkSes = pg_query_params($conn, "SELECT 1 FROM public.caja_sesion WHERE id_caja_sesion=$1 AND estado='Abierta' LIMIT 1", [$id_caja_sesion]);
-  if (!$chkSes || pg_num_rows($chkSes) === 0) throw new Exception('La sesión de caja no está abierta.');
+}
+
 
   // sumar pagos
   $sumPag = 0.0;
