@@ -4,6 +4,7 @@
 // Body JSON/POST: conteo_efectivo, conteo_tarjeta, conteo_transferencia, conteo_otros, observacion
 session_start();
 if (empty($_SESSION['id_usuario'])) { http_response_code(401); echo json_encode(['ok'=>false,'error'=>'No autenticado']); exit; }
+
 require_once __DIR__.'/../../conexion/configv2.php';
 header('Content-Type: application/json; charset=utf-8');
 
@@ -22,23 +23,27 @@ if ($id<=0) j(false,['error'=>'id de sesión inválido'],400);
 
 pg_query($conn,'BEGIN');
 try{
-  // 1) Lock + validar estado abierto
+  // 1) Lock + validar sesión abierta
   $r = pg_query_params(
     $conn,
-    "SELECT id_caja_sesion, id_usuario, estado
+    "SELECT id_caja_sesion, id_caja, id_usuario, estado
        FROM public.caja_sesion
       WHERE id_caja_sesion=$1
       FOR UPDATE",
     [$id]
   );
-  if(!$r || pg_num_rows($r)==0) throw new Exception("Sesión inexistente.");
+  if(!$r || pg_num_rows($r)==0) { pg_query($conn,'ROLLBACK'); j(false,['error'=>'Sesión inexistente.'],404); }
   $rowSes = pg_fetch_assoc($r);
-  if ($rowSes['estado'] !== 'Abierta') throw new Exception("La sesión ya está cerrada.");
+  if ($rowSes['estado'] !== 'Abierta') { pg_query($conn,'ROLLBACK'); j(false,['error'=>'La sesión ya está cerrada.'],409); }
 
-  // (Opcional) si querés forzar que solo el dueño cierre:
-  // if ((int)$rowSes['id_usuario'] !== (int)$_SESSION['id_usuario']) throw new Exception("No sos el dueño de esta sesión.");
+  // (Opcional) exigir dueño o rol admin
+  // if ((int)$rowSes['id_usuario'] !== (int)$_SESSION['id_usuario'] && empty($_SESSION['es_admin'])) {
+  //   pg_query($conn,'ROLLBACK'); j(false,['error'=>'No sos el dueño de esta sesión.'],403);
+  // }
 
-  // 2) Totales teóricos (desde vista) — si no existe la vista, calculalo con SUM() en movimiento_caja
+  // 2) Totales teóricos (vista o fallback)
+  $tEf=0; $tTa=0; $tTr=0; $tOt=0;
+
   $rt = pg_query_params(
     $conn,
     "SELECT COALESCE(efectivo,0), COALESCE(tarjeta,0), COALESCE(transferencia,0), COALESCE(otros,0)
@@ -46,10 +51,25 @@ try{
       WHERE id_caja_sesion=$1",
     [$id]
   );
-  if(!$rt) throw new Exception(pg_last_error($conn));
-  $tEf=0; $tTa=0; $tTr=0; $tOt=0;
-  if (pg_num_rows($rt)>0){
+
+  if ($rt && pg_num_rows($rt)>0) {
     [$tEf,$tTa,$tTr,$tOt] = array_map('floatval', pg_fetch_row($rt));
+  } else {
+    // Fallback por si la vista no existe o no trae nada
+    $rf = pg_query_params(
+      $conn,
+      "SELECT
+         COALESCE(SUM(CASE WHEN medio='EFECTIVO'      THEN importe ELSE 0 END),0) AS efectivo,
+         COALESCE(SUM(CASE WHEN medio='TARJETA'       THEN importe ELSE 0 END),0) AS tarjeta,
+         COALESCE(SUM(CASE WHEN medio='TRANSFERENCIA' THEN importe ELSE 0 END),0) AS transferencia,
+         COALESCE(SUM(CASE WHEN medio NOT IN ('EFECTIVO','TARJETA','TRANSFERENCIA') THEN importe ELSE 0 END),0) AS otros
+       FROM public.movimiento_caja
+       WHERE id_caja_sesion=$1",
+      [$id]
+    );
+    if ($rf && pg_num_rows($rf)>0) {
+      [$tEf,$tTa,$tTr,$tOt] = array_map('floatval', pg_fetch_row($rf));
+    }
   }
 
   // 3) Diferencia global
@@ -73,7 +93,7 @@ try{
             observacion=$10,
             actualizado_en=NOW()
       WHERE id_caja_sesion=$11
-      RETURNING id_caja_sesion, estado, fecha_cierre, diferencia_total",
+      RETURNING id_caja_sesion, id_caja, estado, fecha_cierre, diferencia_total",
     [$cEf,$cTa,$cTr,$cOt,$tEf,$tTa,$tTr,$tOt,$diff,($obs?:null),$id]
   );
   if(!$ru) throw new Exception(pg_last_error($conn));
@@ -81,9 +101,14 @@ try{
 
   pg_query($conn,'COMMIT');
 
-  // 5) Limpiar cache de sesión si la que cerramos es la activa
+  // 5) Limpiar sesión si es la activa
   if (!empty($_SESSION['id_caja_sesion']) && (int)$_SESSION['id_caja_sesion'] === (int)$id) {
     unset($_SESSION['id_caja_sesion']);
+    // También limpiar id_caja y cualquier otro flag relacionado a caja
+    if (!empty($_SESSION['id_caja']) && (int)$_SESSION['id_caja'] === (int)$out['id_caja']) {
+      unset($_SESSION['id_caja']);
+    }
+    if (isset($_SESSION['caja_estado'])) unset($_SESSION['caja_estado']);
     if (function_exists('session_write_close')) session_write_close();
   }
 

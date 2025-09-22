@@ -1,21 +1,14 @@
 <?php
-// facturar_y_cobrar_contado.php — Emite factura (Contado) + cobra y mueve caja/banco
+// facturar_y_cobrar_contado.php — Emite factura (Contado) + cobra y mueve caja/banco (con timbrado por sub-rangos)
 session_start();
 require_once __DIR__ . '/../../conexion/configv2.php';
 header('Content-Type: application/json; charset=utf-8');
 
-function lpad7($n)
-{
-  return str_pad((string)$n, 7, '0', STR_PAD_LEFT);
-}
-function is_iso_date($s)
-{
-  return is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $s);
-}
+function lpad7($n){ return str_pad((string)$n, 7, '0', STR_PAD_LEFT); }
+function is_iso_date($s){ return is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $s); }
 
 // Detecta la columna de tipo en movimiento_stock
-function stock_tipo_col($conn)
-{
+function stock_tipo_col($conn){
   $col = null;
   $q1 = pg_query_params($conn, "SELECT 1 FROM information_schema.columns
            WHERE table_schema='public' AND table_name='movimiento_stock' AND column_name='tipo_movimiento' LIMIT 1", []);
@@ -38,76 +31,41 @@ try {
 
   $in = json_decode(file_get_contents('php://input'), true) ?? $_POST;
 
-  $id_pedido  = isset($in['id_pedido']) ? (int)$in['id_pedido'] : 0;
-  $obs        = isset($in['observacion']) ? trim($in['observacion']) : null;
+  $id_pedido     = isset($in['id_pedido']) ? (int)$in['id_pedido'] : 0;
+  $obs           = isset($in['observacion']) ? trim($in['observacion']) : null;
   $fecha_emision = (isset($in['fecha_emision']) && is_iso_date($in['fecha_emision']))
-    ? $in['fecha_emision'] : date('Y-m-d');
+                    ? $in['fecha_emision'] : date('Y-m-d');
 
   // pagos: [{medio, importe, referencia?, id_cuenta_bancaria?}]
   $pagos = is_array($in['pagos'] ?? null) ? $in['pagos'] : [];
 
-  if ($id_pedido <= 0) {
-    throw new Exception('id_pedido inválido');
-  }
-  if (!$pagos || !is_array($pagos)) {
-    throw new Exception('Debe enviar al menos un medio de pago');
-  }
+  if ($id_pedido <= 0) { throw new Exception('id_pedido inválido'); }
+  if (!$pagos || !is_array($pagos)) { throw new Exception('Debe enviar al menos un medio de pago'); }
 
-// === CAJA/USUARIO: asegurar sesión válida y caja abierta (enum correcto) ===
-$id_usuario = (int)($_SESSION['id_usuario'] ?? 0);
-if ($id_usuario <= 0) {
-  throw new Exception('Sesión de usuario no válida (id_usuario vacío). Volvé a iniciar sesión.');
-}
+  // === CAJA/USUARIO: asegurar sesión válida y caja abierta ===
+  $id_usuario = (int)($_SESSION['id_usuario'] ?? 0);
+  if ($id_usuario <= 0) { throw new Exception('Sesión de usuario no válida (id_usuario vacío). Volvé a iniciar sesión.'); }
 
-$id_caja_sesion = (int)($_SESSION['id_caja_sesion'] ?? 0);
+  $id_caja_sesion = (int)($_SESSION['id_caja_sesion'] ?? 0);
+  $id_caja        = (int)($_SESSION['id_caja'] ?? 0);
+  if ($id_caja_sesion <= 0 || $id_caja <= 0) { throw new Exception('No hay caja abierta en esta sesión. Abrí tu caja antes de facturar contado.'); }
 
-// Valida que la sesión pertenezca al usuario y esté abierta
-function caja_sesion_valida($conn, $id_sesion, $id_usuario){
-  if ($id_sesion <= 0) return false;
-  $q = "
-    SELECT 1
-    FROM public.caja_sesion
-    WHERE id_caja_sesion = $1
-      AND id_usuario     = $2
-      AND estado = 'Abierta'::estado_sesion
-      AND fecha_cierre IS NULL
-    LIMIT 1
-  ";
-  $r = pg_query_params($conn, $q, [$id_sesion, $id_usuario]);
-  return ($r && pg_num_rows($r) > 0);
-}
-
-// Si la de sesión en memoria no es válida, buscá la última abierta del usuario
-if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
-  $rq = pg_query_params(
-    $conn,
-    "SELECT id_caja_sesion
-       FROM public.caja_sesion
-      WHERE id_usuario = $1
-        AND estado = 'Abierta'::estado_sesion
-        AND fecha_cierre IS NULL
-      ORDER BY fecha_apertura DESC, id_caja_sesion DESC
-      LIMIT 1",
-    [$id_usuario]
+  // (Defensivo) validar en BD que la caja_sesion esté Abierta
+  $rCaja = pg_query_params($conn,
+    "SELECT 1 FROM public.caja_sesion WHERE id_caja_sesion=$1 AND id_caja=$2 AND estado='Abierta' LIMIT 1",
+    [$id_caja_sesion, $id_caja]
   );
-  if ($rq && pg_num_rows($rq) > 0) {
-    $id_caja_sesion = (int)pg_fetch_result($rq, 0, 0);
-    $_SESSION['id_caja_sesion'] = $id_caja_sesion; // cachear para siguientes requests
-  } else {
-    throw new Exception('No hay sesión de caja abierta. Abrí tu caja antes de facturar contado.');
+  if (!$rCaja || pg_num_rows($rCaja) === 0) {
+    throw new Exception('La caja de la sesión no está Abierta.');
   }
-}
 
-
-  // sumar pagos
+  // Sumar pagos
   $sumPag = 0.0;
   foreach ($pagos as $p) {
     $imp = (float)($p['importe'] ?? 0);
     if ($imp > 0) $sumPag += $imp;
   }
-  if ($sumPag <= 0) {
-    throw new Exception('Importe total de pagos inválido');
-  }
+  if ($sumPag <= 0) { throw new Exception('Importe total de pagos inválido'); }
 
   // ===== TX =====
   pg_query($conn, 'BEGIN');
@@ -122,9 +80,7 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     FOR UPDATE
   ";
   $rPed = pg_query_params($conn, $sqlPed, [$id_pedido]);
-  if (!$rPed || pg_num_rows($rPed) === 0) {
-    throw new Exception('Pedido no encontrado');
-  }
+  if (!$rPed || pg_num_rows($rPed) === 0) { throw new Exception('Pedido no encontrado'); }
   $ped = pg_fetch_assoc($rPed);
   if (in_array($ped['estado'], ['Anulado', 'Facturado'], true)) {
     throw new Exception('El pedido no está disponible para facturar (Anulado o ya Facturado)');
@@ -152,9 +108,7 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
       (COALESCE(SUM(grav10),0)+COALESCE(SUM(iva10),0)+COALESCE(SUM(grav5),0)+COALESCE(SUM(iva5),0)+COALESCE(SUM(exentas),0))::numeric(14,2) AS total_factura
     FROM base;
   ", [$id_pedido]);
-  if (!$rTot) {
-    throw new Exception('No se pudieron obtener los totales del pedido');
-  }
+  if (!$rTot) { throw new Exception('No se pudieron obtener los totales del pedido'); }
   $tot = pg_fetch_assoc($rTot);
   $grav10  = (float)$tot['total_grav10'];
   $iva10   = (float)$tot['total_iva10'];
@@ -162,46 +116,32 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
   $iva5    = (float)$tot['total_iva5'];
   $exentas = (float)$tot['total_exentas'];
   $total   = (float)$tot['total_factura'];
-  if ($total <= 0) {
-    throw new Exception('Total de factura inválido (ver detalle del pedido)');
-  }
+  if ($total <= 0) { throw new Exception('Total de factura inválido (ver detalle del pedido)'); }
 
   // Contado: validar suma pagos == total
-  if (abs($sumPag - $total) > 0.01) {
-    throw new Exception('El total de pagos debe ser igual al total de la factura (Contado)');
-  }
+  if (abs($sumPag - $total) > 0.01) { throw new Exception('El total de pagos debe ser igual al total de la factura (Contado)'); }
 
-  // Totales cabecera en PHP
   $total_bruto      = $grav10 + $grav5 + $exentas;
   $total_descuento  = 0.0;
   $total_neto       = $total;
 
-  // 3) Timbrado y correlativo -> $numero_doc
-  $rTim = pg_query_params($conn, "
-    SELECT id_timbrado, numero_timbrado, establecimiento, punto_expedicion, nro_actual, nro_hasta,
-           fecha_inicio, fecha_fin
-    FROM public.timbrado
-    WHERE tipo_comprobante='Factura'
-      AND estado='Vigente'
-      AND $1::date BETWEEN fecha_inicio AND fecha_fin
-    ORDER BY id_timbrado
-    FOR UPDATE
-    LIMIT 1
-  ", [$fecha_emision]);
-  if (!$rTim || pg_num_rows($rTim) === 0) {
-    throw new Exception('No hay timbrado vigente para la fecha de emisión');
+  // 3) RESERVA DE NÚMERO (JIT por caja) — reemplaza SELECT/UPDATE sobre timbrado
+  $tamBloque = 500; // ajustable
+  $rRes = pg_query_params($conn,
+    "SELECT * FROM public.reservar_numero($1,$2,$3)", // ('Factura', id_caja, tam_bloque)
+    ['Factura', $id_caja, $tamBloque]
+  );
+  if (!$rRes || pg_num_rows($rRes) === 0) {
+    throw new Exception('No se pudo reservar numeración (timbrado vencido o pool agotado)');
   }
-  $tim = pg_fetch_assoc($rTim);
-  $id_timbrado = (int)$tim['id_timbrado'];
-  $nro_actual  = (int)$tim['nro_actual'];
-  $nro_hasta   = (int)$tim['nro_hasta'];
-  if ($nro_actual > $nro_hasta) {
-    throw new Exception('Rango de timbrado agotado');
-  }
-  $establec = $tim['establecimiento'];
-  $punto    = $tim['punto_expedicion'];
-  $num_tim  = $tim['numero_timbrado'];
-  $numero_doc = $establec . '-' . $punto . '-' . lpad7($nro_actual);
+  $tim = pg_fetch_assoc($rRes);
+  // Devueltos por el SP
+  $id_timbrado       = (int)$tim['id_timbrado'];
+  $id_asignacion     = (int)$tim['id_asignacion'];
+  $nro_corr          = (int)$tim['numero_emitido'];
+  $numero_doc        = $tim['numero_formateado'];  // EEE-PPP-NNNNNNN
+  $num_tim           = $tim['numero_timbrado'];    // número de timbrado (SET)
+  // $tim['establecimiento'], $tim['punto_expedicion'], $tim['tipo_documento'] disponibles si querés guardar
 
   // 4) Validar reservas activas suficientes
   $rCheck = pg_query_params($conn, "
@@ -225,9 +165,7 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     JOIN public.producto p ON p.id_producto = req.id_producto
     WHERE COALESCE(res.qty_reservada,0) < req.qty_requerida
   ", [$id_pedido]);
-  if ($rCheck === false) {
-    throw new Exception('No se pudo validar reservas');
-  }
+  if ($rCheck === false) { throw new Exception('No se pudo validar reservas'); }
   if (pg_num_rows($rCheck) > 0) {
     $faltantes = [];
     while ($row = pg_fetch_assoc($rCheck)) {
@@ -236,20 +174,22 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     throw new Exception('Reserva insuficiente para: ' . implode(', ', $faltantes));
   }
 
-  // 5) Cabecera de FACTURA
+  // 5) Cabecera de FACTURA (guardar lo devuelto por el SP)
   $rCab = pg_query_params($conn, "
     INSERT INTO public.factura_venta_cab(
       fecha_emision, id_cliente, condicion_venta,
       numero_documento, timbrado_numero,
       total_grav10, total_iva10, total_grav5, total_iva5, total_exentas,
       total_bruto, total_descuento, total_neto,
-      estado, id_pedido, observacion, id_timbrado
+      estado, id_pedido, observacion, id_timbrado,
+      id_caja_sesion, id_caja, nro_corr, id_asignacion
     ) VALUES (
       $1, $2, 'Contado',
       $3, $4,
       $5, $6, $7, $8, $9,
       $10, $11, $12,
-      'Emitida', $13, $14, $15
+      'Emitida', $13, $14, $15,
+      $16, $17, $18, $19
     ) RETURNING id_factura
   ", [
     $fecha_emision,
@@ -266,11 +206,13 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     $total_neto,
     $id_pedido,
     $obs,
-    $id_timbrado
+    $id_timbrado,
+    $id_caja_sesion,
+    $id_caja,
+    $nro_corr,
+    $id_asignacion
   ]);
-  if (!$rCab) {
-    throw new Exception('No se pudo crear la factura (cabecera)');
-  }
+  if (!$rCab) { throw new Exception('No se pudo crear la factura (cabecera)'); }
   $id_factura = (int)pg_fetch_result($rCab, 0, 0);
 
   // 6) Detalle
@@ -285,9 +227,7 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     JOIN public.producto p ON p.id_producto = d.id_producto
     WHERE d.id_pedido = $2
   ", [$id_factura, $id_pedido]);
-  if (!$okDet) {
-    throw new Exception('No se pudo insertar el detalle de la factura');
-  }
+  if (!$okDet) { throw new Exception('No se pudo insertar el detalle de la factura'); }
 
   // 7) Movimiento de stock
   $colTipo = stock_tipo_col($conn);
@@ -299,9 +239,7 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     JOIN public.producto p ON p.id_producto = d.id_producto
     WHERE d.id_pedido = $3 AND COALESCE(p.tipo_item,'P') = 'P'
   ", [$fecha_emision . ' 00:00:00', $numero_doc, $id_pedido]);
-  if ($okStock === false) {
-    throw new Exception('No se pudo registrar movimiento de stock');
-  }
+  if ($okStock === false) { throw new Exception('No se pudo registrar movimiento de stock'); }
 
   // 8) Consumir reservas
   $okCons = pg_query_params($conn, "
@@ -309,9 +247,7 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
        SET estado = 'consumida', actualizado_en = NOW()
      WHERE id_pedido = $1 AND TRIM(LOWER(estado)) = 'activa'
   ", [$id_pedido]);
-  if ($okCons === false) {
-    throw new Exception('No se pudo consumir las reservas del pedido');
-  }
+  if ($okCons === false) { throw new Exception('No se pudo consumir las reservas del pedido'); }
 
   // 9) Libro ventas (Cancelada porque cobramos ahora)
   $okLibro = pg_query_params($conn, "
@@ -332,9 +268,7 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     $exentas,
     $total
   ]);
-  if (!$okLibro) {
-    throw new Exception('No se pudo registrar en Libro Ventas');
-  }
+  if (!$okLibro) { throw new Exception('No se pudo registrar en Libro Ventas'); }
 
   // 10) Marcar pedido facturado
   $okPed = pg_query_params(
@@ -342,21 +276,12 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     "UPDATE public.pedido_cab SET estado='Facturado', actualizado_en=NOW() WHERE id_pedido=$1",
     [$id_pedido]
   );
-  if (!$okPed) {
-    throw new Exception('No se pudo actualizar estado del pedido');
-  }
+  if (!$okPed) { throw new Exception('No se pudo actualizar estado del pedido'); }
 
-  // 11) Avanzar numeración timbrado
-  $okTim = pg_query_params(
-    $conn,
-    "UPDATE public.timbrado SET nro_actual = nro_actual + 1 WHERE id_timbrado=$1",
-    [$id_timbrado]
-  );
-  if (!$okTim) {
-    throw new Exception('No se pudo avanzar numeración del timbrado');
-  }
+  // 11) (ELIMINADO) Avanzar numeración timbrado — ya lo hace reservar_numero()
+  // NO hacer: UPDATE timbrado SET nro_actual = nro_actual + 1
 
-  // ======= AHORA SÍ: COBRO + CAJA/BANCO + APLICACIÓN =======
+  // ======= COBRO + CAJA/BANCO + APLICACIÓN =======
   $obsRec = trim(($obs ? ($obs . ' · ') : '') . ('Cobro contado fact. ' . $numero_doc));
 
   // Recibo
@@ -383,21 +308,21 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
     ", [$id_recibo, $medio, $ref, $imp, $fecha_emision, $id_cta]);
     if (!$okPago) throw new Exception('No se pudo registrar el medio de pago');
 
-    // CAJA (Ingreso/origen Venta) — incluye id_usuario
+    // CAJA (Ingreso/origen Venta)
     $qMov = "
-  INSERT INTO public.movimiento_caja
-    (id_caja_sesion, id_usuario, fecha, tipo, origen, medio, monto, descripcion,
-     ref_tipo, ref_id, ref_detalle)
-  VALUES
-    ($1, $2, $3::timestamp, 'Ingreso', 'Venta', $4, $5, $6,
-     'Factura', $7, $8)
-  RETURNING id_movimiento
-";
+      INSERT INTO public.movimiento_caja
+        (id_caja_sesion, id_usuario, fecha, tipo, origen, medio, monto, descripcion,
+         ref_tipo, ref_id, ref_detalle)
+      VALUES
+        ($1, $2, $3::timestamp, 'Ingreso', 'Venta', $4, $5, $6,
+         'Factura', $7, $8)
+      RETURNING id_movimiento
+    ";
     $desc = 'Factura ' . $numero_doc . ' · Recibo #' . $id_recibo;
     $rm = pg_query_params($conn, $qMov, [
       $id_caja_sesion,                 // $1
-      $id_usuario,                     // $2  <-- NUEVO
-      $fecha_emision . ' 00:00:00',      // $3
+      $id_usuario,                     // $2
+      $fecha_emision . ' 00:00:00',    // $3
       $medio,                          // $4
       $imp,                            // $5
       $desc,                           // $6
@@ -411,20 +336,19 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
       }
     }
 
-
-    // BANCO (solo para Tarjeta/Transferencia/Cheque) — COMPATIBLE con tu schema actual
+    // BANCO (solo medios bancarios)
     if (in_array($medio, ['Tarjeta', 'Transferencia', 'Cheque'], true)) {
       $okBanco = pg_query_params($conn, "
-    INSERT INTO public.movimiento_banco(
-      fecha, tipo, id_cuenta_bancaria, referencia, importe, id_recibo, observacion
-    ) VALUES ($1::timestamp, 'Ingreso', $2, $3, $4, $5, $6)
-  ", [
-        $fecha_emision . ' 00:00:00',                    // fecha
-        ($id_cta ?: null),                             // id_cuenta_bancaria (puede ser NULL)
-        ($ref ?: ('Cobro ' . $medio . ' fact. ' . $numero_doc)), // referencia
-        $imp,                                          // importe
-        $id_recibo,                                    // id_recibo (lo acabamos de crear)
-        'Cobro ' . $medio . ' fact. ' . $numero_doc          // observacion
+        INSERT INTO public.movimiento_banco(
+          fecha, tipo, id_cuenta_bancaria, referencia, importe, id_recibo, observacion
+        ) VALUES ($1::timestamp, 'Ingreso', $2, $3, $4, $5, $6)
+      ", [
+        $fecha_emision . ' 00:00:00',
+        ($id_cta ?: null),
+        ($ref ?: ('Cobro ' . $medio . ' fact. ' . $numero_doc)),
+        $imp,
+        $id_recibo,
+        'Cobro ' . $medio . ' fact. ' . $numero_doc
       ]);
       if (!$okBanco) throw new Exception('No se pudo registrar movimiento bancario');
     }
@@ -449,11 +373,11 @@ if (!caja_sesion_valida($conn, $id_caja_sesion, $id_usuario)) {
   pg_query($conn, 'COMMIT');
 
   echo json_encode([
-    'success' => true,
-    'id_factura' => $id_factura,
+    'success'          => true,
+    'id_factura'       => $id_factura,
     'numero_documento' => $numero_doc,
-    'id_recibo' => $id_recibo,
-    'total' => (float)$total
+    'id_recibo'        => $id_recibo,
+    'total'            => (float)$total
   ]);
 } catch (Throwable $e) {
   pg_query($conn, 'ROLLBACK');

@@ -1,5 +1,5 @@
 <?php
-// /caja/abrir.php — UI: Apertura de Caja (elige caja + saldo inicial)
+// /caja/abrir.php — UI: Apertura de Caja (elige caja, SIN saldo inicial)
 session_start();
 if (empty($_SESSION['id_usuario'])) {
   header('Location: /TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/acceso/acceso.html');
@@ -22,12 +22,9 @@ $sql = "
   WHERE c.activa = TRUE
   ORDER BY c.id_sucursal NULLS FIRST, c.nombre
 ";
-
 $rc = pg_query($conn, $sql);
 $cajas = [];
-if ($rc) {
-  while($x = pg_fetch_assoc($rc)) { $cajas[] = $x; }
-}
+if ($rc) { while($x = pg_fetch_assoc($rc)) { $cajas[] = $x; } }
 
 // ¿El usuario tiene ya una sesión abierta?
 $miSesion = null;
@@ -40,7 +37,6 @@ $rms = pg_query_params($conn,
   [ (int)$_SESSION['id_usuario'] ]
 );
 if ($rms && pg_num_rows($rms)>0) { $miSesion = pg_fetch_assoc($rms); }
-
 ?>
 <!doctype html>
 <html lang="es">
@@ -57,21 +53,19 @@ if ($rms && pg_num_rows($rms)>0) { $miSesion = pg_fetch_assoc($rms); }
   .head h1{ margin:0; font-size:22px; }
   .muted{ color:var(--muted); }
   .card{ border:1px solid #e5e7eb; border-radius:12px; padding:14px; margin-bottom:14px; }
-  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grid{ display:grid; grid-template-columns:1fr; gap:12px; }
+  @media(min-width:700px){ .grid{ grid-template-columns:1fr 1fr; } }
   label{ display:block; font-weight:600; margin-bottom:6px; }
-  select, input[type="number"]{
+  select{
     width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font-size:14px;
   }
   .actions{ display:flex; gap:8px; margin-top:12px; }
-  .btn{
-    display:inline-block; padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb; text-decoration:none; color:#111; cursor:pointer;
-  }
+  .btn{ display:inline-block; padding:10px 14px; border-radius:10px; border:1px solid #e5e7eb; text-decoration:none; color:#111; cursor:pointer; }
   .btn.primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
   .btn.ghost{ background:#fff; }
   .badge{ display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; border:1px solid #e5e7eb; }
   .badge.ok{ color:#166534; border-color:#bbf7d0; background:#f0fdf4; }
   .badge.warn{ color:#9a6700; border-color:#fde68a; background:#fef9c3; }
-  .badge.danger{ color:#b91c1c; border-color:#fecaca; background:#fef2f2; }
   .list{ border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; }
   .row{ display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-top:1px solid #f1f5f9; }
   .row:first-child{ border-top:none; }
@@ -107,7 +101,7 @@ if ($rms && pg_num_rows($rms)>0) { $miSesion = pg_fetch_assoc($rms); }
           <label for="id_caja">Caja</label>
           <select id="id_caja" name="id_caja" required>
             <option value="">— Seleccionar —</option>
-            <?php foreach($cajas as $c): 
+            <?php foreach($cajas as $c):
               $ocupada = !empty($c['id_caja_sesion']);
               $label = $c['nombre'] . (isset($c['id_sucursal']) ? (" · Suc. ".$c['id_sucursal']) : "");
               $sub = $ocupada ? (" (Ocupada por ".($c['nombre_cajero'] ? $c['nombre_cajero'] : ('#'.$c['usuario_abre'])).")") : " (Libre)";
@@ -118,11 +112,6 @@ if ($rms && pg_num_rows($rms)>0) { $miSesion = pg_fetch_assoc($rms); }
             <?php endforeach; ?>
           </select>
           <div class="help">Las cajas ocupadas aparecen deshabilitadas.</div>
-        </div>
-        <div>
-          <label for="saldo_inicial">Saldo inicial (Gs)</label>
-          <input type="number" min="0" step="1" id="saldo_inicial" name="saldo_inicial" placeholder="0" value="0" required>
-          <div class="help">Ej.: 100000 para iniciar con Gs 100.000.</div>
         </div>
       </div>
 
@@ -172,7 +161,7 @@ if ($rms && pg_num_rows($rms)>0) { $miSesion = pg_fetch_assoc($rms); }
             <small> · Abierta: <?= e($miSesion['fecha_apertura']) ?></small>
           </div>
           <div class="right">
-            <a class="btn" href="/caja/panel.php">Ir al panel</a>
+            <a class="btn" href="/caja/ui_panel.php">Ir al panel</a>
           </div>
         </div>
       </div>
@@ -187,22 +176,19 @@ if ($rms && pg_num_rows($rms)>0) { $miSesion = pg_fetch_assoc($rms); }
   const $ = (q)=>document.querySelector(q);
   const btn = $("#btnAbrir");
   const msg = $("#msg");
-  const form = $("#formApertura");
 
   async function abrirSesion(){
     msg.textContent = "Abriendo sesión...";
     msg.className = "help";
 
     const id_caja = $("#id_caja").value;
-    const saldo_inicial = $("#saldo_inicial").value;
-
     if(!id_caja){ msg.textContent = "Elegí una caja."; msg.className="error"; return; }
 
     try{
       const res = await fetch('/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/caja/caja_sesion_abrir.php', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ id_caja: parseInt(id_caja,10), saldo_inicial: parseFloat(saldo_inicial||0) })
+        body: JSON.stringify({ id_caja: parseInt(id_caja,10) }) // <-- solo id_caja
       });
       const json = await res.json();
       if(!json.ok){
@@ -212,6 +198,8 @@ if ($rms && pg_num_rows($rms)>0) { $miSesion = pg_fetch_assoc($rms); }
       }
       msg.textContent = "Sesión abierta con éxito. Redirigiendo al panel...";
       msg.className = "success";
+
+      // Refrescar la sesión PHP del browser y redirigir al panel
       setTimeout(()=> location.href='/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/caja/ui_panel.php', 800);
     }catch(err){
       console.error(err);

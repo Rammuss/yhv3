@@ -2,6 +2,10 @@
 // facturacion.php
 session_start();
 
+
+// session_start();
+// header('Content-Type: text/plain; charset=utf-8');
+// print_r($_SESSION);
 // if (empty($_SESSION['nombre_usuario'])) { /* header('Location: login.php'); exit; */ }
 ?>
 <!doctype html>
