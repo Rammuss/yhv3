@@ -1,13 +1,9 @@
 <?php
-// facturar_pedido.php — versión sin generación de cobros (Contado/Crédito)
-// Emite la factura, mueve stock, consume reservas, registra libro_ventas,
-// y (solo si es Crédito) crea CxC/cuotas. NO crea recibos ni movimientos de caja/banco.
-
+// facturar_pedido.php — Emite la factura SIN cobro (Contado/Crédito), con numeración por sub-rangos de CAJA
 session_start();
 require_once __DIR__ . '/../../conexion/configv2.php';
 header('Content-Type: application/json; charset=utf-8');
 
-function lpad7($n){ return str_pad((string)$n, 7, '0', STR_PAD_LEFT); }
 function is_iso_date($s){ return is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/',$s); }
 
 try {
@@ -20,13 +16,12 @@ try {
 
   $id_pedido  = isset($in['id_pedido']) ? (int)$in['id_pedido'] : 0;
   $condicion  = isset($in['condicion_venta']) ? trim($in['condicion_venta']) : '';
-  // (Eliminado) $medioPago / $refPago — NO se usan aquí
   $vto        = isset($in['fecha_vencimiento']) ? trim($in['fecha_vencimiento']) : null;
   $obs        = isset($in['observacion']) ? trim($in['observacion']) : null;
   $fecha_emision = (isset($in['fecha_emision']) && is_iso_date($in['fecha_emision']))
                    ? $in['fecha_emision'] : date('Y-m-d');
 
-  // Plan de cuotas opcional para Crédito
+  // Plan de cuotas (opcional en Crédito)
   $plan = (isset($in['plan_cuotas']) && is_array($in['plan_cuotas'])) ? $in['plan_cuotas'] : [];
 
   if ($id_pedido <= 0) { throw new Exception('id_pedido inválido'); }
@@ -45,16 +40,26 @@ try {
           throw new Exception("Plan de cuotas: total de cuota inválido en cuota ".($i+1));
         }
       }
-      // si hay plan, no exigimos $vto
-      $vto = null;
+      $vto = null; // si hay plan, no exigimos vto simple
     } else {
-      // modo simple: 1 vencimiento
-      if (empty($vto) || !is_iso_date($vto)) {
-        throw new Exception('fecha_vencimiento requerida (YYYY-MM-DD) para Crédito');
-      }
+      if (empty($vto) || !is_iso_date($vto)) { throw new Exception('fecha_vencimiento requerida (YYYY-MM-DD) para Crédito'); }
       if ($vto < $fecha_emision) { throw new Exception('La fecha de vencimiento no puede ser anterior a la emisión'); }
     }
   }
+
+  // === Sesión caja / usuario (requerido para reservar número) ===
+  $id_usuario     = (int)($_SESSION['id_usuario'] ?? 0);
+  $id_caja_sesion = (int)($_SESSION['id_caja_sesion'] ?? 0);
+  $id_caja        = (int)($_SESSION['id_caja'] ?? 0);
+  if ($id_usuario <= 0) { throw new Exception('Sesión de usuario no válida.'); }
+  if ($id_caja_sesion <= 0 || $id_caja <= 0) { throw new Exception('No hay caja abierta en esta sesión.'); }
+
+  // Defensivo: verificar que la caja_sesion esté Abierta
+  $rCaja = pg_query_params($conn,
+    "SELECT 1 FROM public.caja_sesion WHERE id_caja_sesion=$1 AND id_caja=$2 AND estado='Abierta' LIMIT 1",
+    [$id_caja_sesion, $id_caja]
+  );
+  if (!$rCaja || pg_num_rows($rCaja)===0) { throw new Exception('La caja de la sesión no está Abierta.'); }
 
   // ===== TX =====
   pg_query($conn, 'BEGIN');
@@ -107,35 +112,30 @@ try {
   $total   = (float)$tot['total_factura'];
   if ($total <= 0) { throw new Exception('Total de factura inválido (ver detalle del pedido)'); }
 
-  // Totales cabecera en PHP
   $total_bruto      = $grav10 + $grav5 + $exentas;
   $total_descuento  = 0.0;
   $total_neto       = $total;
 
-  // 3) Timbrado (para la FECHA EMISIÓN) y reservar correlativo
-  $sqlTim = "
-    SELECT id_timbrado, numero_timbrado, establecimiento, punto_expedicion, nro_actual, nro_hasta,
-           fecha_inicio, fecha_fin
-    FROM public.timbrado
-    WHERE tipo_comprobante='Factura'
-      AND estado='Vigente'
-      AND $1::date BETWEEN fecha_inicio AND fecha_fin
-    ORDER BY id_timbrado
-    FOR UPDATE
-    LIMIT 1
-  ";
-  $rTim = pg_query_params($conn, $sqlTim, [$fecha_emision]);
-  if (!$rTim || pg_num_rows($rTim) === 0) { throw new Exception('No hay timbrado vigente para la fecha de emisión'); }
-  $tim = pg_fetch_assoc($rTim);
-  $id_timbrado = (int)$tim['id_timbrado'];
-  $nro_actual  = (int)$tim['nro_actual'];
-  $nro_hasta   = (int)$tim['nro_hasta'];
-  if ($nro_actual > $nro_hasta) { throw new Exception('Rango de timbrado agotado'); }
+  // 3) RESERVA DE NÚMERO (JIT por CAJA)
+  $tamBloque = 500; // configurable
+  $rRes = pg_query_params($conn,
+    "SELECT * FROM public.reservar_numero($1,$2,$3)", // ('Factura', id_caja, tam_bloque)
+    ['Factura', $id_caja, $tamBloque]
+  );
+  if (!$rRes || pg_num_rows($rRes)===0) {
+    throw new Exception('No se pudo reservar numeración (timbrado vencido o pool agotado)');
+  }
+  $rowNum = pg_fetch_assoc($rRes);
+  // devuelve: id_timbrado, id_asignacion, nro_corr, numero_formateado
+  $id_timbrado   = (int)$rowNum['id_timbrado'];
+  $id_asignacion = (int)$rowNum['id_asignacion'];
+  $nro_corr      = (int)$rowNum['nro_corr'];
+  $numero_doc    = $rowNum['numero_formateado'];    // EEE-PPP-NNNNNNN
 
-  $establec = $tim['establecimiento'];
-  $punto    = $tim['punto_expedicion'];
-  $num_tim  = $tim['numero_timbrado'];
-  $numero_doc = $establec . '-' . $punto . '-' . lpad7($nro_actual);
+  // número de timbrado para Libro Ventas
+  $rNumTim = pg_query_params($conn, "SELECT numero_timbrado FROM public.timbrado WHERE id_timbrado=$1 LIMIT 1", [$id_timbrado]);
+  if (!$rNumTim || pg_num_rows($rNumTim) === 0) { throw new Exception('No se pudo obtener número de timbrado'); }
+  $num_tim = pg_fetch_result($rNumTim, 0, 0);
 
   // 4) Validar reservas activas suficientes
   $sqlCheckReserva = "
@@ -169,20 +169,22 @@ try {
     throw new Exception('Reserva insuficiente para: '.implode(', ', $faltantes));
   }
 
-  // 5) Cabecera de FACTURA
+  // 5) Cabecera de FACTURA (guardar datos del SP)
   $sqlFacCab = "
     INSERT INTO public.factura_venta_cab(
       fecha_emision, id_cliente, condicion_venta,
       numero_documento, timbrado_numero,
       total_grav10, total_iva10, total_grav5, total_iva5, total_exentas,
       total_bruto, total_descuento, total_neto,
-      estado, id_pedido, observacion, id_timbrado
+      estado, id_pedido, observacion, id_timbrado,
+      id_caja_sesion, id_caja, nro_corr, id_asignacion
     ) VALUES (
       $1, $2, $3,
       $4, $5,
       $6, $7, $8, $9, $10,
       $11, $12, $13,
-      'Emitida', $14, $15, $16
+      'Emitida', $14, $15, $16,
+      $17, $18, $19, $20
     ) RETURNING id_factura
   ";
   $paramsCab = [
@@ -190,7 +192,8 @@ try {
     $numero_doc, $num_tim,
     $grav10, $iva10, $grav5, $iva5, $exentas,
     $total_bruto, $total_descuento, $total_neto,
-    $id_pedido, $obs, $id_timbrado
+    $id_pedido, $obs, $id_timbrado,
+    $id_caja_sesion, $id_caja, $nro_corr, $id_asignacion
   ];
   $rCab = pg_query_params($conn, $sqlFacCab, $paramsCab);
   if (!$rCab) { throw new Exception('No se pudo crear la factura (cabecera)'); }
@@ -213,19 +216,12 @@ try {
 
   // 7) Movimiento de stock (solo productos) — 'salida'
   $sqlStock = "
-    INSERT INTO public.movimiento_stock(
-      fecha, id_producto, tipo_movimiento, cantidad, observacion
-    )
-    SELECT
-      $1::timestamp,
-      d.id_producto,
-      'salida'::varchar(10),
-      GREATEST(1, ROUND(d.cantidad)::int),
-      'Fact. '||$2
+    INSERT INTO public.movimiento_stock(fecha, id_producto, tipo_movimiento, cantidad, observacion)
+    SELECT $1::timestamp, d.id_producto, 'salida'::varchar(10),
+           d.cantidad, 'Fact. '||$2
     FROM public.pedido_det d
     JOIN public.producto p ON p.id_producto = d.id_producto
-    WHERE d.id_pedido = $3
-      AND COALESCE(p.tipo_item,'P') = 'P'
+    WHERE d.id_pedido = $3 AND COALESCE(p.tipo_item,'P') = 'P'
   ";
   $okStock = pg_query_params($conn, $sqlStock, [$fecha_emision.' 00:00:00', $numero_doc, $id_pedido]);
   if ($okStock === false) { throw new Exception('No se pudo registrar movimiento de stock'); }
@@ -233,31 +229,45 @@ try {
   // 8) Consumir reservas del pedido
   $sqlConsumirReserva = "
     UPDATE public.reserva_stock
-    SET estado = 'consumida',
-        actualizado_en = NOW()
-    WHERE id_pedido = $1
-      AND lower(estado) = 'activa'
+    SET estado = 'consumida', actualizado_en = NOW()
+    WHERE id_pedido = $1 AND lower(estado) = 'activa'
   ";
   $okCons = pg_query_params($conn, $sqlConsumirReserva, [$id_pedido]);
   if ($okCons === false) { throw new Exception('No se pudo consumir las reservas del pedido'); }
 
-  // 9) SIN COBROS AQUÍ
-  // Contado: no hace nada (quedará pendiente de cobro en UI de Cobros → Facturas)
-  // Crédito: crear CxC (simple o por cuotas) SIN pagos aquí.
+  // 9) SIN cobros aquí. Solo Libro Ventas “Emitida”.
+  $okLibro = pg_query_params(
+    $conn,
+    "INSERT INTO public.libro_ventas(
+       fecha_emision, id_factura, numero_documento, timbrado_numero, id_cliente, condicion_venta,
+       grav10, iva10, grav5, iva5, exentas, total, estado_doc
+     ) VALUES ($1::date,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Emitida')",
+    [$fecha_emision, $id_factura, $numero_doc, $num_tim, $id_cliente, $condicion,
+     $grav10, $iva10, $grav5, $iva5, $exentas, $total]
+  );
+  if (!$okLibro) { throw new Exception('No se pudo registrar en Libro Ventas'); }
+
+  // 10) Marcar pedido como facturado
+  $okPed = pg_query_params($conn,
+    "UPDATE public.pedido_cab SET estado='Facturado', actualizado_en=NOW() WHERE id_pedido=$1",
+    [$id_pedido]
+  );
+  if (!$okPed) { throw new Exception('No se pudo actualizar estado del pedido'); }
+
+  // 11) Crédito: generar CxC (simple o por cuotas), sin cobros aquí
   if ($condicion === 'Credito') {
     if (count($plan) > 0) {
-      // cuotas múltiples
       $sumPlan = 0.0;
       foreach ($plan as $c) { $sumPlan += (float)$c['total']; }
       if (abs($sumPlan - $total) > 0.05) {
         throw new Exception('El total del plan de cuotas no coincide con el total de la factura');
       }
       foreach ($plan as $c) {
-        $nro      = (int)$c['nro'];
-        $venc     = (string)$c['vencimiento'];
-        $cap      = isset($c['capital']) ? (float)$c['capital'] : 0.0;
-        $int      = isset($c['interes']) ? (float)$c['interes'] : 0.0;
-        $totalCu  = (float)$c['total'];
+        $nro   = (int)$c['nro'];
+        $venc  = (string)$c['vencimiento'];
+        $cap   = isset($c['capital']) ? (float)$c['capital'] : 0.0;
+        $int   = isset($c['interes']) ? (float)$c['interes'] : 0.0;
+        $totCu = (float)$c['total'];
 
         $okCxc = pg_query_params(
           $conn,
@@ -266,46 +276,21 @@ try {
               monto_origen, saldo_actual, fecha_vencimiento,
               estado, nro_cuota, capital, interes)
            VALUES ($1,$2,$3::date,$4,$4,$5::date,'Abierta',$6,$7,$8)",
-          [$id_cliente, $id_factura, $fecha_emision, $totalCu, $venc, $nro, $cap, $int]
+          [$id_cliente, $id_factura, $fecha_emision, $totCu, $venc, $nro, $cap, $int]
         );
         if (!$okCxc) { throw new Exception('No se pudo crear la cuota de CxC'); }
       }
     } else {
-      // 1 sola CxC
       $okCxc = pg_query_params(
         $conn,
-        "INSERT INTO public.cuenta_cobrar(id_cliente, id_factura, fecha_origen, monto_origen, saldo_actual, fecha_vencimiento, estado)
+        "INSERT INTO public.cuenta_cobrar
+           (id_cliente, id_factura, fecha_origen, monto_origen, saldo_actual, fecha_vencimiento, estado)
          VALUES ($1,$2,$3::date,$4,$4,$5::date,'Abierta')",
         [$id_cliente, $id_factura, $fecha_emision, $total, $vto]
       );
       if (!$okCxc) { throw new Exception('No se pudo crear la cuenta por cobrar'); }
     }
   }
-
-  // 10) Libro Ventas
-  $okLibro = pg_query_params(
-    $conn,
-    "INSERT INTO public.libro_ventas(fecha_emision, id_factura, numero_documento, timbrado_numero, id_cliente, condicion_venta,
-                                     grav10, iva10, grav5, iva5, exentas, total, estado_doc)
-     VALUES ($1::date,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Emitida')",
-    [$fecha_emision, $id_factura, $numero_doc, $num_tim, $id_cliente, $condicion,
-     $grav10, $iva10, $grav5, $iva5, $exentas, $total]
-  );
-  if (!$okLibro) { throw new Exception('No se pudo registrar en Libro Ventas'); }
-
-  // 11) Marcar pedido como facturado
-  $okPed = pg_query_params($conn,
-    "UPDATE public.pedido_cab SET estado='Facturado', actualizado_en=NOW() WHERE id_pedido=$1",
-    [$id_pedido]
-  );
-  if (!$okPed) { throw new Exception('No se pudo actualizar estado del pedido'); }
-
-  // 12) Avanzar numeración del timbrado
-  $okTim = pg_query_params($conn,
-    "UPDATE public.timbrado SET nro_actual = nro_actual + 1 WHERE id_timbrado=$1",
-    [$id_timbrado]
-  );
-  if (!$okTim) { throw new Exception('No se pudo avanzar numeración del timbrado'); }
 
   pg_query($conn, 'COMMIT');
 
@@ -317,6 +302,7 @@ try {
     'fecha_emision'=> $fecha_emision,
     'total'=> $total
   ]);
+
 } catch (Throwable $e) {
   pg_query($conn, 'ROLLBACK');
   http_response_code(400);

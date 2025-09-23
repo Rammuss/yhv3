@@ -125,7 +125,7 @@ try {
   $total_descuento  = 0.0;
   $total_neto       = $total;
 
-  // 3) RESERVA DE NÚMERO (JIT por caja) — reemplaza SELECT/UPDATE sobre timbrado
+  // 3) RESERVA DE NÚMERO (JIT por caja)
   $tamBloque = 500; // ajustable
   $rRes = pg_query_params($conn,
     "SELECT * FROM public.reservar_numero($1,$2,$3)", // ('Factura', id_caja, tam_bloque)
@@ -134,14 +134,18 @@ try {
   if (!$rRes || pg_num_rows($rRes) === 0) {
     throw new Exception('No se pudo reservar numeración (timbrado vencido o pool agotado)');
   }
-  $tim = pg_fetch_assoc($rRes);
-  // Devueltos por el SP
-  $id_timbrado       = (int)$tim['id_timbrado'];
-  $id_asignacion     = (int)$tim['id_asignacion'];
-  $nro_corr          = (int)$tim['numero_emitido'];
-  $numero_doc        = $tim['numero_formateado'];  // EEE-PPP-NNNNNNN
-  $num_tim           = $tim['numero_timbrado'];    // número de timbrado (SET)
-  // $tim['establecimiento'], $tim['punto_expedicion'], $tim['tipo_documento'] disponibles si querés guardar
+  $rowNum = pg_fetch_assoc($rRes);
+
+  // Devueltos por reservar_numero(): id_timbrado, id_asignacion, nro_corr, numero_formateado
+  $id_timbrado   = (int)$rowNum['id_timbrado'];
+  $id_asignacion = (int)$rowNum['id_asignacion'];
+  $nro_corr      = (int)$rowNum['nro_corr'];
+  $numero_doc    = $rowNum['numero_formateado']; // EEE-PPP-NNNNNNN
+
+  // Obtener número de timbrado (para libro_ventas) a partir de id_timbrado
+  $rNumTim = pg_query_params($conn, "SELECT numero_timbrado FROM public.timbrado WHERE id_timbrado=$1 LIMIT 1", [$id_timbrado]);
+  if (!$rNumTim || pg_num_rows($rNumTim) === 0) { throw new Exception('No se pudo obtener número de timbrado'); }
+  $num_tim = pg_fetch_result($rNumTim, 0, 0);
 
   // 4) Validar reservas activas suficientes
   $rCheck = pg_query_params($conn, "
@@ -279,7 +283,6 @@ try {
   if (!$okPed) { throw new Exception('No se pudo actualizar estado del pedido'); }
 
   // 11) (ELIMINADO) Avanzar numeración timbrado — ya lo hace reservar_numero()
-  // NO hacer: UPDATE timbrado SET nro_actual = nro_actual + 1
 
   // ======= COBRO + CAJA/BANCO + APLICACIÓN =======
   $obsRec = trim(($obs ? ($obs . ' · ') : '') . ('Cobro contado fact. ' . $numero_doc));

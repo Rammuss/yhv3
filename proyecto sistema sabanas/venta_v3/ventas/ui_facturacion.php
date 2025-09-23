@@ -1,12 +1,6 @@
 <?php
 // facturacion.php
 session_start();
-
-
-// session_start();
-// header('Content-Type: text/plain; charset=utf-8');
-// print_r($_SESSION);
-// if (empty($_SESSION['nombre_usuario'])) { /* header('Location: login.php'); exit; */ }
 ?>
 <!doctype html>
 <html lang="es">
@@ -92,12 +86,13 @@ session_start();
       <input id="timbradoHiddenId" type="hidden" />
     </div>
     <div>
-      <button id="btnRefrescarTimbrado" class="btn small">Actualizar</button><br/>
+      <button id="btnRefrescarTimbrado" class="btn small">Actualizar</button>
+      <button id="btnPrepararTimbrado" class="btn small" style="display:none">Preparar numeración</button><br/>
       <span id="timbradoBadge" class="badge ok" style="display:none">OK</span>
     </div>
   </div>
   <div class="row hint" id="timbradoAyuda">
-    Mostramos el próximo número a emitir. El correlativo definitivo se asigna al confirmar la factura.
+    Mostramos el próximo número de <b>tu caja</b>. El correlativo definitivo se asigna al confirmar la factura.
   </div>
 </div>
 
@@ -253,7 +248,7 @@ session_start();
 const $ = (id)=>document.getElementById(id);
 
 /* ========= PRINT SEGURO ========= */
-const FACTURA_PRINT_URL = 'factura_print.php';  // ajustá rutas si es necesario
+const FACTURA_PRINT_URL = 'factura_print.php';
 const RECIBO_PRINT_URL  = 'recibo_print.php';
 
 function abrirImpresion(url, auto=true){
@@ -266,12 +261,8 @@ function abrirImpresion(url, auto=true){
     location.href = final;
   }
 }
-function abrirImpresionFactura(id, auto=true){
-  abrirImpresion(`${FACTURA_PRINT_URL}?id=${encodeURIComponent(id)}`, auto);
-}
-function abrirImpresionRecibo(id, auto=true){
-  abrirImpresion(`${RECIBO_PRINT_URL}?id=${encodeURIComponent(id)}`, auto);
-}
+function abrirImpresionFactura(id, auto=true){ abrirImpresion(`${FACTURA_PRINT_URL}?id=${encodeURIComponent(id)}`, auto); }
+function abrirImpresionRecibo(id, auto=true){ abrirImpresion(`${RECIBO_PRINT_URL}?id=${encodeURIComponent(id)}`, auto); }
 /* ================================= */
 
 // ===== Estado =====
@@ -292,34 +283,85 @@ function fmtISO(d){ const m=String(d.getMonth()+1).padStart(2,'0'); const day=St
 function toNum(v){ return Number(v||0); }
 function money(v,dec=2){ return Number(v||0).toFixed(dec); }
 
-// ===== Timbrado =====
+// ===== Timbrado (preview por CAJA) =====
 async function cargarTimbrado(){
-  const info=$('timbradoInfo'), badge=$('timbradoBadge');
-  info.value='(Cargando timbrado...)'; badge.style.display='none';
+  const info = $('timbradoInfo');
+  const badge = $('timbradoBadge');
+  const btnPrep = $('btnPrepararTimbrado');
+
+  info.value = '(Cargando timbrado...)';
+  badge.style.display = 'none';
+  btnPrep.style.display = 'none';
+
   try{
-    const r = await fetch('../timbrado/get_timbrado_vigente.php');
+    // Endpoint que usa la caja de la sesión y devuelve next_preview / next_preview_fmt
+    const r = await fetch('../../venta_v3/timbrado/get_timbrado_vigente.php', { credentials: 'include' });
     const j = await r.json();
+
     if(!j.success){
-      info.value='No hay timbrado vigente para Factura';
-      badge.textContent='Sin timbrado'; badge.className='badge danger'; badge.style.display='inline-block';
-      timbrado=null; return;
+      info.value = 'No hay timbrado vigente para Factura';
+      badge.textContent = 'Sin timbrado';
+      badge.className = 'badge danger';
+      badge.style.display = 'inline-block';
+      timbrado = null;
+      return;
     }
-    timbrado=j.timbrado;
-    const numFmt = timbrado.establecimiento+'-'+timbrado.punto_expedicion+'-'+pad7(timbrado.numero_proximo);
-    info.value = `Timbrado ${timbrado.numero_timbrado} | Próximo: ${numFmt} | Vigente hasta ${timbrado.fecha_fin}`;
-    const hoy=new Date(); const fin=parseISO(timbrado.fecha_fin);
-    const dias=daysDiff(hoy, fin);
+
+    timbrado = j.timbrado || null;
+    const est = timbrado.establecimiento;
+    const pe  = timbrado.punto_expedicion;
+
+    // Próximo número de la CAJA (si hay bloque). Si no, mostramos “se asignará…”
+    let proxTxt = '(se asignará al confirmar)';
+    if (j.next_preview_fmt) {
+      proxTxt = j.next_preview_fmt; // ya viene EEE-PPP-NNNNNNN
+    } else if (j.next_preview) {
+      proxTxt = `${est}-${pe}-${pad7(j.next_preview)}`;
+    }
+
+    info.value = `Timbrado ${timbrado.numero_timbrado} | Próximo caja: ${proxTxt} | Vigente hasta ${timbrado.fecha_fin}`;
+
+    // Badge de vigencia por fechas
+    const hoy = new Date();
+    const fin = parseISO(timbrado.fecha_fin);
+    const dias = daysDiff(hoy, fin);
     let state='ok', text='OK';
     if (dias<=0){ state='danger'; text='Vencido'; }
     else if (dias<=30){ state='warn'; text=`Vence en ${dias} días`; }
-    badge.textContent=text; badge.className='badge '+state; badge.style.display='inline-block';
+    badge.textContent = text;
+    badge.className = 'badge '+state;
+    badge.style.display = 'inline-block';
+
+    // Si no hay bloque asignado a la caja, ofrezco pre-provisionar (opcional)
+    if (!j.id_asignacion || j.disponibles_caja === 0 || !j.next_preview) {
+      $('btnPrepararTimbrado').style.display = 'inline-block';
+    } else {
+      $('btnPrepararTimbrado').style.display = 'none';
+    }
+
     validarFechaContraTimbrado();
   }catch(e){
-    info.value='Error al cargar timbrado'; timbrado=null;
-    const b=$('timbradoBadge'); b.textContent='Error'; b.className='badge danger'; b.style.display='inline-block';
+    info.value='Error al cargar timbrado';
+    timbrado=null;
+    badge.textContent='Error';
+    badge.className='badge danger';
+    badge.style.display='inline-block';
   }
 }
 $('btnRefrescarTimbrado').addEventListener('click', cargarTimbrado);
+
+// (Opcional) Pre-provisionar bloque sin emitir (para que el preview muestre número)
+$('btnPrepararTimbrado').addEventListener('click', async ()=>{
+  try{
+    const r = await fetch('../timbrado/provisionar_bloque_factura.php', { method:'POST', credentials:'include' });
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'No se pudo preparar numeración');
+    await cargarTimbrado();
+    alert('Numeración preparada para esta caja.');
+  }catch(e){
+    alert(e.message);
+  }
+});
 
 // ===== Condición =====
 $('condicion').addEventListener('change', onCondicionChange);
@@ -602,7 +644,6 @@ $('btnEmitir').addEventListener('click', async ()=>{
       alert('Factura emitida: '+j.numero_documento+' | Total: '+Number(j.total).toFixed(2));
       $('status').textContent='Factura emitida: '+j.numero_documento;
       cargarTimbrado();
-      // Imprimir FACTURA
       abrirImpresionFactura(j.id_factura, true);
     } else {
       // Contado + cobrar ahora
@@ -629,9 +670,7 @@ $('btnEmitir').addEventListener('click', async ()=>{
       alert('Factura emitida y cobrada: '+j.numero_documento);
       $('status').textContent='Factura cobrada: '+j.numero_documento;
 
-      // 1) Imprimir FACTURA
       abrirImpresionFactura(j.id_factura, true);
-      // 2) Imprimir RECIBO (si backend lo devolvió)
       if (j.id_recibo) {
         setTimeout(()=>abrirImpresionRecibo(j.id_recibo, true), 600);
       }
