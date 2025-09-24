@@ -1,99 +1,86 @@
 <?php
-// ../timbrado/get_timbrado_info.php  — Preview por caja (NO reserva número)
+// get_timbrado_para_caja.php
+// Devuelve el timbrado vigente asignado a la caja, y el próximo número sugerido.
+
 session_start();
 require_once __DIR__ . '/../../conexion/configv2.php';
 header('Content-Type: application/json; charset=utf-8');
 
-if (empty($_SESSION['nombre_usuario'])) {
-  http_response_code(401);
-  echo json_encode(['success'=>false,'error'=>'No autorizado']); exit;
-}
-
-$idCaja = isset($_SESSION['id_caja']) ? (int)$_SESSION['id_caja'] : (int)($_GET['id_caja'] ?? 0);
-if ($idCaja <= 0) {
-  echo json_encode(['success'=>false,'error'=>'id_caja requerido']); exit;
-}
-
 try {
-  // 1) Timbrado vigente (Factura)
-  $sqlTim = "
-    SELECT id_timbrado, numero_timbrado, tipo_comprobante, tipo_documento,
-           establecimiento, punto_expedicion, nro_desde, nro_hasta,
-           fecha_inicio, fecha_fin, estado
-    FROM public.timbrado
-    WHERE tipo_comprobante = 'Factura'
-      AND estado = 'Vigente'
-      AND CURRENT_DATE BETWEEN fecha_inicio AND fecha_fin
-    ORDER BY id_timbrado DESC
+  if (empty($_SESSION['nombre_usuario'])) { 
+    throw new Exception('No autenticado');
+  }
+
+  $id_caja = (int)($_SESSION['id_caja'] ?? 0);
+  if ($id_caja <= 0) throw new Exception('Caja no asignada en sesión');
+
+  // Aceptar tipo por GET ?tipo=Factura|NC|ND, o por ?clase=NC|ND (desde la pantalla de notas)
+  $tipo = '';
+  if (isset($_GET['tipo']) && trim($_GET['tipo']) !== '') {
+    $tipo = trim($_GET['tipo']);
+  } elseif (isset($_GET['clase']) && trim($_GET['clase']) !== '') {
+    // Mapear 'clase' a tipo_comprobante
+    $clase = strtoupper(trim($_GET['clase']));
+    if ($clase === 'NC') $tipo = 'NC';
+    elseif ($clase === 'ND') $tipo = 'ND';
+  }
+
+  // Fallback (si no vino nada). OJO: mejor siempre pasar el tipo correcto desde la UI.
+  if ($tipo === '') {
+    // Puedes elegir forzar a 'Factura' como último recurso.
+    $tipo = 'Factura';
+    // Si preferís, en vez de forzar, lanza error:
+    // throw new Exception('Tipo de comprobante requerido');
+  }
+
+  $sql = "
+    SELECT t.id_timbrado, t.numero_timbrado, t.tipo_comprobante,
+           t.establecimiento, t.punto_expedicion,
+           t.nro_desde, t.nro_hasta, t.nro_actual,
+           t.fecha_inicio, t.fecha_fin, t.estado,
+           a.id_asignacion
+    FROM public.timbrado t
+    JOIN public.timbrado_asignacion a
+      ON a.id_timbrado = t.id_timbrado
+     AND lower(a.estado) = 'vigente'
+    WHERE a.id_caja = $1
+      AND t.tipo_comprobante = $2
+      AND t.estado = 'Vigente'
+      AND CURRENT_DATE BETWEEN t.fecha_inicio AND t.fecha_fin
+    ORDER BY t.fecha_fin ASC, t.id_timbrado ASC
     LIMIT 1
   ";
-  $rt = pg_query($conn, $sqlTim);
-  if (!$rt || pg_num_rows($rt) === 0) {
-    echo json_encode(['success'=>false,'error'=>'No hay timbrado vigente para Factura']); exit;
-  }
-  $t = pg_fetch_assoc($rt);
-  $id_timbrado = (int)$t['id_timbrado'];
-
-  // 2) Bloque VIGENTE de ESTA CAJA (el más reciente)
-  $ra = pg_query_params($conn, "
-    SELECT id_asignacion, desde_numero, hasta_numero, siguiente_numero, estado
-    FROM public.timbrado_asignacion
-    WHERE id_timbrado = $1
-      AND id_caja     = $2
-      AND estado      = 'Vigente'
-      AND siguiente_numero <= hasta_numero
-    ORDER BY id_asignacion DESC
-    LIMIT 1
-  ", [$id_timbrado, $idCaja]);
-
-  $id_asignacion = null;
-  $next_preview = null;
-  $disponibles_caja = 0;
-
-  if ($ra && pg_num_rows($ra) > 0) {
-    $a = pg_fetch_assoc($ra);
-    $id_asignacion   = (int)$a['id_asignacion'];
-    $desde           = (int)$a['desde_numero'];
-    $hasta           = (int)$a['hasta_numero'];
-    $siguiente       = (int)$a['siguiente_numero'];
-
-    if ($siguiente <= $hasta) {
-      $next_preview = $siguiente;
-      $disponibles_caja = max(0, $hasta - $siguiente + 1);
-    }
+  $res = pg_query_params($conn, $sql, [$id_caja, $tipo]);
+  if (!$res || pg_num_rows($res) === 0) {
+    echo json_encode(['success'=>false, 'error'=>'No hay timbrado vigente asignado a esta caja para el tipo '.$tipo]);
+    exit;
   }
 
-  // 3) Formato amigable
-  $fmt7 = function($n){ return str_pad((string)$n, 7, '0', STR_PAD_LEFT); };
-  $next_preview_fmt = null;
-  if ($next_preview !== null) {
-    $next_preview_fmt = $t['establecimiento'].'-'.$t['punto_expedicion'].'-'.$fmt7($next_preview);
-  }
+  $row = pg_fetch_assoc($res);
+  $siguiente = max((int)$row['nro_desde'], (int)$row['nro_actual'] + 1);
+  $agotado   = $siguiente > (int)$row['nro_hasta'];
 
-  // 4) Respuesta — OJO: campos de preview en el NIVEL RAÍZ
   echo json_encode([
     'success' => true,
     'timbrado'=> [
-      'id_timbrado'      => (int)$t['id_timbrado'],
-      'numero_timbrado'  => $t['numero_timbrado'],
-      'tipo_comprobante' => $t['tipo_comprobante'],
-      'tipo_documento'   => $t['tipo_documento'],
-      'establecimiento'  => $t['establecimiento'],
-      'punto_expedicion' => $t['punto_expedicion'],
-      'nro_desde'        => (int)$t['nro_desde'],
-      'nro_hasta'        => (int)$t['nro_hasta'],
-      'fecha_inicio'     => $t['fecha_inicio'],
-      'fecha_fin'        => $t['fecha_fin'],
-      'estado'           => $t['estado']
-    ],
-    'id_asignacion'    => $id_asignacion,       // ← raíz
-    'next_preview'     => $next_preview,        // ← raíz
-    'next_preview_fmt' => $next_preview_fmt,    // ← raíz
-    'disponibles_caja' => $disponibles_caja,    // ← raíz
-    'nota'             => 'El número definitivo se asigna al confirmar (reservar_numero).'
+      'id_timbrado'       => (int)$row['id_timbrado'],
+      'numero_timbrado'   => $row['numero_timbrado'],
+      'tipo_comprobante'  => $row['tipo_comprobante'],
+      'establecimiento'   => $row['establecimiento'],
+      'punto_expedicion'  => $row['punto_expedicion'],
+      'nro_desde'         => (int)$row['nro_desde'],
+      'nro_hasta'         => (int)$row['nro_hasta'],
+      'nro_actual'        => (int)$row['nro_actual'],
+      'fecha_inicio'      => $row['fecha_inicio'],
+      'fecha_fin'         => $row['fecha_fin'],
+      'id_asignacion'     => (int)$row['id_asignacion'],
+      'proximo_numero'    => $agotado ? null : $siguiente,
+      'proximo_formateado'=> $agotado ? null : ($row['establecimiento'].'-'.$row['punto_expedicion'].'-'.str_pad($siguiente,7,'0',STR_PAD_LEFT)),
+      'agotado'           => $agotado
+    ]
   ]);
 
 } catch (Throwable $e) {
-  http_response_code(500);
+  http_response_code(400);
   echo json_encode(['success'=>false,'error'=>$e->getMessage()]);
 }

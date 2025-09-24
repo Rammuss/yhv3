@@ -79,16 +79,20 @@ session_start();
 
 <!-- TIMBRADO -->
 <div class="card">
+  <h2 style="margin:0 0 6px 0">Timbrado vigente</h2>
   <div class="row" style="align-items:flex-end">
     <div style="flex:1">
-      <label>Timbrado vigente</label><br/>
       <input id="timbradoInfo" type="text" readonly style="width:100%" placeholder="(Cargando timbrado...)"/>
       <input id="timbradoHiddenId" type="hidden" />
+      <div style="margin-top:6px">
+        <span id="timEstado" class="badge ok" style="display:none">OK</span>
+        <span id="timRango" class="pill">—</span>
+        <span id="timPPP" class="pill">—</span>
+        <span id="timProx" class="pill">Próximo: —</span>
+      </div>
     </div>
     <div>
       <button id="btnRefrescarTimbrado" class="btn small">Actualizar</button>
-      <button id="btnPrepararTimbrado" class="btn small" style="display:none">Preparar numeración</button><br/>
-      <span id="timbradoBadge" class="badge ok" style="display:none">OK</span>
     </div>
   </div>
   <div class="row hint" id="timbradoAyuda">
@@ -250,7 +254,6 @@ const $ = (id)=>document.getElementById(id);
 /* ========= PRINT SEGURO ========= */
 const FACTURA_PRINT_URL = 'factura_print.php';
 const RECIBO_PRINT_URL  = 'recibo_print.php';
-
 function abrirImpresion(url, auto=true){
   const final = `${url}${auto ? (url.includes('?') ? '&auto=1' : '?auto=1') : ''}`;
   let w = window.open('', '_blank');
@@ -270,7 +273,7 @@ let clienteSel = null;
 let pedidoSel  = null;
 let totales = {grav10:0,iva10:0,grav5:0,iva5:0,exentas:0,total:0};
 let timbrado = null;
-let planCuotas = []; // para enviar al backend en crédito
+let planCuotas = [];
 
 // ===== Helpers =====
 function daysDiff(a, b){ const MS=24*60*60*1000; return Math.floor((b.getTime()-a.getTime())/MS); }
@@ -284,84 +287,77 @@ function toNum(v){ return Number(v||0); }
 function money(v,dec=2){ return Number(v||0).toFixed(dec); }
 
 // ===== Timbrado (preview por CAJA) =====
+const URL_TIMBRADO = '../../venta_v3/timbrado/get_timbrado_vigente.php?tipo=Factura'; // Cambiá Factura por NC/ND según pantalla
+
 async function cargarTimbrado(){
   const info = $('timbradoInfo');
-  const badge = $('timbradoBadge');
-  const btnPrep = $('btnPrepararTimbrado');
+  const bEstado = $('timEstado');
+  const pRango  = $('timRango');
+  const pPPP    = $('timPPP');
+  const pProx   = $('timProx');
+  const ayuda   = $('timbradoAyuda');
 
   info.value = '(Cargando timbrado...)';
-  badge.style.display = 'none';
-  btnPrep.style.display = 'none';
+  bEstado.style.display='none';
+  pRango.textContent='—';
+  pPPP.textContent='—';
+  pProx.textContent='Próximo: —';
 
   try{
-    // Endpoint que usa la caja de la sesión y devuelve next_preview / next_preview_fmt
-    const r = await fetch('../../venta_v3/timbrado/get_timbrado_vigente.php', { credentials: 'include' });
+    const r = await fetch(URL_TIMBRADO, { cache:'no-store', credentials:'include' });
     const j = await r.json();
 
     if(!j.success){
-      info.value = 'No hay timbrado vigente para Factura';
-      badge.textContent = 'Sin timbrado';
-      badge.className = 'badge danger';
-      badge.style.display = 'inline-block';
+      info.value = j.error || 'No hay timbrado vigente';
+      bEstado.textContent = 'Sin timbrado';
+      bEstado.className = 'badge danger';
+      bEstado.style.display='inline-block';
       timbrado = null;
       return;
     }
 
-    timbrado = j.timbrado || null;
-    const est = timbrado.establecimiento;
-    const pe  = timbrado.punto_expedicion;
+    const t = j.timbrado;
+    timbrado = t;
 
-    // Próximo número de la CAJA (si hay bloque). Si no, mostramos “se asignará…”
-    let proxTxt = '(se asignará al confirmar)';
-    if (j.next_preview_fmt) {
-      proxTxt = j.next_preview_fmt; // ya viene EEE-PPP-NNNNNNN
-    } else if (j.next_preview) {
-      proxTxt = `${est}-${pe}-${pad7(j.next_preview)}`;
+    // Cabecera y chips
+    info.value = `Timbrado ${t.numero_timbrado} | Vigente ${t.fecha_inicio} a ${t.fecha_fin}`;
+    pRango.textContent = `Rango: ${t.nro_desde}–${t.nro_hasta} (actual: ${t.nro_actual})`;
+    pPPP.textContent   = `PPP: ${t.establecimiento}-${t.punto_expedicion}`;
+
+    if (j.proximo_formateado){
+      pProx.textContent = `Próximo: ${j.proximo_formateado}`;
+      pProx.style.background = '';
+      ayuda.textContent = 'Mostramos el próximo número de tu caja. El correlativo definitivo se asigna al confirmar.';
+    } else if (j.proximo_numero){
+      pProx.textContent = `Próximo: ${t.establecimiento}-${t.punto_expedicion}-${pad7(j.proximo_numero)}`;
+      pProx.style.background = '';
+    } else {
+      pProx.textContent = 'Próximo: (se asignará al confirmar)';
+      pProx.style.background = '';
     }
 
-    info.value = `Timbrado ${timbrado.numero_timbrado} | Próximo caja: ${proxTxt} | Vigente hasta ${timbrado.fecha_fin}`;
-
-    // Badge de vigencia por fechas
+    // Estado por vigencia / agotado
     const hoy = new Date();
-    const fin = parseISO(timbrado.fecha_fin);
+    const fin = parseISO(t.fecha_fin);
     const dias = daysDiff(hoy, fin);
     let state='ok', text='OK';
-    if (dias<=0){ state='danger'; text='Vencido'; }
+    if (j.agotado){ state='danger'; text='Agotado'; }
+    else if (dias<=0){ state='danger'; text='Vencido'; }
     else if (dias<=30){ state='warn'; text=`Vence en ${dias} días`; }
-    badge.textContent = text;
-    badge.className = 'badge '+state;
-    badge.style.display = 'inline-block';
-
-    // Si no hay bloque asignado a la caja, ofrezco pre-provisionar (opcional)
-    if (!j.id_asignacion || j.disponibles_caja === 0 || !j.next_preview) {
-      $('btnPrepararTimbrado').style.display = 'inline-block';
-    } else {
-      $('btnPrepararTimbrado').style.display = 'none';
-    }
+    bEstado.textContent = text;
+    bEstado.className = 'badge '+state;
+    bEstado.style.display = 'inline-block';
 
     validarFechaContraTimbrado();
   }catch(e){
     info.value='Error al cargar timbrado';
+    bEstado.textContent='Error';
+    bEstado.className='badge danger';
+    bEstado.style.display='inline-block';
     timbrado=null;
-    badge.textContent='Error';
-    badge.className='badge danger';
-    badge.style.display='inline-block';
   }
 }
 $('btnRefrescarTimbrado').addEventListener('click', cargarTimbrado);
-
-// (Opcional) Pre-provisionar bloque sin emitir (para que el preview muestre número)
-$('btnPrepararTimbrado').addEventListener('click', async ()=>{
-  try{
-    const r = await fetch('../timbrado/provisionar_bloque_factura.php', { method:'POST', credentials:'include' });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'No se pudo preparar numeración');
-    await cargarTimbrado();
-    alert('Numeración preparada para esta caja.');
-  }catch(e){
-    alert(e.message);
-  }
-});
 
 // ===== Condición =====
 $('condicion').addEventListener('change', onCondicionChange);
@@ -438,9 +434,7 @@ $('btnEstirar').addEventListener('click', async ()=>{
       clienteSel={ id_cliente:j.pedido.id_cliente, nombre_completo:(j.pedido.nombre||'')+' '+(j.pedido.apellido||''), ruc_ci:j.pedido.ruc_ci };
       $('cliente').value=clienteSel.nombre_completo; $('ruc').value=clienteSel.ruc_ci||''; }
     pintarGrilla(j.items||[]); $('status').textContent='Pedido '+j.pedido.id_pedido+' listo para facturar';
-    // Resetear plan si cambia total
     planCuotas=[]; $('planWrap').style.display='none';
-    // Preparar pagos (reset)
     resetPagosTabla();
   }catch(e){ alert(e.message); }
 });
@@ -609,7 +603,6 @@ $('btnEmitir').addEventListener('click', async ()=>{
   if(!timbrado){ alert('No hay timbrado vigente. No se puede emitir.'); return; }
   const fecha = $('fecha').value; if(!fecha){ alert('Ingresá la fecha de emisión'); return; }
 
-  // Validación vigencia timbrado
   if (timbrado){
     const d=parseISO(fecha), ini=parseISO(timbrado.fecha_inicio), fin=parseISO(timbrado.fecha_fin);
     if (d<ini || d>fin){ if(!confirm('La fecha está fuera de la vigencia del timbrado. ¿Continuar igualmente?')) return; }
@@ -622,7 +615,6 @@ $('btnEmitir').addEventListener('click', async ()=>{
 
   try{
     if (condicion==='Credito' || !cobrarAhora){
-      // Emitir solo factura
       const payload={
         id_pedido: pedidoSel,
         condicion_venta: condicion,
@@ -646,7 +638,6 @@ $('btnEmitir').addEventListener('click', async ()=>{
       cargarTimbrado();
       abrirImpresionFactura(j.id_factura, true);
     } else {
-      // Contado + cobrar ahora
       const pagos = getPagos();
       if (!pagos.length) throw new Error('Agregá al menos un medio de pago.');
       const suma = pagos.reduce((acc,p)=>acc+p.importe,0);
@@ -674,7 +665,6 @@ $('btnEmitir').addEventListener('click', async ()=>{
       if (j.id_recibo) {
         setTimeout(()=>abrirImpresionRecibo(j.id_recibo, true), 600);
       }
-
       cargarTimbrado();
     }
   }catch(e){

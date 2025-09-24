@@ -128,7 +128,7 @@ try {
   $rowNum = pg_fetch_assoc($rRes);
   // devuelve: id_timbrado, id_asignacion, nro_corr, numero_formateado
   $id_timbrado   = (int)$rowNum['id_timbrado'];
-  $id_asignacion = (int)$rowNum['id_asignacion'];
+  $id_asignacion = (int)$rowNum['id_asignacion']; // (compat, aunque ya no uses bloques)
   $nro_corr      = (int)$rowNum['nro_corr'];
   $numero_doc    = $rowNum['numero_formateado'];    // EEE-PPP-NNNNNNN
 
@@ -235,15 +235,31 @@ try {
   $okCons = pg_query_params($conn, $sqlConsumirReserva, [$id_pedido]);
   if ($okCons === false) { throw new Exception('No se pudo consumir las reservas del pedido'); }
 
-  // 9) SIN cobros aquí. Solo Libro Ventas “Emitida”.
+  // 9) SIN cobros aquí. Libro Ventas (NUEVA TABLA) con estado 'Emitida'
   $okLibro = pg_query_params(
     $conn,
-    "INSERT INTO public.libro_ventas(
-       fecha_emision, id_factura, numero_documento, timbrado_numero, id_cliente, condicion_venta,
-       grav10, iva10, grav5, iva5, exentas, total, estado_doc
-     ) VALUES ($1::date,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'Emitida')",
-    [$fecha_emision, $id_factura, $numero_doc, $num_tim, $id_cliente, $condicion,
-     $grav10, $iva10, $grav5, $iva5, $exentas, $total]
+    "INSERT INTO public.libro_ventas_new(
+       fecha_emision, doc_tipo, id_doc, numero_documento, timbrado_numero,
+       id_cliente, condicion_venta,
+       grav10, iva10, grav5, iva5, exentas, total,
+       estado_doc, id_timbrado, id_caja
+     ) VALUES (
+       $1::date, 'FACT', $2, $3, $4,
+       $5, $6,
+       $7, $8, $9, $10, $11, $12,
+       'Emitida', $13, $14
+     )",
+    [
+      $fecha_emision,          // $1
+      $id_factura,             // $2
+      $numero_doc,             // $3
+      $num_tim,                // $4
+      $id_cliente,             // $5
+      $condicion,              // $6
+      $grav10, $iva10, $grav5, $iva5, $exentas, $total,  // $7..$12
+      $id_timbrado,            // $13
+      $id_caja                 // $14
+    ]
   );
   if (!$okLibro) { throw new Exception('No se pudo registrar en Libro Ventas'); }
 
