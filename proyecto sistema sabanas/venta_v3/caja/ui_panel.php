@@ -12,7 +12,7 @@ function n($x,$d=0){ return number_format((float)$x,$d,',','.'); }
 
 $idUser = (int)$_SESSION['id_usuario'];
 
-// 1) Traer mi sesión abierta (si existe)
+// 1) Traer mi sesión abierta
 $sqlSesion = "
   SELECT cs.id_caja_sesion, cs.id_caja, cs.fecha_apertura, c.nombre AS caja_nombre
   FROM public.caja_sesion cs
@@ -23,7 +23,6 @@ $sqlSesion = "
 $rs = pg_query_params($conn, $sqlSesion, [$idUser]);
 $ses = $rs && pg_num_rows($rs)>0 ? pg_fetch_assoc($rs) : null;
 
-// Si no hay sesión, mando a abrir (RUTA RELATIVA)
 if (!$ses) {
   header('Location: /TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/caja/ui_abrir.php');
   exit;
@@ -31,7 +30,7 @@ if (!$ses) {
 
 $idSesion = (int)$ses['id_caja_sesion'];
 
-// 2) Totales teóricos por medio (vista)
+// 2) Totales teóricos
 $sqlTot = "
   SELECT COALESCE(efectivo,0) AS efectivo,
          COALESCE(tarjeta,0) AS tarjeta,
@@ -42,7 +41,7 @@ $sqlTot = "
 ";
 $rt = pg_query_params($conn, $sqlTot, [$idSesion]);
 $tot = ['efectivo'=>0,'tarjeta'=>0,'transferencia'=>0,'otros'=>0];
-if ($rt && pg_num_rows($rt)>0) { $tot = pg_fetch_assoc($rt); }
+if ($rt && pg_num_rows($rt)>0) $tot = pg_fetch_assoc($rt);
 
 // 3) Últimos movimientos
 $sqlMovs = "
@@ -54,13 +53,12 @@ $sqlMovs = "
 ";
 $rm = pg_query_params($conn, $sqlMovs, [$idSesion]);
 $movs = [];
-if ($rm) { while($x=pg_fetch_assoc($rm)) $movs[]=$x; }
+if ($rm) while($x=pg_fetch_assoc($rm)) $movs[]=$x;
 
-// 4) Contadores simples (opcional)
+// 4) Contador de movimientos
 $sqlCount = "SELECT COUNT(*) FROM public.movimiento_caja WHERE id_caja_sesion = $1";
 $rc = pg_query_params($conn, $sqlCount, [$idSesion]);
 $totalMovs = $rc ? (int)pg_fetch_result($rc,0,0) : 0;
-
 ?>
 <!doctype html>
 <html lang="es">
@@ -116,24 +114,16 @@ $totalMovs = $rc ? (int)pg_fetch_result($rc,0,0) : 0;
     </div>
   </div>
 
-  <!-- KPIs de totales teóricos -->
+  <!-- KPIs -->
   <div class="grid cols-4" style="display:grid; grid-template-columns: repeat(4,1fr); gap:12px;">
-    <div class="card kpi"><div>
-      <h3>Efectivo</h3><strong>Gs <?= n($tot['efectivo'] ?? 0, 0) ?></strong>
-    </div></div>
-    <div class="card kpi"><div>
-      <h3>Tarjeta</h3><strong>Gs <?= n($tot['tarjeta'] ?? 0, 0) ?></strong>
-    </div></div>
-    <div class="card kpi"><div>
-      <h3>Transferencia</h3><strong>Gs <?= n($tot['transferencia'] ?? 0, 0) ?></strong>
-    </div></div>
-    <div class="card kpi"><div>
-      <h3>Otros</h3><strong>Gs <?= n($tot['otros'] ?? 0, 0) ?></strong>
-    </div></div>
+    <div class="card kpi"><div><h3>Efectivo</h3><strong>Gs <?= n($tot['efectivo'],0) ?></strong></div></div>
+    <div class="card kpi"><div><h3>Tarjeta</h3><strong>Gs <?= n($tot['tarjeta'],0) ?></strong></div></div>
+    <div class="card kpi"><div><h3>Transferencia</h3><strong>Gs <?= n($tot['transferencia'],0) ?></strong></div></div>
+    <div class="card kpi"><div><h3>Otros</h3><strong>Gs <?= n($tot['otros'],0) ?></strong></div></div>
   </div>
 
   <div class="grid cols-2" style="margin-top:12px;">
-    <!-- Form movimiento rápido -->
+    <!-- Movimiento rápido -->
     <div class="card">
       <h3 style="margin:0 0 10px;">Movimiento rápido</h3>
       <form id="formMov" onsubmit="return false;">
@@ -178,7 +168,6 @@ $totalMovs = $rc ? (int)pg_fetch_result($rc,0,0) : 0;
         <div style="margin-top:10px;">
           <label for="descripcion">Descripción</label>
           <input type="text" id="descripcion" maxlength="140" placeholder="Detalle / referencia (opcional)">
-          <div class="help">Ej.: “Gasto menor: agua”, “Retiro a tesorería”, “Ajuste”.</div>
         </div>
 
         <div class="actions" style="margin-top:12px;">
@@ -194,42 +183,48 @@ $totalMovs = $rc ? (int)pg_fetch_result($rc,0,0) : 0;
       <div class="list">
         <?php if(empty($movs)): ?>
           <div class="row"><div class="grow muted">Sin movimientos todavía.</div></div>
-        <?php else: ?>
-          <?php foreach($movs as $m): ?>
-            <div class="row">
-              <div class="grow">
-                <div><strong><?= e($m['origen']) ?></strong> · <small class="muted"><?= e($m['medio']) ?></small></div>
-                <div class="muted"><?= e($m['descripcion'] ?? '') ?></div>
-                <div class="muted" style="font-size:12px;"><?= e($m['fecha']) ?></div>
-              </div>
-              <div class="right">
-                <span class="badge <?= $m['tipo']==='Ingreso'?'ing':'egr' ?>"><?= e($m['tipo']) ?></span><br>
-                <strong>Gs <?= n($m['monto'],0) ?></strong>
-              </div>
+        <?php else: foreach($movs as $m): ?>
+          <div class="row">
+            <div class="grow">
+              <div><strong><?= e($m['origen']) ?></strong> · <small class="muted"><?= e($m['medio']) ?></small></div>
+              <div class="muted"><?= e($m['descripcion'] ?? '') ?></div>
+              <div class="muted" style="font-size:12px;"><?= e($m['fecha']) ?></div>
             </div>
-          <?php endforeach; ?>
-        <?php endif; ?>
+            <div class="right">
+              <span class="badge <?= $m['tipo']==='Ingreso'?'ing':'egr' ?>"><?= e($m['tipo']) ?></span><br>
+              <strong>Gs <?= n($m['monto'],0) ?></strong>
+            </div>
+          </div>
+        <?php endforeach; endif; ?>
       </div>
       <div class="actions" style="margin-top:10px;">
         <a class="btn" href="movimientos.php">Ver todos</a>
       </div>
     </div>
   </div>
+
+  <!-- NC pendientes -->
+  <div class="card" style="margin-top:16px;">
+    <h3 style="margin:0 0 10px;">Notas de Crédito Pendientes</h3>
+    <div id="ncPendientes" class="list"></div>
+    <div style="margin-top:10px; display:flex; gap:8px;">
+      <input type="text" id="buscarNC" placeholder="Buscar por cliente o número..." style="flex:1; padding:8px;">
+      <button class="btn" id="btnBuscarNC">Buscar</button>
+    </div>
+  </div>
 </div>
 
 <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js" class="no-print"></script>
 <script>
-(function(){
-  const $ = (q)=>document.querySelector(q);
-  const idSesion = <?= (int)$idSesion ?>;
-  const msg = $("#msgMov");
-  const btn = $("#btnMov");
+(async function(){
+  const $ = q => document.querySelector(q);
 
   async function enviarMovimiento(){
+    const msg = $("#msgMov");
     msg.textContent = "Guardando...";
     msg.className = "help";
     const payload = {
-      id_caja_sesion: idSesion,
+      id_caja_sesion: <?= (int)$idSesion ?>,
       tipo: $("#tipo").value,
       origen: $("#origen").value,
       medio: $("#medio").value,
@@ -237,7 +232,7 @@ $totalMovs = $rc ? (int)pg_fetch_result($rc,0,0) : 0;
       descripcion: $("#descripcion").value||""
     };
     try{
-      const res = await fetch('movimiento_caja_crear.php', { // RUTA RELATIVA
+      const res = await fetch('movimiento_caja_crear.php',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify(payload)
@@ -257,8 +252,60 @@ $totalMovs = $rc ? (int)pg_fetch_result($rc,0,0) : 0;
       msg.className = "error";
     }
   }
+  document.getElementById('btnMov').addEventListener('click', e=>{ e.preventDefault(); enviarMovimiento(); });
 
-  btn.addEventListener('click', (ev)=>{ ev.preventDefault(); enviarMovimiento(); });
+  async function cargarNCPendientes(filtro=""){
+    const res = await fetch('../../venta_v3/notas/notas_pendientes.php?filtro='+encodeURIComponent(filtro));
+    const js = await res.json();
+    const cont = document.getElementById('ncPendientes');
+    cont.innerHTML = "";
+    if(!js.ok || !js.data.length){
+      cont.innerHTML = '<div class="row"><div class="grow muted">Sin NC pendientes.</div></div>';
+      return;
+    }
+    js.data.forEach(n=>{
+      const div = document.createElement('div');
+      div.className="row";
+      div.innerHTML = `
+        <div class="grow">
+          <strong>${n.numero_documento}</strong> — ${n.cliente}<br>
+          <small class="muted">Total: Gs ${new Intl.NumberFormat('es-PY').format(n.total_neto)}</small><br>
+          <select class="medio-nc">
+            <option value="Efectivo">Efectivo</option>
+            <option value="Transferencia">Transferencia</option>
+            <option value="Cheque">Cheque</option>
+          </select>
+        </div>
+        <div>
+          <button class="btn primary" onclick="generarEgreso(${n.id_nc},${n.total_neto},this)">Egreso</button>
+        </div>
+      `;
+      cont.appendChild(div);
+    });
+  }
+
+  window.generarEgreso = async function(id_nc, importe, btn){
+    const medio = btn.parentElement.parentElement.querySelector('.medio-nc').value;
+    if(!confirm("¿Generar egreso de caja por esta NC?")) return;
+    const res = await fetch('../../venta_v3/notas/nota_cobrar_egreso.php',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({id_nc:id_nc, medio:medio, importe:importe})
+    });
+    const js = await res.json();
+    if(js.ok){
+      alert("Egreso generado correctamente.");
+      cargarNCPendientes();
+    }else{
+      alert("Error: "+js.error);
+    }
+  }
+
+  document.getElementById('btnBuscarNC').addEventListener('click',()=> {
+    cargarNCPendientes(document.getElementById('buscarNC').value);
+  });
+
+  cargarNCPendientes();
 })();
 </script>
 </body>
