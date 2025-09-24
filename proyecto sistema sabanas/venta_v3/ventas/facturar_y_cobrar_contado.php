@@ -62,10 +62,14 @@ try {
   // Sumar pagos
   $sumPag = 0.0;
   foreach ($pagos as $p) {
-    $imp = (float)($p['importe'] ?? 0);
+    // Aceptar tanto "1000" como 1000
+    $impStr = (string)($p['importe'] ?? '0');
+    $impStr = str_replace(',', '.', $impStr);
+    $imp = (float)$impStr;
     if ($imp > 0) $sumPag += $imp;
   }
-  if ($sumPag <= 0) { throw new Exception('Importe total de pagos inválido'); }
+  // Redondeo a 2 decimales para comparar apples-to-apples
+  $sumPag = round($sumPag, 2);
 
   // ===== TX =====
   pg_query($conn, 'BEGIN');
@@ -87,48 +91,61 @@ try {
   }
   $id_cliente = (int)$ped['id_cliente'];
 
-  // 2) Totales desde pedido_det
-  $rTot = pg_query_params($conn, "
-    WITH base AS (
+  // 2) Totales desde pedido_det (NORMALIZADOS para no duplicar IVA)
+  $sqlTot = "
+    WITH lineas AS (
       SELECT
-        CASE WHEN d.tipo_iva = '10%' THEN d.subtotal_neto ELSE 0 END AS grav10,
-        CASE WHEN d.tipo_iva = '10%' THEN d.iva_monto     ELSE 0 END AS iva10,
-        CASE WHEN d.tipo_iva = '5%'  THEN d.subtotal_neto ELSE 0 END AS grav5,
-        CASE WHEN d.tipo_iva = '5%'  THEN d.iva_monto     ELSE 0 END AS iva5,
-        CASE WHEN d.tipo_iva = 'Exento' THEN d.subtotal_neto ELSE 0 END AS exentas
+        CASE
+          WHEN d.tipo_iva IN ('10%','10','10.0') THEN '10'
+          WHEN d.tipo_iva IN ('5%','5','5.0')   THEN '5'
+          WHEN d.tipo_iva ILIKE 'EX%' OR d.tipo_iva ILIKE 'EXENTO%' THEN 'EX'
+          ELSE d.tipo_iva
+        END AS tipo_iva_norm,
+        d.subtotal_neto::numeric(14,2) AS imp,
+        COALESCE(NULLIF(d.iva_monto,0),
+          CASE
+            WHEN d.tipo_iva IN ('10%','10','10.0') THEN round(d.subtotal_neto/11.0,2)
+            WHEN d.tipo_iva IN ('5%','5','5.0')    THEN round(d.subtotal_neto/21.0,2)
+            ELSE 0
+          END
+        )::numeric(14,2) AS iva_calc
       FROM public.pedido_det d
       WHERE d.id_pedido = $1
     )
     SELECT
-      COALESCE(SUM(grav10),0)::numeric(14,2)  AS total_grav10,
-      COALESCE(SUM(iva10),0)::numeric(14,2)   AS total_iva10,
-      COALESCE(SUM(grav5),0)::numeric(14,2)   AS total_grav5,
-      COALESCE(SUM(iva5),0)::numeric(14,2)    AS total_iva5,
-      COALESCE(SUM(exentas),0)::numeric(14,2) AS total_exentas,
-      (COALESCE(SUM(grav10),0)+COALESCE(SUM(iva10),0)+COALESCE(SUM(grav5),0)+COALESCE(SUM(iva5),0)+COALESCE(SUM(exentas),0))::numeric(14,2) AS total_factura
-    FROM base;
-  ", [$id_pedido]);
-  if (!$rTot) { throw new Exception('No se pudieron obtener los totales del pedido'); }
+      COALESCE(SUM(CASE WHEN tipo_iva_norm='10' THEN imp-iva_calc ELSE 0 END),0)::numeric(14,2) AS total_grav10,
+      COALESCE(SUM(CASE WHEN tipo_iva_norm='10' THEN iva_calc    ELSE 0 END),0)::numeric(14,2) AS total_iva10,
+      COALESCE(SUM(CASE WHEN tipo_iva_norm='5'  THEN imp-iva_calc ELSE 0 END),0)::numeric(14,2) AS total_grav5,
+      COALESCE(SUM(CASE WHEN tipo_iva_norm='5'  THEN iva_calc    ELSE 0 END),0)::numeric(14,2) AS total_iva5,
+      COALESCE(SUM(CASE WHEN tipo_iva_norm='EX' THEN imp         ELSE 0 END),0)::numeric(14,2) AS total_exentas,
+      COALESCE(SUM(imp),0)::numeric(14,2) AS total_factura
+    FROM lineas
+  ";
+  $rTot = pg_query_params($conn, $sqlTot, [$id_pedido]);
+  if (!$rTot) { throw new Exception('No se pudo calcular totales'); }
   $tot = pg_fetch_assoc($rTot);
   $grav10  = (float)$tot['total_grav10'];
   $iva10   = (float)$tot['total_iva10'];
   $grav5   = (float)$tot['total_grav5'];
   $iva5    = (float)$tot['total_iva5'];
   $exentas = (float)$tot['total_exentas'];
-  $total   = (float)$tot['total_factura'];
+  $total   = round((float)$tot['total_factura'], 2);
   if ($total <= 0) { throw new Exception('Total de factura inválido (ver detalle del pedido)'); }
 
-  // Contado: validar suma pagos == total
-  if (abs($sumPag - $total) > 0.01) { throw new Exception('El total de pagos debe ser igual al total de la factura (Contado)'); }
+  // Contado: validar suma pagos == total (con pequeña tolerancia por redondeo)
+  $tol = 0.05; // ajustá si usás enteros en Gs
+  if (abs($sumPag - $total) > $tol) {
+    throw new Exception('El total de pagos debe ser igual al total de la factura (Contado)');
+  }
 
-  $total_bruto      = $grav10 + $grav5 + $exentas;
+  $total_bruto      = round($grav10 + $grav5 + $exentas, 2);
   $total_descuento  = 0.0;
   $total_neto       = $total;
 
   // 3) RESERVA DE NÚMERO (JIT por caja)
   $tamBloque = 500; // ajustable
   $rRes = pg_query_params($conn,
-    "SELECT * FROM public.reservar_numero($1,$2,$3)", // ('Factura', id_caja, tam_bloque)
+    "SELECT * FROM public.reservar_numero($1,$2,$3)",
     ['Factura', $id_caja, $tamBloque]
   );
   if (!$rRes || pg_num_rows($rRes) === 0) {
@@ -138,11 +155,11 @@ try {
 
   // Devueltos por reservar_numero(): id_timbrado, id_asignacion, nro_corr, numero_formateado
   $id_timbrado   = (int)$rowNum['id_timbrado'];
-  $id_asignacion = (int)$rowNum['id_asignacion']; // (no se usa, pero lo preservo por compat)
+  $id_asignacion = (int)$rowNum['id_asignacion']; // compat
   $nro_corr      = (int)$rowNum['nro_corr'];
   $numero_doc    = $rowNum['numero_formateado']; // EEE-PPP-NNNNNNN
 
-  // Obtener número de timbrado (para libro_ventas) a partir de id_timbrado
+  // Obtener número de timbrado para libro_ventas
   $rNumTim = pg_query_params($conn, "SELECT numero_timbrado FROM public.timbrado WHERE id_timbrado=$1 LIMIT 1", [$id_timbrado]);
   if (!$rNumTim || pg_num_rows($rNumTim) === 0) { throw new Exception('No se pudo obtener número de timbrado'); }
   $num_tim = pg_fetch_result($rNumTim, 0, 0);
@@ -178,7 +195,7 @@ try {
     throw new Exception('Reserva insuficiente para: ' . implode(', ', $faltantes));
   }
 
-  // 5) Cabecera de FACTURA (guardar lo devuelto por el SP)
+  // 5) Cabecera de FACTURA
   $rCab = pg_query_params($conn, "
     INSERT INTO public.factura_venta_cab(
       fecha_emision, id_cliente, condicion_venta,
@@ -267,14 +284,14 @@ try {
       'Cancelada', $12, $13
     )
   ", [
-    $fecha_emision,    // $1
-    $id_factura,       // $2
-    $numero_doc,       // $3
-    $num_tim,          // $4
-    $id_cliente,       // $5
-    $grav10, $iva10, $grav5, $iva5, $exentas, $total, // $6..$11
-    $id_timbrado,      // $12
-    $id_caja           // $13
+    $fecha_emision,
+    $id_factura,
+    $numero_doc,
+    $num_tim,
+    $id_cliente,
+    $grav10, $iva10, $grav5, $iva5, $exentas, $total,
+    $id_timbrado,
+    $id_caja
   ]);
   if (!$okLibro) { throw new Exception('No se pudo registrar en Libro Ventas'); }
 
@@ -285,8 +302,6 @@ try {
     [$id_pedido]
   );
   if (!$okPed) { throw new Exception('No se pudo actualizar estado del pedido'); }
-
-  // 11) (ELIMINADO) Avanzar numeración timbrado — ya lo hace reservar_numero()
 
   // ======= COBRO + CAJA/BANCO + APLICACIÓN =======
   $obsRec = trim(($obs ? ($obs . ' · ') : '') . ('Cobro contado fact. ' . $numero_doc));
@@ -303,7 +318,8 @@ try {
   // Detalle de pagos + Caja + Banco
   foreach ($pagos as $p) {
     $medio  = trim($p['medio'] ?? '');
-    $imp    = (float)($p['importe'] ?? 0);
+    $impStr = (string)($p['importe'] ?? '0'); $impStr = str_replace(',', '.', $impStr);
+    $imp    = (float)$impStr;
     $ref    = trim($p['referencia'] ?? '') ?: null;
     $id_cta = isset($p['id_cuenta_bancaria']) ? (int)$p['id_cuenta_bancaria'] : null;
     if ($imp <= 0 || $medio === '') continue;
@@ -312,7 +328,7 @@ try {
     $okPago = pg_query_params($conn, "
       INSERT INTO public.recibo_cobranza_det_pago(id_recibo, medio_pago, referencia, importe_bruto, comision, fecha_acredit, id_cuenta_bancaria)
       VALUES ($1, $2, $3, $4, 0, $5::date, $6)
-    ", [$id_recibo, $medio, $ref, $imp, $fecha_emision, $id_cta]);
+    ", [$id_recibo, $medio, $ref, round($imp,2), $fecha_emision, $id_cta]);
     if (!$okPago) throw new Exception('No se pudo registrar el medio de pago');
 
     // CAJA (Ingreso/origen Venta)
@@ -327,14 +343,14 @@ try {
     ";
     $desc = 'Factura ' . $numero_doc . ' · Recibo #' . $id_recibo;
     $rm = pg_query_params($conn, $qMov, [
-      $id_caja_sesion,                 // $1
-      $id_usuario,                     // $2
-      $fecha_emision . ' 00:00:00',    // $3
-      $medio,                          // $4
-      $imp,                            // $5
-      $desc,                           // $6
-      $id_factura,                     // $7
-      $medio                           // $8
+      $id_caja_sesion,
+      $id_usuario,
+      $fecha_emision . ' 00:00:00',
+      $medio,
+      round($imp,2),
+      $desc,
+      $id_factura,
+      $medio
     ]);
     if (!$rm) {
       $err = pg_last_error($conn);
@@ -353,7 +369,7 @@ try {
         $fecha_emision . ' 00:00:00',
         ($id_cta ?: null),
         ($ref ?: ('Cobro ' . $medio . ' fact. ' . $numero_doc)),
-        $imp,
+        round($imp,2),
         $id_recibo,
         'Cobro ' . $medio . ' fact. ' . $numero_doc
       ]);

@@ -31,16 +31,12 @@ if (empty($_SESSION['nombre_usuario'])) {
   .right{display:flex;justify-content:flex-end;gap:8px}
   .totals{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
   .totals .kv{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px}
-  /* sugerencias */
   .sugs{position:relative;max-width:440px}
   .sugs-list{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:var(--shadow);z-index:10;max-height:260px;overflow:auto}
   .sug{padding:8px;cursor:pointer} .sug:hover{background:#f3f4f6}
-  /* modal */
   .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:20}
   .modal > .inner{background:#fff;border-radius:16px;max-width:900px;margin:60px auto;padding:16px}
-  /* Toast */
   #toast{position:fixed; right:16px; top:16px; z-index:9999; display:none; padding:12px 14px; border-radius:10px; box-shadow:0 10px 24px rgba(0,0,0,.15); color:#fff; font-weight:600; max-width: 80vw;}
-  /* preview factura */
   .preview{display:none; gap:12px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:12px; margin-top:10px}
   .preview .col{flex:1; min-width:260px}
   .chip{display:inline-block;background:#eef2ff;border:1px solid #dbeafe;border-radius:999px;padding:4px 10px;font-size:.85rem;margin-right:6px;cursor:pointer}
@@ -52,6 +48,7 @@ if (empty($_SESSION['nombre_usuario'])) {
   .pill{display:inline-flex;align-items:center;gap:6px;background:#f3f4f6;border:1px solid #e5e7eb;border-radius:999px;padding:6px 10px}
   .muted-sm{color:var(--muted);font-size:.85rem}
   .footlist{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+  .hint{font-size:.88rem;color:#6b7280}
 </style>
 </head>
 <body>
@@ -60,14 +57,16 @@ if (empty($_SESSION['nombre_usuario'])) {
 <div class="wrap">
   <div class="card">
     <h1>Emitir Nota</h1>
-    <p class="muted">Creá una <b>NC</b> (crédito) o <b>ND</b> (débito) usando PPP por caja. La ND genera CxC; la NC puede aplicar crédito y opcionalmente afectar stock.</p>
+    <p class="muted">Creá una <b>NC</b> (crédito) o <b>ND</b> (débito). La NC puede:
+      <br>• <b>Aplicar a cuotas</b> (descuenta saldo abierto de una factura a crédito), o
+      <br>• Quedar <b>pendiente</b> para devolución en caja (egreso manual).
+    </p>
   </div>
 
-  <!-- PASO 1: Buscar Factura (ahora con filtros completos) -->
+  <!-- PASO 1: Buscar Factura -->
   <div class="card">
     <h2>Buscar factura</h2>
 
-    <!-- Chips rápidas -->
     <div class="facet">
       <span class="chip" data-preset="">Todas</span>
       <span class="chip" data-preset="hoy">Hoy</span>
@@ -100,29 +99,17 @@ if (empty($_SESSION['nombre_usuario'])) {
         </div>
       </div>
 
-      <div class="group">
-        <label>Desde</label>
-        <input type="date" id="desde">
-      </div>
-      <div class="group">
-        <label>Hasta</label>
-        <input type="date" id="hasta">
-      </div>
+      <div class="group"><label>Desde</label><input type="date" id="desde"></div>
+      <div class="group"><label>Hasta</label><input type="date" id="hasta"></div>
 
-      <div class="group">
-        <button class="btn" type="button" id="btnBuscarFac">Buscar</button>
-      </div>
-      <div class="group">
-        <button class="btn btn-danger" type="button" id="btnLimpiarFac">Limpiar</button>
-      </div>
+      <div class="group"><button class="btn" type="button" id="btnBuscarFac">Buscar</button></div>
+      <div class="group"><button class="btn btn-danger" type="button" id="btnLimpiarFac">Limpiar</button></div>
     </div>
 
     <div class="sugs-list" id="listFac" style="display:none; position:relative; margin-top:8px; max-height:320px;"></div>
     <div class="footlist">
       <div class="muted-sm" id="metaList"></div>
-      <div>
-        <button class="btn btn-sm" type="button" id="btnVerMas" style="display:none">Ver más</button>
-      </div>
+      <div><button class="btn btn-sm" type="button" id="btnVerMas" style="display:none">Ver más</button></div>
     </div>
 
     <div class="row" style="margin-top:10px">
@@ -139,6 +126,7 @@ if (empty($_SESSION['nombre_usuario'])) {
           <button class="btn btn-sm" type="button" id="btnCargarItems">Cargar ítems</button>
           <button class="btn btn-sm" type="button" id="btnUsarFactura">Usar factura</button>
         </div>
+        <p class="hint" style="margin-top:8px">Si la factura es <b>Crédito</b> y tiene cuotas abiertas, podés elegir <b>“Emitir y aplicar a cuotas”</b> más abajo.</p>
       </div>
     </div>
   </div>
@@ -182,6 +170,24 @@ if (empty($_SESSION['nombre_usuario'])) {
       <div id="bloqueAfecta">
         <label>&nbsp;</label>
         <label><input type="checkbox" id="afecta_stock" name="afecta_stock" value="1"> Afecta stock (solo NC)</label>
+      </div>
+    </div>
+
+    <!-- ACCIÓN POST-EMISIÓN -->
+    <h2>Acción post-emisión</h2>
+    <div class="row">
+      <div>
+        <label>Acción</label>
+        <select id="accionPost">
+          <option value="emitir">Solo emitir (pendiente)</option>
+          <option value="aplicar_cuotas">Emitir y aplicar a cuotas (Crédito)</option>
+        </select>
+      </div>
+
+      <div id="boxAplicar" style="display:none; border:1px dashed #e5e7eb; padding:8px; border-radius:8px;">
+        <label>Factura (Crédito) a aplicar</label>
+        <select id="ddlFacturaCredito"><option value="">— Seleccioná —</option></select>
+        <div class="muted" id="infoSaldos" style="margin-top:6px">Saldo abierto: —</div>
       </div>
     </div>
 
@@ -249,11 +255,13 @@ if (empty($_SESSION['nombre_usuario'])) {
 
 <script>
 /* ===== Endpoints ===== */
-const URL_FACTURAS_BUSCAR = '../../venta_v3/notas/facturas_buscar.php';  // <- endpoint nuevo con filtros
-const URL_FACTURA_DETALLE = '../../venta_v3/notas/factura_detalle.php';
-const URL_NOTAS_EMITIR    = '../../venta_v3/notas/notas_emitir.php';
-const URL_CLIENTES_BUSCAR = '/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/cliente/clientes_buscar.php';
-const URL_PROD_BUSCAR     = 'productos_disponibles.php';
+const URL_FACTURAS_BUSCAR   = '../../venta_v3/notas/facturas_buscar.php';
+const URL_FACTURA_DETALLE   = '../../venta_v3/notas/factura_detalle.php';
+const URL_NOTAS_EMITIR      = '../../venta_v3/notas/notas_emitir.php';
+const URL_NOTAS_APLICAR     = '../../venta_v3/notas/aplicar_nc_cuotas.php';  // NUEVO
+const URL_FACTS_CRED_ABIERT = '../../venta_v3/notas/facturas_credito_abiertas.php'; // NUEVO
+const URL_CLIENTES_BUSCAR   = '/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/cliente/clientes_buscar.php';
+const URL_PROD_BUSCAR       = 'productos_disponibles.php';
 
 /* ===== Toast ===== */
 function showToast(msg, type='ok') {
@@ -276,7 +284,11 @@ document.addEventListener('DOMContentLoaded', setHoy);
 /* ===== Clase → toggle afecta stock ===== */
 const selClase = document.getElementById('clase');
 const chkAfecta = document.getElementById('afecta_stock');
-selClase.addEventListener('change', ()=>{ const isNC = selClase.value==='NC'; chkAfecta.disabled = !isNC; if (!isNC) chkAfecta.checked = false; });
+selClase.addEventListener('change', ()=>{
+  const isNC = selClase.value==='NC';
+  chkAfecta.disabled = !isNC;
+  if (!isNC) chkAfecta.checked = false;
+});
 
 /* ===== Autocompletar Cliente ===== */
 const inpCli = document.getElementById('buscarCliente');
@@ -296,7 +308,7 @@ inpCli.addEventListener('keyup', ()=>{
         const d=document.createElement('div');
         d.className='sug';
         d.textContent = `${c.nombre_completo} (${c.ruc_ci||'s/CI'})`;
-        d.onclick = ()=>{ inpCli.value = d.textContent; idCliente.value = c.id_cliente; sugsBox.style.display='none'; };
+        d.onclick = ()=>{ inpCli.value = d.textContent; idCliente.value = c.id_cliente; sugsBox.style.display='none'; maybeLoadCreditoList(); };
         sugsBox.appendChild(d);
       });
       sugsBox.style.display='block';
@@ -305,7 +317,7 @@ inpCli.addEventListener('keyup', ()=>{
 });
 document.addEventListener('click',(e)=>{ if (!sugsBox.contains(e.target) && e.target!==inpCli) sugsBox.style.display='none'; });
 
-/* ===== PASO 1: Buscar Facturas con filtros y paginación ===== */
+/* ===== Buscar Facturas ===== */
 const chips = Array.from(document.querySelectorAll('.chip'));
 const qFac = document.getElementById('qFac');
 const listFac = document.getElementById('listFac');
@@ -325,15 +337,13 @@ const btnUsarFactura  = document.getElementById('btnUsarFactura');
 
 let facSel=null;
 let paging = { limit: 10, offset: 0, total: 0, has_more: false };
-let lastQuery = null; // para conservar filtros al “Ver más”
+let lastQuery = null;
 
 chips.forEach(ch => ch.addEventListener('click', ()=>{
   chips.forEach(c=>c.classList.remove('active'));
   ch.classList.add('active');
-  // preset setea fechas y limpia manual
   const p = ch.dataset.preset || '';
   if (p==='') { desde.value=''; hasta.value=''; }
-  // guardamos preset en atributo del contenedor
   document.body.dataset.preset = p;
   paging.offset = 0;
   performSearch(true);
@@ -342,15 +352,15 @@ chips.forEach(ch => ch.addEventListener('click', ()=>{
 btnBuscarFac.addEventListener('click', ()=>{ paging.offset=0; performSearch(true); });
 btnLimpiarFac.addEventListener('click', ()=>{
   qFac.value=''; filtroCond.value='';
-  chkEstados.forEach(x=>x.checked = (x.value==='Emitida')); // por defecto solo Emitida
+  chkEstados.forEach(x=>x.checked = (x.value==='Emitida'));
   desde.value=''; hasta.value='';
   chips.forEach(c=>c.classList.remove('active')); document.body.dataset.preset='';
   paging = { limit: 10, offset: 0, total: 0, has_more:false };
   listFac.style.display='none'; listFac.innerHTML=''; metaList.textContent=''; idFacturaInput.value=''; preview.style.display='none'; facSel=null;
+  clearCreditoSelect();
 });
 
 btnVerMas.addEventListener('click', ()=>{ if (!paging.has_more) return; paging.offset += paging.limit; performSearch(false); });
-
 qFac.addEventListener('keyup', (e)=>{ if (e.key==='Enter') { paging.offset=0; performSearch(true); } });
 
 async function performSearch(resetList){
@@ -359,9 +369,7 @@ async function performSearch(resetList){
   if (qFac.value.trim()!=='') params.set('q', qFac.value.trim());
   if (filtroCond.value) params.set('cond', filtroCond.value);
 
-  // estados → array (si todos están tildados, mandamos * para “todos”)
   if (estados.length===0) {
-    // ningún estado => no habrá resultados; enviamos algo imposible para explicitar
     params.append('estados[]', '___none___');
   } else if (estados.length===3) {
     params.set('estado','*');
@@ -369,13 +377,11 @@ async function performSearch(resetList){
     estados.forEach(s => params.append('estados[]', s));
   }
 
-  // fechas o preset
   const preset = document.body.dataset.preset || '';
-  if (preset) { params.set('preset', preset); }
+  if (preset) params.set('preset', preset);
   if (desde.value) params.set('desde', desde.value);
   if (hasta.value) params.set('hasta', hasta.value);
 
-  // paginación
   params.set('limit', paging.limit);
   params.set('offset', paging.offset);
 
@@ -385,16 +391,13 @@ async function performSearch(resetList){
   const res = await fetch(url);
   const js  = await res.json();
 
-  if (!js.success) {
-    showToast(js.error || 'No se pudo buscar', 'err');
-    return;
-  }
+  if (!js.success) { showToast(js.error || 'No se pudo buscar', 'err'); return; }
 
   const rows = js.data || [];
   paging.total = js.total_count || 0;
   paging.has_more = !!js.has_more;
 
-  if (resetList) { listFac.innerHTML=''; }
+  if (resetList) listFac.innerHTML='';
 
   if (rows.length) {
     rows.forEach(f=>{
@@ -426,6 +429,7 @@ async function selectFactura(id){
   facSel = js.data;
   idFacturaInput.value = facSel.id_factura;
   renderFacturaPreview(facSel);
+  maybeLoadCreditoList(); // por si quiere aplicar
 }
 
 function renderFacturaPreview(fac){
@@ -444,36 +448,67 @@ function renderFacturaPreview(fac){
   `;
 }
 
-btnCargarItems.addEventListener('click', ()=>{
-  if(!facSel || !facSel.detalle){ showToast('Sin detalle de factura','err'); return; }
-  items = facSel.detalle.map(d=>({
-    id_producto: d.id_producto || null,
-    descripcion: d.descripcion,
-    cantidad: d.cantidad,
-    precio_unitario: d.precio_unitario,
-    descuento: 0,
-    tipo_iva: (d.tipo_iva && d.tipo_iva.toLowerCase().includes('10')) ? '10'
-           : (d.tipo_iva && d.tipo_iva.toLowerCase().includes('5'))  ? '5' : 'EX'
-  }));
-  render();
-  showToast('Ítems cargados desde la factura');
+/* ===== Acción post-emisión ===== */
+const accionSel = document.getElementById('accionPost');
+const boxAplicar = document.getElementById('boxAplicar');
+const ddlFacturaCredito = document.getElementById('ddlFacturaCredito');
+const infoSaldos = document.getElementById('infoSaldos');
+
+accionSel.addEventListener('change', ()=>{
+  const v = accionSel.value;
+  boxAplicar.style.display = (v==='aplicar_cuotas') ? 'block' : 'none';
+  if (v==='aplicar_cuotas') maybeLoadCreditoList();
 });
 
-btnUsarFactura.addEventListener('click', ()=>{
-  if(!facSel){ showToast('Seleccioná una factura','err'); return; }
-  if (facSel.id_cliente && facSel.cliente){
-    idCliente.value = facSel.id_cliente;
-    document.getElementById('buscarCliente').value = `${facSel.cliente} (${facSel.ruc_ci||'s/CI'})`;
+function clearCreditoSelect(){
+  ddlFacturaCredito.innerHTML = '<option value="">— Seleccioná —</option>';
+  infoSaldos.textContent = 'Saldo abierto: —';
+}
+
+async function maybeLoadCreditoList(){
+  if (accionSel.value!=='aplicar_cuotas') return;
+  const idCli = Number(idCliente.value||0);
+  if (!idCli){ clearCreditoSelect(); return; }
+
+  // Si ya hay una factura seleccionada de vista previa y es Crédito, la priorizamos
+  if (facSel && String(facSel.condicion_venta).toLowerCase()==='credito') {
+    ddlFacturaCredito.innerHTML = `<option value="${facSel.id_factura}">${facSel.numero_documento} | ${facSel.fecha_emision}</option>`;
+    infoSaldos.textContent = 'Saldo abierto: (se consultará al aplicar)';
+    return;
   }
-  showToast('Factura seleccionada');
-});
 
-/* ===== Ítems de la nota ===== */
+  try{
+    const r = await fetch(`${URL_FACTS_CRED_ABIERT}?id_cliente=${idCli}`);
+    const j = await r.json();
+    clearCreditoSelect();
+    if (j.success && (j.data||[]).length){
+      (j.data||[]).forEach(f=>{
+        const opt = document.createElement('option');
+        opt.value = f.id_factura;
+        opt.textContent = `${f.numero_documento} | ${f.fecha} | saldo: ${Number(f.saldo_abierto||0).toFixed(2)}`;
+        ddlFacturaCredito.appendChild(opt);
+      });
+      infoSaldos.textContent = 'Elegí la factura a afectar';
+    } else {
+      infoSaldos.textContent = 'Sin facturas a crédito con saldo abierto';
+    }
+  }catch(e){
+    infoSaldos.textContent = 'Error al cargar facturas';
+  }
+}
+
+/* ===== Ítems ===== */
 const tbody = document.getElementById('tbody');
 const detalleInput = document.getElementById('detalle_json');
 let items = []; // {id_producto, descripcion, cantidad, precio_unitario, descuento, tipo_iva}
 
-function ivaRate(tipo){ return tipo==='10'||tipo==='10%'?0.10:(tipo==='5'||tipo==='5%'?0.05:0.0); }
+function ivaRate(tipo){
+  // Acepta '10', '10%', '5', '5%', 'EX'
+  const t = String(tipo||'').toUpperCase();
+  if (t==='10' || t==='10%') return 0.10;
+  if (t==='5'  || t==='5%')  return 0.05;
+  return 0.00;
+}
 function fmt2(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDigits:2}); }
 
 function render(){
@@ -492,7 +527,7 @@ function render(){
     tr.innerHTML = `
       <td style="text-align:left">${it.descripcion}</td>
       <td>${fmt2(it.precio_unitario)}</td>
-      <td>${it.tipo_iva||'EX'}</td>
+      <td>${(String(it.tipo_iva||'EX').toUpperCase().includes('10')?'10':String(it.tipo_iva||'EX').toUpperCase().includes('5')?'5':'EX')}</td>
       <td><input type="number" min="1" step="1" value="${it.cantidad}" oninput="chgCant(${i},this.value)" style="width:90px"></td>
       <td><input type="number" min="0" step="0.01" value="${it.descuento||0}" oninput="chgDesc(${i},this.value)" style="width:110px"></td>
       <td>${fmt2(neto)}</td>
@@ -513,7 +548,7 @@ function chgDesc(i,v){ v=parseFloat(v||'0'); if(!Number.isFinite(v)||v<0) v=0; c
 function quitar(i){ items.splice(i,1); render(); }
 function limpiarItems(){ items=[]; render(); }
 
-/* ===== Modal búsqueda de productos/servicios ===== */
+/* ===== Modal productos ===== */
 const modal = document.getElementById('modalBuscar');
 const tbodyBuscar = document.getElementById('tbodyBuscar');
 const inpProd = document.getElementById('qProd');
@@ -550,6 +585,32 @@ function agregar(prod){
   render();
 }
 
+/* ===== Cargar items desde factura ===== */
+btnCargarItems.addEventListener('click', ()=>{
+  if(!facSel || !facSel.detalle){ showToast('Sin detalle de factura','err'); return; }
+  items = facSel.detalle.map(d=>({
+    id_producto: d.id_producto || null,
+    descripcion: d.descripcion,
+    cantidad: d.cantidad,
+    precio_unitario: d.precio_unitario,
+    descuento: 0,
+    tipo_iva: (d.tipo_iva && d.tipo_iva.toLowerCase().includes('10')) ? '10'
+           : (d.tipo_iva && d.tipo_iva.toLowerCase().includes('5'))  ? '5' : 'EX'
+  }));
+  render();
+  showToast('Ítems cargados desde la factura');
+});
+
+btnUsarFactura.addEventListener('click', ()=>{
+  if(!facSel){ showToast('Seleccioná una factura','err'); return; }
+  if (facSel.id_cliente && facSel.cliente){
+    idCliente.value = facSel.id_cliente;
+    document.getElementById('buscarCliente').value = `${facSel.cliente} (${facSel.ruc_ci||'s/CI'})`;
+  }
+  maybeLoadCreditoList();
+  showToast('Factura seleccionada');
+});
+
 /* ===== Submit Nota ===== */
 const form = document.getElementById('formNota');
 const btnEmitir = document.getElementById('btnEmitir');
@@ -558,37 +619,70 @@ form.addEventListener('submit', async (e)=>{
   if(!idCliente.value){ showToast('Seleccioná un cliente','err'); return; }
   if(items.length===0){ showToast('Agregá al menos un ítem','err'); return; }
 
+  const clase = document.getElementById('clase').value;
   const payload = {
-    clase: document.getElementById('clase').value,
+    clase,
     id_cliente: Number(idCliente.value),
-    id_factura: idFacturaInput.value ? Number(idFacturaInput.value) : null,
+    id_factura: (document.getElementById('id_factura').value ? Number(document.getElementById('id_factura').value) : null),
     id_motivo: document.getElementById('id_motivo').value || null,
     motivo_texto: document.getElementById('motivo_texto').value || null,
     fecha_emision: document.getElementById('fecha_emision').value,
-    afecta_stock: document.getElementById('clase').value==='NC' ? document.getElementById('afecta_stock').checked : false,
+    afecta_stock: (clase==='NC') ? document.getElementById('afecta_stock').checked : false,
     detalle: items
   };
 
+  // Validación: si va a aplicar a cuotas, necesitamos una factura Crédito
+  const accion = accionSel.value;
+  let id_factura_aplicar = null;
+  if (accion==='aplicar_cuotas'){
+    // Prioriza la factura seleccionada en el paso 1 si existe y es Crédito
+    if (facSel && String(facSel.condicion_venta).toLowerCase()==='credito'){
+      id_factura_aplicar = facSel.id_factura;
+    } else {
+      id_factura_aplicar = Number(ddlFacturaCredito.value||0) || null;
+    }
+    if (!id_factura_aplicar){
+      showToast('Elegí la factura a crédito para aplicar la NC','err');
+      return;
+    }
+  }
+
   btnEmitir.disabled=true; btnEmitir.textContent='Emitiendo...';
   try{
-    const res = await fetch(URL_NOTAS_EMITIR, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify(payload)
-    });
+    // 1) Emitir NC/ND
+    const res = await fetch(URL_NOTAS_EMITIR, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const js = await res.json();
-    if(!js.success){ showToast(js.error||'Error al emitir','err'); }
-    else{
+    if(!js.success){ showToast(js.error||'Error al emitir','err'); return; }
+
+    // 2) Si corresponde, aplicar automáticamente a cuotas
+    if (accion==='aplicar_cuotas' && js.clase==='NC' && id_factura_aplicar){
+      const r2 = await fetch(URL_NOTAS_APLICAR, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id_nc: js.id_nota, id_factura: id_factura_aplicar })
+      });
+      const k = await r2.json();
+      if (!k.success){ showToast('NC emitida, pero no se pudo aplicar a cuotas: '+(k.error||''), 'err'); }
+      else { showToast(`✅ NC ${js.numero_documento} emitida y aplicada (Gs ${Number(k.aplicado_total||0).toFixed(2)})`,'ok'); }
+    } else {
       showToast(`✅ ${js.clase} Nº ${js.numero_documento} emitida`,'ok');
-      items=[]; render(); form.reset(); setHoy(); preview.style.display='none'; facSel=null; idFacturaInput.value='';
     }
-  }catch(err){ showToast('Error de red/servidor','err'); }
-  finally{ btnEmitir.disabled=false; btnEmitir.textContent='Emitir Nota'; }
+
+    // Reset UI
+    items=[]; render(); form.reset(); setHoy();
+    preview.style.display='none'; facSel=null; document.getElementById('id_factura').value='';
+    clearCreditoSelect();
+    accionSel.value='emitir'; boxAplicar.style.display='none';
+
+  }catch(err){
+    showToast('Error de red/servidor','err');
+  } finally {
+    btnEmitir.disabled=false; btnEmitir.textContent='Emitir Nota';
+  }
 });
 
-// Render inicial
+/* ===== Render inicial ===== */
 render();
-// Búsqueda default: “Emitida” con 10 items
 performSearch(true);
 </script>
 <script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>

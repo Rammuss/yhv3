@@ -287,7 +287,7 @@ function toNum(v){ return Number(v||0); }
 function money(v,dec=2){ return Number(v||0).toFixed(dec); }
 
 // ===== Timbrado (preview por CAJA) =====
-const URL_TIMBRADO = '../../venta_v3/timbrado/get_timbrado_vigente.php?tipo=Factura'; // Cambiá Factura por NC/ND según pantalla
+const URL_TIMBRADO = '../../venta_v3/timbrado/get_timbrado_vigente.php?tipo=Factura';
 
 async function cargarTimbrado(){
   const info = $('timbradoInfo');
@@ -319,7 +319,6 @@ async function cargarTimbrado(){
     const t = j.timbrado;
     timbrado = t;
 
-    // Cabecera y chips
     info.value = `Timbrado ${t.numero_timbrado} | Vigente ${t.fecha_inicio} a ${t.fecha_fin}`;
     pRango.textContent = `Rango: ${t.nro_desde}–${t.nro_hasta} (actual: ${t.nro_actual})`;
     pPPP.textContent   = `PPP: ${t.establecimiento}-${t.punto_expedicion}`;
@@ -336,7 +335,6 @@ async function cargarTimbrado(){
       pProx.style.background = '';
     }
 
-    // Estado por vigencia / agotado
     const hoy = new Date();
     const fin = parseISO(t.fecha_fin);
     const dias = daysDiff(hoy, fin);
@@ -430,41 +428,83 @@ $('btnEstirar').addEventListener('click', async ()=>{
   try{
     const r=await fetch('get_pedido_para_facturar.php?id_pedido='+pedidoSel);
     const j=await r.json(); if(!j.success) throw new Error(j.error||'No se pudo estirar el pedido');
+
     if(!clienteSel){
       clienteSel={ id_cliente:j.pedido.id_cliente, nombre_completo:(j.pedido.nombre||'')+' '+(j.pedido.apellido||''), ruc_ci:j.pedido.ruc_ci };
-      $('cliente').value=clienteSel.nombre_completo; $('ruc').value=clienteSel.ruc_ci||''; }
-    pintarGrilla(j.items||[]); $('status').textContent='Pedido '+j.pedido.id_pedido+' listo para facturar';
+      $('cliente').value=clienteSel.nombre_completo; $('ruc').value=clienteSel.ruc_ci||'';
+    }
+
+    // Pintamos la grilla con ítems y usamos los TOTALES DEL BACKEND para el pie
+    pintarGrilla(j.items||[], j.totales || null);
+
+    $('status').textContent='Pedido '+j.pedido.id_pedido+' listo para facturar';
     planCuotas=[]; $('planWrap').style.display='none';
     resetPagosTabla();
   }catch(e){ alert(e.message); }
 });
 
-// ===== Grilla =====
-function pintarGrilla(items){
+// ===== Grilla (FIX: no duplicar IVA) =====
+// Si totalesBackend viene, se usan esos números (evita diferencias con el server).
+function pintarGrilla(items, totalesBackend=null){
   const tb=$('grid').querySelector('tbody'); tb.innerHTML='';
-  let g10=0,i10=0,g5=0,i5=0,ex=0,total=0;
+
+  // Pintar filas
   items.forEach(it=>{
     const tr=document.createElement('tr');
     tr.innerHTML=`
       <td>${it.descripcion}</td>
       <td>${it.tipo_item==='S'?'Servicio':'Producto'}</td>
-      <td class="right">${Number(it.cantidad).toFixed(3)}</td>
-      <td class="right">${Number(it.precio_unitario).toFixed(2)}</td>
-      <td>${it.tipo_iva}</td>
-      <td class="right">${Number(it.subtotal_neto).toFixed(2)}</td>`;
+      <td class="right">${Number(it.cantidad||0).toFixed(3)}</td>
+      <td class="right">${Number(it.precio_unitario||0).toFixed(2)}</td>
+      <td>${it.tipo_iva||''}</td>
+      <td class="right">${Number(it.subtotal_neto||0).toFixed(2)}</td>`;
     tb.appendChild(tr);
-    if(it.tipo_iva==='10%'){ g10+=+it.subtotal_neto; i10+=+it.iva_monto; }
-    else if(it.tipo_iva==='5%'){ g5+=+it.subtotal_neto; i5+=+it.iva_monto; }
-    else { ex+=+it.subtotal_neto; }
-    total += (+it.subtotal_neto) + (+it.iva_monto);
   });
-  $('grav10').textContent=g10.toFixed(2);
-  $('iva10').textContent=i10.toFixed(2);
-  $('grav5').textContent=g5.toFixed(2);
-  $('iva5').textContent=i5.toFixed(2);
-  $('exentas').textContent=ex.toFixed(2);
-  $('total').textContent=total.toFixed(2);
-  totales={grav10:g10,iva10:i10,grav5:g5,iva5:i5,exentas:ex,total};
+
+  if (totalesBackend){
+    // Usar lo que manda el backend (recomendado)
+    $('grav10').textContent   = Number(totalesBackend.total_grav10||0).toFixed(2);
+    $('iva10').textContent    = Number(totalesBackend.total_iva10||0).toFixed(2);
+    $('grav5').textContent    = Number(totalesBackend.total_grav5||0).toFixed(2);
+    $('iva5').textContent     = Number(totalesBackend.total_iva5||0).toFixed(2);
+    $('exentas').textContent  = Number(totalesBackend.total_exentas||0).toFixed(2);
+    $('total').textContent    = Number(totalesBackend.total_factura||0).toFixed(2);
+    totales = {
+      grav10: Number(totalesBackend.total_grav10||0),
+      iva10:  Number(totalesBackend.total_iva10||0),
+      grav5:  Number(totalesBackend.total_grav5||0),
+      iva5:   Number(totalesBackend.total_iva5||0),
+      exentas:Number(totalesBackend.total_exentas||0),
+      total:  Number(totalesBackend.total_factura||0)
+    };
+  } else {
+    // Cálculo local (sin duplicar IVA) por si no mandaran totales del backend
+    let g10=0,i10=0,g5=0,i5=0,ex=0,total=0;
+    items.forEach(it=>{
+      let importe = Number(it.subtotal_neto)|| (Number(it.cantidad||0)*Number(it.precio_unitario||0) - Number(it.descuento||0));
+      if (importe<0) importe=0;
+      const tiva = String(it.tipo_iva||'').toUpperCase();
+      let iva = Number(it.iva_monto)||0;
+      if (iva<=0){
+        if (tiva==='10%'||tiva==='10') iva = +(importe/11).toFixed(2);
+        else if (tiva==='5%'||tiva==='5') iva = +(importe/21).toFixed(2);
+        else iva=0;
+      }
+      const base = +(importe - iva).toFixed(2);
+      if (tiva==='10%'||tiva==='10'){ g10+=base; i10+=iva; }
+      else if (tiva==='5%'||tiva==='5'){ g5+=base; i5+=iva; }
+      else { ex+=base; }
+      total += importe; // NO sumar IVA otra vez
+    });
+    $('grav10').textContent=g10.toFixed(2);
+    $('iva10').textContent=i10.toFixed(2);
+    $('grav5').textContent=g5.toFixed(2);
+    $('iva5').textContent=i5.toFixed(2);
+    $('exentas').textContent=ex.toFixed(2);
+    $('total').textContent=total.toFixed(2);
+    totales={grav10:g10,iva10:i10,grav5:g5,iva5:i5,exentas:ex,total};
+  }
+
   onCondicionChange();
 }
 

@@ -69,12 +69,12 @@ try {
              pr.nombre AS descripcion,
              COALESCE(pr.tipo_item,'P') AS tipo_item,     -- 'P' o 'S'
              'UNI'::varchar(10) AS unidad,
-             d.cantidad::numeric(14,3)      AS cantidad,
+             d.cantidad::numeric(14,3)        AS cantidad,
              d.precio_unitario::numeric(14,2) AS precio_unitario,
              d.tipo_iva,
-             d.descuento::numeric(14,2)     AS descuento,
-             d.iva_monto::numeric(14,2)     AS iva_monto,
-             d.subtotal_neto::numeric(14,2) AS subtotal_neto
+             d.descuento::numeric(14,2)       AS descuento,
+             d.iva_monto::numeric(14,2)       AS iva_monto,
+             d.subtotal_neto::numeric(14,2)   AS subtotal_neto
       FROM public.pedido_det d
       JOIN public.producto pr ON pr.id_producto = d.id_producto
       WHERE d.id_pedido = $1
@@ -87,12 +87,12 @@ try {
              pr.nombre AS descripcion,
              'P' AS tipo_item,                              -- fallback
              'UNI'::varchar(10) AS unidad,
-             d.cantidad::numeric(14,3)      AS cantidad,
+             d.cantidad::numeric(14,3)        AS cantidad,
              d.precio_unitario::numeric(14,2) AS precio_unitario,
              d.tipo_iva,
-             d.descuento::numeric(14,2)     AS descuento,
-             d.iva_monto::numeric(14,2)     AS iva_monto,
-             d.subtotal_neto::numeric(14,2) AS subtotal_neto
+             d.descuento::numeric(14,2)       AS descuento,
+             d.iva_monto::numeric(14,2)       AS iva_monto,
+             d.subtotal_neto::numeric(14,2)   AS subtotal_neto
       FROM public.pedido_det d
       JOIN public.producto pr ON pr.id_producto = d.id_producto
       WHERE d.id_pedido = $1
@@ -103,39 +103,69 @@ try {
   $stDet = pg_query_params($conn, $sqlDet, [$id_pedido]);
   if (!$stDet) { throw new Exception('No se pudo obtener el detalle del pedido'); }
 
+  // --- 4) Construir items y totales NORMALIZADOS ---
   $items = [];
-  $g10=$i10=$g5=$i5=$ex=$tot=0.0;
+  $g10_base = 0.0;  // base 10% sin IVA
+  $i10      = 0.0;  // IVA 10%
+  $g5_base  = 0.0;  // base 5% sin IVA
+  $i5       = 0.0;  // IVA 5%
+  $ex_base  = 0.0;  // exentas
+  $total_visible = 0.0; // total con IVA (lo que ve el cliente)
 
   while ($r = pg_fetch_assoc($stDet)) {
+    // Item para la UI (tal cual DB)
     $itm = [
-      'id_pedido_det' => (int)$r['id_pedido_det'],
-      'id_producto'   => (int)$r['id_producto'],
-      'descripcion'   => $r['descripcion'],
-      'tipo_item'     => $r['tipo_item'],               // 'P' o 'S' (o 'P' fijo si no existe la columna)
-      'unidad'        => $r['unidad'],
-      'cantidad'      => (float)$r['cantidad'],
-      'precio_unitario'=> (float)$r['precio_unitario'],
-      'tipo_iva'      => $r['tipo_iva'],                // '10%' | '5%' | 'Exento'
-      'descuento'     => (float)$r['descuento'],
-      'iva_monto'     => (float)$r['iva_monto'],
-      'subtotal_neto' => (float)$r['subtotal_neto'],
+      'id_pedido_det'   => (int)$r['id_pedido_det'],
+      'id_producto'     => (int)$r['id_producto'],
+      'descripcion'     => $r['descripcion'],
+      'tipo_item'       => $r['tipo_item'],               // 'P' o 'S'
+      'unidad'          => $r['unidad'],
+      'cantidad'        => (float)$r['cantidad'],
+      'precio_unitario' => (float)$r['precio_unitario'],
+      'tipo_iva'        => $r['tipo_iva'],                // '10%' | '5%' | 'Exento'
+      'descuento'       => (float)$r['descuento'],
+      'iva_monto'       => (float)$r['iva_monto'],
+      'subtotal_neto'   => (float)$r['subtotal_neto'],
     ];
     $items[] = $itm;
 
-    // Acumular totales para UI
-    if ($itm['tipo_iva'] === '10%') { $g10 += $itm['subtotal_neto']; $i10 += $itm['iva_monto']; }
-    elseif ($itm['tipo_iva'] === '5%') { $g5 += $itm['subtotal_neto']; $i5 += $itm['iva_monto']; }
-    else { $ex += $itm['subtotal_neto']; }
-    $tot += $itm['subtotal_neto'] + $itm['iva_monto'];
+    // --- Normalización por línea para totales ---
+    $tiva = strtoupper(trim($itm['tipo_iva'])); // '10%' | '5%' | 'EXENTO'
+    // Importe visible (si no llega, lo calculo como cant*pu - desc)
+    $importe = $itm['subtotal_neto'] > 0
+             ? $itm['subtotal_neto']
+             : max(0.0, $itm['cantidad'] * $itm['precio_unitario'] - $itm['descuento']);
+
+    // IVA de la línea: uso el enviado si es >0, si no descompongo por /11 o /21
+    if ($tiva === '10%' || $tiva === '10') {
+      $iva_calc = ($itm['iva_monto'] > 0) ? round($itm['iva_monto'], 2)
+                                          : round($importe / 11.0, 2);
+      $base = $importe - $iva_calc;
+      $g10_base += $base;
+      $i10      += $iva_calc;
+    } elseif ($tiva === '5%' || $tiva === '5') {
+      $iva_calc = ($itm['iva_monto'] > 0) ? round($itm['iva_monto'], 2)
+                                          : round($importe / 21.0, 2);
+      $base = $importe - $iva_calc;
+      $g5_base += $base;
+      $i5      += $iva_calc;
+    } else {
+      // Exento
+      $base = $importe;
+      $ex_base += $base;
+    }
+
+    // El total visible YA incluye el IVA -> no volver a sumarlo
+    $total_visible += $importe;
   }
 
   $totales = [
-    'total_grav10'  => round($g10, 2),
+    'total_grav10'  => round($g10_base, 2),
     'total_iva10'   => round($i10, 2),
-    'total_grav5'   => round($g5, 2),
+    'total_grav5'   => round($g5_base, 2),
     'total_iva5'    => round($i5, 2),
-    'total_exentas' => round($ex, 2),
-    'total_factura' => round($tot, 2)
+    'total_exentas' => round($ex_base, 2),
+    'total_factura' => round($total_visible, 2)
   ];
 
   echo json_encode([

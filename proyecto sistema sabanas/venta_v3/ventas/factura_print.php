@@ -1,5 +1,5 @@
 <?php
-// factura_print.php — Vista A4, lista para imprimir
+// factura_print.php — Vista A4, lista para imprimir (totales recalculados desde detalle, sin duplicar IVA)
 session_start();
 if (empty($_SESSION['nombre_usuario'])) {
   header('Location: /TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/acceso/acceso.html');
@@ -39,10 +39,64 @@ $sqlD = "
 ";
 $rd = pg_query_params($conn, $sqlD, [$id]);
 
+// Normalizar totales desde DETALLE (evita sumar IVA dos veces)
+$rows = [];
+$g10 = 0.0; $i10 = 0.0; $g5 = 0.0; $i5 = 0.0; $ex = 0.0; $total_visible = 0.0;
+
+if ($rd){
+  while($d = pg_fetch_assoc($rd)){
+    $cantidad = (float)$d['cantidad'];
+    $precio   = (float)$d['precio_unitario'];
+    $desc     = 0.0; // el print no recibe el descuento por línea; ya viene neteado en subtotal_neto
+    $tiva_raw = strtoupper(trim((string)$d['tipo_iva'])); // '10%'|'5%'|'EXENTO'|'EXENTO'|'EX'
+    $importe  = (float)$d['subtotal_neto'];               // visible (con IVA si corresponde)
+    if ($importe < 0) $importe = 0.0;
+
+    // IVA de la línea: si viene >0, usarlo; si no, descomponer por /11 o /21
+    $iva = (float)$d['iva_monto'];
+    if ($iva <= 0.0){
+      if ($tiva_raw === '10%' || $tiva_raw === '10') {
+        $iva = round($importe / 11.0, 2);
+      } elseif ($tiva_raw === '5%' || $tiva_raw === '5') {
+        $iva = round($importe / 21.0, 2);
+      } else {
+        $iva = 0.0;
+      }
+    }
+    $base = round($importe - $iva, 2);
+
+    if ($tiva_raw === '10%' || $tiva_raw === '10') { $g10 += $base; $i10 += $iva; }
+    elseif ($tiva_raw === '5%' || $tiva_raw === '5') { $g5 += $base; $i5 += $iva; }
+    else { $ex += $base; }
+
+    $total_visible += $importe;
+
+    $rows[] = [
+      'cantidad' => $cantidad,
+      'descripcion' => $d['descripcion'],
+      'unidad' => $d['unidad'],
+      'precio' => $precio,
+      'tipo_iva' => $d['tipo_iva'],
+      'importe' => $importe
+    ];
+  }
+}
+
+// Redondeos finales
+$g10 = round($g10, 2); $i10 = round($i10, 2);
+$g5  = round($g5 , 2); $i5  = round($i5 , 2);
+$ex  = round($ex , 2);
+$total_visible = round($total_visible, 2);
+
 $estado = strtolower($F['estado'] ?? '');
 $esAnulada = ($estado === 'anulada');
 $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
 $esCredito = (strcasecmp($F['condicion_venta'] ?? '', 'Credito') === 0);
+
+// Diferencia entre cabecera y recalculado (si existiera)
+$header_total = isset($F['total_neto']) ? (float)$F['total_neto'] : (float)$F['total_factura'] ?? 0.0;
+$diffTotal = round($total_visible - $header_total, 2);
+$hayDiferencia = (abs($diffTotal) > 0.01);
 
 // --- CONTADO: calcular saldo pendiente (por si no se pagó todavía)
 $pendienteContado = null;
@@ -125,7 +179,7 @@ if ($esCredito) {
     font-size:120px; color:rgba(185,28,28,.12); font-weight:800; letter-spacing:6px;
   }
 
-  .actions{ position:sticky; top:0; background:#fff; border-bottom:1px solid #eee; padding:8px 14px; display:flex; gap:8px; }
+  .actions{ position:sticky; top:0; background:#fff; border-bottom:1px solid #eee; padding:8px 14px; display:flex; gap:8px; flex-wrap:wrap; }
   .btn{ display:inline-block; padding:8px 12px; border-radius:8px; border:1px solid #e5e7eb; text-decoration:none; color:#111; }
   .btn.primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
   .no-print{ display:block; }
@@ -154,6 +208,10 @@ if ($esCredito) {
     <?php else: ?>
       <span class="badge warn">Contado: Saldo pendiente Gs <?= n($pendienteContado,0) ?></span>
     <?php endif; ?>
+  <?php endif; ?>
+
+  <?php if($hayDiferencia): ?>
+    <span class="badge warn">Ajuste de totales en impresión: cab <?= n($header_total,0) ?> · calc <?= n($total_visible,0) ?></span>
   <?php endif; ?>
 </div>
 
@@ -208,7 +266,7 @@ if ($esCredito) {
           <?php $c = $cuotas[0] ?? null; ?>
           <div style="margin-top:6px; padding:6px; border:1px dashed #e5e7eb; border-radius:8px;">
             <strong>Vencimiento:</strong> <?= e($c['fecha_vencimiento'] ?? '-') ?><br>
-            <strong>Total a crédito:</strong> Gs <?= n($c['total_cuota'] ?? $F['total_neto'], 0) ?>
+            <strong>Total a crédito:</strong> Gs <?= n($c['total_cuota'] ?? $total_visible, 0) ?>
           </div>
         <?php else: ?>
           <div style="margin-top:6px; padding:6px; border:1px dashed #e5e7eb; border-radius:8px;">
@@ -231,17 +289,17 @@ if ($esCredito) {
       </tr>
     </thead>
     <tbody>
-      <?php if ($rd && pg_num_rows($rd)>0): ?>
-        <?php while($d=pg_fetch_assoc($rd)): ?>
+      <?php if (!empty($rows)): ?>
+        <?php foreach($rows as $d): ?>
           <tr>
             <td><?= e(n($d['cantidad'], 0)) ?></td>
             <td><?= e($d['descripcion']) ?></td>
             <td><?= e($d['unidad']) ?></td>
-            <td class="right"><?= e(n($d['precio_unitario'], 0)) ?></td>
+            <td class="right"><?= e(n($d['precio'], 0)) ?></td>
             <td class="right"><?= e($d['tipo_iva']) ?></td>
-            <td class="right"><?= e(n($d['subtotal_neto'], 0)) ?></td>
+            <td class="right"><?= e(n($d['importe'], 0)) ?></td>
           </tr>
-        <?php endwhile; ?>
+        <?php endforeach; ?>
       <?php else: ?>
         <tr><td colspan="6" class="muted">Sin ítems</td></tr>
       <?php endif; ?>
@@ -251,32 +309,32 @@ if ($esCredito) {
       <tr>
         <td colspan="4"></td>
         <td class="right">Grav. 10%:</td>
-        <td class="right"><?= e(n($F['total_grav10'] ?? 0, 0)) ?></td>
+        <td class="right"><?= e(n($g10, 0)) ?></td>
       </tr>
       <tr>
         <td colspan="4"></td>
         <td class="right">IVA 10%:</td>
-        <td class="right"><?= e(n($F['total_iva10'] ?? 0, 0)) ?></td>
+        <td class="right"><?= e(n($i10, 0)) ?></td>
       </tr>
       <tr>
         <td colspan="4"></td>
         <td class="right">Grav. 5%:</td>
-        <td class="right"><?= e(n($F['total_grav5'] ?? 0, 0)) ?></td>
+        <td class="right"><?= e(n($g5, 0)) ?></td>
       </tr>
       <tr>
         <td colspan="4"></td>
         <td class="right">IVA 5%:</td>
-        <td class="right"><?= e(n($F['total_iva5'] ?? 0, 0)) ?></td>
+        <td class="right"><?= e(n($i5, 0)) ?></td>
       </tr>
       <tr>
         <td colspan="4"></td>
         <td class="right">Exentas:</td>
-        <td class="right"><?= e(n($F['total_exentas'] ?? 0, 0)) ?></td>
+        <td class="right"><?= e(n($ex, 0)) ?></td>
       </tr>
       <tr>
         <td colspan="4"></td>
-        <td class="right"><strong>Total Neto:</strong></td>
-        <td class="right"><strong><?= e(n($F['total_neto'] ?? 0, 0)) ?></strong></td>
+        <td class="right"><strong>Total:</strong></td>
+        <td class="right"><strong><?= e(n($total_visible, 0)) ?></strong></td>
       </tr>
     </tfoot>
   </table>

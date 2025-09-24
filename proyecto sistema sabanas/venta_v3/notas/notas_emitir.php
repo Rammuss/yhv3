@@ -138,7 +138,7 @@ try {
       $id_fact, $id_cli, $id_timbrado, $id_asignacion, $nro_corr,
       $ppp, $numero_doc, $fecha,
       $mot_id, $mot_txt,
-      $tot_bruto, $tot_desc, $tot_iva, $tot_neto,
+      (float)$tot_bruto, (float)$tot_desc, (float)$tot_iva, (float)$tot_neto,
       $afecta_stock ? 't' : 'f', $creado_por, $ahora_ts, $id_caja, $id_caja_sesion
     ]);
     if (!$rCab) throw new Exception('No se pudo crear NC (cabecera)');
@@ -168,7 +168,7 @@ try {
     }
 
     /* ---- NC: CxC (aplica crédito) ---- */
-    $credito = $tot_neto;
+    $credito = (float)$tot_neto;
     if ($credito > 0.009) {
       if ($id_fact){
         $rs = pg_query_params($conn, "
@@ -186,7 +186,7 @@ try {
           pg_query_params($conn,"
             INSERT INTO public.movimiento_cxc (id_cxc, fecha, tipo, monto, referencia, observacion)
             VALUES ($1,$2::date,'nota_credito',$3,$4,'NC aplicada a factura')
-          ", [$id_cxc, $fecha, $aplicar, $numero_doc]);
+          ", [$id_cxc, $fecha, (float)$aplicar, $numero_doc]);
 
           pg_query_params($conn,"
             UPDATE public.cuenta_cobrar
@@ -194,7 +194,7 @@ try {
                    estado = CASE WHEN saldo_actual - $1 <= 0.009 THEN 'Cerrada' ELSE estado END,
                    actualizado_en = NOW()
              WHERE id_cxc = $2
-          ", [$aplicar, $id_cxc]);
+          ", [(float)$aplicar, $id_cxc]);
 
           $credito -= $aplicar;
         }
@@ -206,13 +206,13 @@ try {
             (id_cliente, id_factura, fecha_origen, monto_origen, saldo_actual, estado)
           VALUES ($1,NULL,$2::date,$3 * -1, $3 * -1,'Abierta')
           RETURNING id_cxc
-        ", [$id_cli, $fecha, $credito]);
+        ", [$id_cli, $fecha, (float)$credito]);
         $id_cxc_cred = (int)pg_fetch_result($r, 0, 0);
 
         pg_query_params($conn,"
           INSERT INTO public.movimiento_cxc (id_cxc, fecha, tipo, monto, referencia, observacion)
           VALUES ($1,$2::date,'nota_credito',$3,$4,'NC saldo a favor')
-        ", [$id_cxc_cred, $fecha, $credito, $numero_doc]);
+        ", [$id_cxc_cred, $fecha, (float)$credito, $numero_doc]);
       }
     }
 
@@ -230,7 +230,7 @@ try {
       if ($okStock === false) throw new Exception('No se pudo registrar movimiento de stock (NC)');
     }
 
-    /* ---- NC: Libro Ventas (libro_ventas_new) → negativos ---- */
+    /* ---- NC: Libro Ventas (libro_ventas_new) → negativos con CAST ---- */
     $rSum = pg_query_params($conn, "
       WITH base AS (
         SELECT
@@ -266,13 +266,13 @@ try {
       ) VALUES (
         $1::date,'NC',$2,$3,$4,
         $5,$6,
-        -($7::numeric),-($8::numeric),-($9::numeric),-($10::numeric),-($11::numeric),-($12::numeric),
+        ($7::numeric)*-1,($8::numeric)*-1,($9::numeric)*-1,($10::numeric)*-1,($11::numeric)*-1,($12::numeric)*-1,
         'Emitida',$13,$14
       )
     ",[
       $fecha, $id_nota, $numero_doc, $num_tim,
       $id_cli, $cond_venta,
-      $lv_g10,$lv_i10,$lv_g5,$lv_i5,$lv_ex,$tot_neto,
+      (float)$lv_g10,(float)$lv_i10,(float)$lv_g5,(float)$lv_i5,(float)$lv_ex,(float)$tot_neto,
       $id_timbrado, $id_caja
     ]);
     if (!$okLibro) throw new Exception('No se pudo registrar NC en libro_ventas_new');
@@ -297,7 +297,7 @@ try {
       $id_fact, $id_cli, $id_timbrado, $id_asignacion, $nro_corr,
       $ppp, $numero_doc, $fecha,
       $mot_id, $mot_txt,
-      $tot_bruto, $tot_desc, $tot_iva, $tot_neto,
+      (float)$tot_bruto, (float)$tot_desc, (float)$tot_iva, (float)$tot_neto,
       $creado_por, $ahora_ts, $id_caja, $id_caja_sesion
     ]);
     if (!$rCab) throw new Exception('No se pudo crear ND (cabecera)');
@@ -333,15 +333,15 @@ try {
         (id_cliente, id_factura, fecha_origen, monto_origen, saldo_actual, fecha_vencimiento, estado)
       VALUES ($1,$2,$3::date,$4,$4,$5::date,'Abierta')
       RETURNING id_cxc
-    ",[$id_cli, $id_fact, $fecha, $tot_neto, $vto_nd]);
+    ",[$id_cli, $id_fact, $fecha, (float)$tot_neto, $vto_nd]);
     $id_cxc_nd = (int)pg_fetch_result($r,0,0);
 
     pg_query_params($conn,"
       INSERT INTO public.movimiento_cxc (id_cxc, fecha, tipo, monto, referencia, observacion)
       VALUES ($1,$2::date,'recargo',$3,$4,'ND recargo/ajuste')
-    ",[$id_cxc_nd, $fecha, $tot_neto, $numero_doc]);
+    ",[$id_cxc_nd, $fecha, (float)$tot_neto, $numero_doc]);
 
-    /* ---- ND: Libro Ventas (libro_ventas_new) → positivos ---- */
+    /* ---- ND: Libro Ventas (libro_ventas_new) → positivos con CAST ---- */
     $rSum = pg_query_params($conn, "
       WITH base AS (
         SELECT
@@ -383,7 +383,7 @@ try {
     ",[
       $fecha, $id_nota, $numero_doc, $num_tim,
       $id_cli, $cond_venta,
-      $lv_g10,$lv_i10,$lv_g5,$lv_i5,$lv_ex,$tot_neto,
+      (float)$lv_g10,(float)$lv_i10,(float)$lv_g5,(float)$lv_i5,(float)$lv_ex,(float)$tot_neto,
       $id_timbrado, $id_caja
     ]);
     if (!$okLibro) throw new Exception('No se pudo registrar ND en libro_ventas_new');
@@ -402,10 +402,10 @@ try {
     'id_nota'=>$id_nota,
     'fecha_emision'=>$fecha,
     'totales'=>[
-      'bruto'=>$tot_bruto,
-      'descuento'=>$tot_desc,
-      'iva'=>$tot_iva,
-      'neto'=>$tot_neto
+      'bruto'=>(float)$tot_bruto,
+      'descuento'=>(float)$tot_desc,
+      'iva'=>(float)$tot_iva,
+      'neto'=>(float)$tot_neto
     ]
   ]);
 
