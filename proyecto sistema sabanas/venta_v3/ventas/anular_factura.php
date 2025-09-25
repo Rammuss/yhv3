@@ -8,6 +8,36 @@ header('Content-Type: application/json; charset=utf-8');
 
 function is_positive_int($v){ return is_numeric($v) && (int)$v > 0; }
 
+/** Detecta nombre de tabla de libro de ventas a usar */
+function libro_table($conn){
+  // Prioridad a la nueva
+  $q1 = pg_query_params($conn,"
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema='public' AND table_name='libro_ventas_new' LIMIT 1",[]);
+  if ($q1 && pg_num_rows($q1) > 0) return 'libro_ventas_new';
+
+  // Fallback a la vieja
+  $q2 = pg_query_params($conn,"
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema='public' AND table_name='libro_ventas' LIMIT 1",[]);
+  if ($q2 && pg_num_rows($q2) > 0) return 'libro_ventas';
+
+  throw new Exception('No existe tabla de libro de ventas (libro_ventas_new / libro_ventas)');
+}
+
+/** Detecta nombre de columna de tipo en movimiento_stock */
+function stock_tipo_col($conn){
+  $q1 = pg_query_params($conn,"
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='movimiento_stock' AND column_name='tipo_movimiento' LIMIT 1",[]);
+  if ($q1 && pg_num_rows($q1) > 0) return 'tipo_movimiento';
+  $q2 = pg_query_params($conn,"
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='movimiento_stock' AND column_name='tipo' LIMIT 1",[]);
+  if ($q2 && pg_num_rows($q2) > 0) return 'tipo';
+  throw new Exception("No se encontró la columna de tipo ('tipo_movimiento' o 'tipo') en movimiento_stock");
+}
+
 try {
   if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -22,6 +52,10 @@ try {
 
   if (!is_positive_int($id_factura)) { throw new Exception('id_factura inválido'); }
   if (empty($motivo)) { throw new Exception('motivo es requerido'); }
+
+  // Descubrir recursos
+  $libroTbl = libro_table($conn);
+  $stockTipoCol = stock_tipo_col($conn);
 
   pg_query($conn, 'BEGIN');
 
@@ -58,14 +92,14 @@ try {
     throw new Exception('No se puede anular: existen pagos aplicados a la CxC asociada');
   }
 
-  // 3) Revertir STOCK con entrada por cada ítem de producto
+  // 3) Revertir STOCK con entrada por cada ítem de producto (cantidad exacta)
   $sqlStockEntrada = "
-    INSERT INTO public.movimiento_stock(fecha, id_producto, tipo_movimiento, cantidad, observacion)
+    INSERT INTO public.movimiento_stock(fecha, id_producto, {$stockTipoCol}, cantidad, observacion)
     SELECT
       NOW(),
       d.id_producto,
       'entrada'::varchar(10),
-      GREATEST(1, ROUND(d.cantidad)::int),
+      d.cantidad,                               -- misma cantidad que salió
       'Anulación Fact. '||$1
     FROM public.factura_venta_det d
     JOIN public.producto p ON p.id_producto = d.id_producto
@@ -75,24 +109,44 @@ try {
   $okStock = pg_query_params($conn, $sqlStockEntrada, [$numero_doc, $id_factura]);
   if ($okStock === false) { throw new Exception('No se pudo revertir el movimiento de stock'); }
 
-  // 4) CxC: marcar como Anulada (si existe)
-  //    (No borramos; saldo a 0 para evitar cobranzas posteriores)
+  // 4) CxC: marcar como Anulada (si existe) y saldo a 0
   $sqlCxCUpdate = "
     UPDATE public.cuenta_cobrar
-       SET estado='Anulada', saldo_actual=0
+       SET estado='Anulada', saldo_actual=0, actualizado_en=NOW()
      WHERE id_factura = $1
   ";
   $okCxC = pg_query_params($conn, $sqlCxCUpdate, [$id_factura]);
   if ($okCxC === false) { throw new Exception('No se pudo actualizar CxC a estado Anulada'); }
 
   // 5) Libro Ventas: marcar estado_doc='Anulada'
-  $sqlLibro = "
-    UPDATE public.libro_ventas
-       SET estado_doc='Anulada'
-     WHERE id_factura = $1
-  ";
-  $okLib = pg_query_params($conn, $sqlLibro, [$id_factura]);
-  if ($okLib === false) { throw new Exception('No se pudo actualizar Libro de Ventas'); }
+  if ($libroTbl === 'libro_ventas_new') {
+    // En la nueva tabla se referencia por doc_tipo + id_doc
+    $sqlLibro = "
+      UPDATE public.libro_ventas_new
+         SET estado_doc='Anulada'
+       WHERE doc_tipo='FACT' AND id_doc=$1
+    ";
+    $okLib = pg_query_params($conn, $sqlLibro, [$id_factura]);
+    if ($okLib === false) { throw new Exception('No se pudo actualizar Libro de Ventas (new)'); }
+  } else {
+    // En la vieja tabla asumimos que hay columna id_factura o numero_documento
+    // Intento por id_factura
+    $okLib = pg_query_params($conn, "
+      UPDATE public.libro_ventas
+         SET estado_doc='Anulada'
+       WHERE id_factura=$1
+    ", [$id_factura]);
+
+    if ($okLib === false || pg_affected_rows($okLib) === 0) {
+      // Fallback por número_documento
+      $okLib2 = pg_query_params($conn, "
+        UPDATE public.libro_ventas
+           SET estado_doc='Anulada'
+         WHERE numero_documento=$1
+      ", [$numero_doc]);
+      if ($okLib2 === false) { throw new Exception('No se pudo actualizar Libro de Ventas (legacy)'); }
+    }
+  }
 
   // 6) Factura → estado Anulada + auditoría de anulación
   $sqlFacUpd = "
@@ -117,7 +171,7 @@ try {
     if ($okPed === false) { throw new Exception('No se pudo devolver el pedido a Pendiente'); }
   }
 
-  // NOTA: No se toca timbrado (numeración no se retrocede).
+  // Nota: No se toca timbrado (numeración no se retrocede).
 
   pg_query($conn, 'COMMIT');
 

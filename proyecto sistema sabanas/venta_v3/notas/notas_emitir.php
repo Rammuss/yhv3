@@ -85,20 +85,20 @@ try {
   }
   if ($tot_neto <= 0) { throw new Exception('total_neto inválido'); }
 
-  // Si está vinculada a una factura, traigo condicion_venta para el libro (si no, default Contado)
-  $cond_venta = 'Contado';
+  // Si está vinculada a una factura, traigo condicion_venta (para NC). Para ND forzaremos 'Credito' más abajo.
+  $cond_venta_nc = 'Contado';
   if ($id_fact) {
     $rCV = pg_query_params($conn, "SELECT condicion_venta FROM public.factura_venta_cab WHERE id_factura=$1", [$id_fact]);
     if ($rCV && pg_num_rows($rCV)>0) {
-      $cond_venta = pg_fetch_result($rCV, 0, 0) ?: 'Contado';
+      $cond_venta_nc = pg_fetch_result($rCV, 0, 0) ?: 'Contado';
     }
   }
 
   // ---------------- TX ----------------
   pg_query($conn, 'BEGIN');
 
-  // A) Reservar número (usa SP simple por PPP y caja)
-  $tamBloque = isset($in['tamano_bloque']) ? (int)$in['tamano_bloque'] : 1; // ignorado por el SP simple; ok enviar 1
+  // A) Reservar número (usa SP por PPP y caja)
+  $tamBloque = isset($in['tamano_bloque']) ? (int)$in['tamano_bloque'] : 1;
   $rRes = pg_query_params($conn, "SELECT * FROM public.reservar_numero($1,$2,$3)", [$clase, $id_caja, $tamBloque]);
   if (!$rRes || pg_num_rows($rRes)===0) { throw new Exception('No se pudo reservar numeración'); }
   $res = pg_fetch_assoc($rRes);
@@ -108,15 +108,16 @@ try {
   $numero_doc    = $res['numero_formateado']; // EEE-PPP-0000001
 
   // PPP
-  $rTim = pg_query_params($conn, "SELECT establecimiento, punto_expedicion FROM public.timbrado WHERE id_timbrado=$1", [$id_timbrado]);
+  $rTim = pg_query_params($conn, "SELECT establecimiento, punto_expedicion, numero_timbrado FROM public.timbrado WHERE id_timbrado=$1", [$id_timbrado]);
   if (!$rTim || pg_num_rows($rTim)===0) { throw new Exception('Timbrado no encontrado'); }
   $tim = pg_fetch_assoc($rTim);
   $ppp = $tim['establecimiento'].'-'.$tim['punto_expedicion'];
+  $num_tim = $tim['numero_timbrado'];
 
   // Auditoría
   $tz = new DateTimeZone('America/Asuncion');
   $ahora_ts = (new DateTime('now', $tz))->format('Y-m-d H:i:sP');
-  $creado_por = $_SESSION['usuario'] ?? 'system';
+  $creado_por = $_SESSION['usuario'] ?? ($_SESSION['nombre_usuario'] ?? 'system');
 
   if ($clase === 'NC') {
     /* ---- NC: CAB ---- */
@@ -167,54 +168,42 @@ try {
       if (!$ok) throw new Exception('No se pudo insertar detalle NC en fila '.($i+1));
     }
 
-    /* ---- NC: CxC (aplica crédito) ---- */
+    /* ---- NC: Aplicación sobre CxC de la factura (si corresponde) ---- */
     $credito = (float)$tot_neto;
-    if ($credito > 0.009) {
-      if ($id_fact){
-        $rs = pg_query_params($conn, "
-          SELECT id_cxc, saldo_actual
-          FROM public.cuenta_cobrar
-          WHERE id_cliente=$1 AND id_factura=$2 AND estado='Abierta'
-          ORDER BY fecha_vencimiento NULLS FIRST, id_cxc
-        ", [$id_cli, $id_fact]);
+    if ($credito > 0.009 && $id_fact){
+      $rs = pg_query_params($conn, "
+        SELECT id_cxc, saldo_actual
+        FROM public.cuenta_cobrar
+        WHERE id_cliente=$1 AND id_factura=$2 AND estado='Abierta'
+        ORDER BY fecha_vencimiento NULLS FIRST, id_cxc
+        FOR UPDATE
+      ", [$id_cli, $id_fact]);
 
-        while ($credito > 0.009 && $rs && ($cc = pg_fetch_assoc($rs))){
-          $id_cxc = (int)$cc['id_cxc']; $saldo = (float)$cc['saldo_actual'];
-          if ($saldo <= 0) { continue; }
-          $aplicar = min($credito, $saldo);
+      while ($credito > 0.009 && $rs && ($cc = pg_fetch_assoc($rs))){
+        $id_cxc = (int)$cc['id_cxc']; $saldo = (float)$cc['saldo_actual'];
+        if ($saldo <= 0) { continue; }
+        $aplicar = min($credito, $saldo);
 
-          pg_query_params($conn,"
-            INSERT INTO public.movimiento_cxc (id_cxc, fecha, tipo, monto, referencia, observacion)
-            VALUES ($1,$2::date,'nota_credito',$3,$4,'NC aplicada a factura')
-          ", [$id_cxc, $fecha, (float)$aplicar, $numero_doc]);
-
-          pg_query_params($conn,"
-            UPDATE public.cuenta_cobrar
-               SET saldo_actual = saldo_actual - $1,
-                   estado = CASE WHEN saldo_actual - $1 <= 0.009 THEN 'Cerrada' ELSE estado END,
-                   actualizado_en = NOW()
-             WHERE id_cxc = $2
-          ", [(float)$aplicar, $id_cxc]);
-
-          $credito -= $aplicar;
-        }
-      }
-      if ($credito > 0.009) {
-        // crédito a favor (CxC negativa)
-        $r = pg_query_params($conn,"
-          INSERT INTO public.cuenta_cobrar
-            (id_cliente, id_factura, fecha_origen, monto_origen, saldo_actual, estado)
-          VALUES ($1,NULL,$2::date,$3 * -1, $3 * -1,'Abierta')
-          RETURNING id_cxc
-        ", [$id_cli, $fecha, (float)$credito]);
-        $id_cxc_cred = (int)pg_fetch_result($r, 0, 0);
-
-        pg_query_params($conn,"
+        $okMv = pg_query_params($conn,"
           INSERT INTO public.movimiento_cxc (id_cxc, fecha, tipo, monto, referencia, observacion)
-          VALUES ($1,$2::date,'nota_credito',$3,$4,'NC saldo a favor')
-        ", [$id_cxc_cred, $fecha, (float)$credito, $numero_doc]);
+          VALUES ($1,$2::date,'nota_credito',$3,$4,'NC aplicada a factura')
+        ", [$id_cxc, $fecha, (float)$aplicar, $numero_doc]);
+        if(!$okMv) throw new Exception('No se pudo registrar movimiento CxC');
+
+        $okUp = pg_query_params($conn,"
+          UPDATE public.cuenta_cobrar
+             SET saldo_actual = saldo_actual - $1,
+                 estado = CASE WHEN saldo_actual - $1 <= 0.009 THEN 'Cerrada' ELSE estado END,
+                 actualizado_en = NOW()
+           WHERE id_cxc = $2
+        ", [(float)$aplicar, $id_cxc]);
+        if(!$okUp) throw new Exception('No se pudo actualizar cuota');
+
+        $credito -= $aplicar;
       }
     }
+    // Si queda crédito sin aplicar, NO creamos CxC negativa.
+    // La NC queda 'Emitida' para egreso de caja posterior o para aplicar luego a otra factura.
 
     /* ---- NC: Stock devolución (entrada) ---- */
     if ($afecta_stock){
@@ -253,10 +242,6 @@ try {
     if (!$rSum) throw new Exception('No se pudo calcular totales de libro para NC');
     list($lv_g10,$lv_i10,$lv_g5,$lv_i5,$lv_ex) = array_map('floatval', pg_fetch_row($rSum));
 
-    $rNumTim = pg_query_params($conn,"SELECT numero_timbrado FROM public.timbrado WHERE id_timbrado=$1",[$id_timbrado]);
-    if (!$rNumTim || pg_num_rows($rNumTim)==0) throw new Exception('No se pudo obtener número de timbrado (NC)');
-    $num_tim = pg_fetch_result($rNumTim,0,0);
-
     $okLibro = pg_query_params($conn,"
       INSERT INTO public.libro_ventas_new(
         fecha_emision, doc_tipo, id_doc, numero_documento, timbrado_numero,
@@ -271,7 +256,7 @@ try {
       )
     ",[
       $fecha, $id_nota, $numero_doc, $num_tim,
-      $id_cli, $cond_venta,
+      $id_cli, $cond_venta_nc,
       (float)$lv_g10,(float)$lv_i10,(float)$lv_g5,(float)$lv_i5,(float)$lv_ex,(float)$tot_neto,
       $id_timbrado, $id_caja
     ]);
@@ -336,12 +321,13 @@ try {
     ",[$id_cli, $id_fact, $fecha, (float)$tot_neto, $vto_nd]);
     $id_cxc_nd = (int)pg_fetch_result($r,0,0);
 
-    pg_query_params($conn,"
+    $okMv = pg_query_params($conn,"
       INSERT INTO public.movimiento_cxc (id_cxc, fecha, tipo, monto, referencia, observacion)
       VALUES ($1,$2::date,'recargo',$3,$4,'ND recargo/ajuste')
     ",[$id_cxc_nd, $fecha, (float)$tot_neto, $numero_doc]);
+    if(!$okMv) throw new Exception('No se pudo registrar movimiento CxC (ND)');
 
-    /* ---- ND: Libro Ventas (libro_ventas_new) → positivos con CAST ---- */
+    /* ---- ND: Libro Ventas (libro_ventas_new) → positivos ---- */
     $rSum = pg_query_params($conn, "
       WITH base AS (
         SELECT
@@ -364,10 +350,7 @@ try {
     if (!$rSum) throw new Exception('No se pudo calcular totales de libro para ND');
     list($lv_g10,$lv_i10,$lv_g5,$lv_i5,$lv_ex) = array_map('floatval', pg_fetch_row($rSum));
 
-    $rNumTim = pg_query_params($conn,"SELECT numero_timbrado FROM public.timbrado WHERE id_timbrado=$1",[$id_timbrado]);
-    if (!$rNumTim || pg_num_rows($rNumTim)==0) throw new Exception('No se pudo obtener número de timbrado (ND)');
-    $num_tim = pg_fetch_result($rNumTim,0,0);
-
+    // Para ND forzamos 'Credito' en el libro (se creó CxC)
     $okLibro = pg_query_params($conn,"
       INSERT INTO public.libro_ventas_new(
         fecha_emision, doc_tipo, id_doc, numero_documento, timbrado_numero,
@@ -376,13 +359,13 @@ try {
         estado_doc, id_timbrado, id_caja
       ) VALUES (
         $1::date,'ND',$2,$3,$4,
-        $5,$6,
-        ($7::numeric),($8::numeric),($9::numeric),($10::numeric),($11::numeric),($12::numeric),
-        'Emitida',$13,$14
+        $5,'Credito',
+        ($6::numeric),($7::numeric),($8::numeric),($9::numeric),($10::numeric),($11::numeric),
+        'Emitida',$12,$13
       )
     ",[
       $fecha, $id_nota, $numero_doc, $num_tim,
-      $id_cli, $cond_venta,
+      $id_cli,
       (float)$lv_g10,(float)$lv_i10,(float)$lv_g5,(float)$lv_i5,(float)$lv_ex,(float)$tot_neto,
       $id_timbrado, $id_caja
     ]);

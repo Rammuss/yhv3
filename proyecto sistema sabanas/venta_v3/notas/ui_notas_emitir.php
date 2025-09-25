@@ -122,7 +122,7 @@ if (empty($_SESSION['nombre_usuario'])) {
     <div id="preview" class="preview">
       <div class="col" id="previewInfo"></div>
       <div class="col">
-        <div class="right">
+        <div class="right" id="boxBtnsFactura">
           <button class="btn btn-sm" type="button" id="btnCargarItems">Cargar ítems</button>
           <button class="btn btn-sm" type="button" id="btnUsarFactura">Usar factura</button>
         </div>
@@ -193,8 +193,9 @@ if (empty($_SESSION['nombre_usuario'])) {
 
     <!-- DETALLE -->
     <h2>Ítems</h2>
-    <div class="right">
-      <button class="btn" type="button" onclick="abrirBuscador()">Buscar producto/servicio</button>
+    <div class="right" id="toolbarItems">
+      <button class="btn" type="button" id="btnBuscarPS" onclick="abrirBuscador()">Buscar producto/servicio</button>
+      <button class="btn" type="button" id="btnAgregarConceptoND" style="display:none" onclick="agregarConceptoND()">Agregar concepto (ND)</button>
       <button class="btn btn-danger" type="button" onclick="limpiarItems()">Limpiar ítems</button>
     </div>
 
@@ -258,8 +259,8 @@ if (empty($_SESSION['nombre_usuario'])) {
 const URL_FACTURAS_BUSCAR   = '../../venta_v3/notas/facturas_buscar.php';
 const URL_FACTURA_DETALLE   = '../../venta_v3/notas/factura_detalle.php';
 const URL_NOTAS_EMITIR      = '../../venta_v3/notas/notas_emitir.php';
-const URL_NOTAS_APLICAR     = '../../venta_v3/notas/aplicar_nc_cuotas.php';  // NUEVO
-const URL_FACTS_CRED_ABIERT = '../../venta_v3/notas/facturas_credito_abiertas.php'; // NUEVO
+const URL_NOTAS_APLICAR     = '../../venta_v3/notas/aplicar_nc_cuotas.php';
+const URL_FACTS_CRED_ABIERT = '../../venta_v3/notas/facturas_credito_abiertas.php';
 const URL_CLIENTES_BUSCAR   = '/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/cliente/clientes_buscar.php';
 const URL_PROD_BUSCAR       = 'productos_disponibles.php';
 
@@ -281,14 +282,44 @@ function setHoy(){
 }
 document.addEventListener('DOMContentLoaded', setHoy);
 
-/* ===== Clase → toggle afecta stock ===== */
+/* ===== Clase → toggle UI (NC vs ND) ===== */
 const selClase = document.getElementById('clase');
 const chkAfecta = document.getElementById('afecta_stock');
-selClase.addEventListener('change', ()=>{
+const accionSel = document.getElementById('accionPost');
+const boxAplicar = document.getElementById('boxAplicar');
+const btnBuscarPS = document.getElementById('btnBuscarPS');
+const btnAgregarConceptoND = document.getElementById('btnAgregarConceptoND');
+const boxBtnsFactura = document.getElementById('boxBtnsFactura');
+
+function toggleUiByClase(){
   const isNC = selClase.value==='NC';
+  // Stock sólo NC
   chkAfecta.disabled = !isNC;
   if (!isNC) chkAfecta.checked = false;
-});
+
+  // Acciones post-emisión
+  if (isNC){
+    // permitir aplicar a cuotas
+    [...accionSel.options].forEach(o=>o.disabled=false);
+  } else {
+    // ND: sólo “emitir”
+    accionSel.value = 'emitir';
+    [...accionSel.options].forEach(o=>{
+      o.disabled = (o.value==='aplicar_cuotas');
+    });
+    boxAplicar.style.display='none';
+  }
+
+  // Toolbar de items
+  btnBuscarPS.style.display       = isNC ? 'inline-block' : 'none';
+  btnAgregarConceptoND.style.display = isNC ? 'none' : 'inline-block';
+
+  // Botones de la vista previa (tiene sentido cargar ítems desde factura sólo para NC)
+  boxBtnsFactura.style.display = isNC ? 'flex' : 'none';
+
+  render(); // re-renderiza filas en modo editable si ND
+}
+selClase.addEventListener('change', toggleUiByClase);
 
 /* ===== Autocompletar Cliente ===== */
 const inpCli = document.getElementById('buscarCliente');
@@ -449,8 +480,6 @@ function renderFacturaPreview(fac){
 }
 
 /* ===== Acción post-emisión ===== */
-const accionSel = document.getElementById('accionPost');
-const boxAplicar = document.getElementById('boxAplicar');
 const ddlFacturaCredito = document.getElementById('ddlFacturaCredito');
 const infoSaldos = document.getElementById('infoSaldos');
 
@@ -470,7 +499,6 @@ async function maybeLoadCreditoList(){
   const idCli = Number(idCliente.value||0);
   if (!idCli){ clearCreditoSelect(); return; }
 
-  // Si ya hay una factura seleccionada de vista previa y es Crédito, la priorizamos
   if (facSel && String(facSel.condicion_venta).toLowerCase()==='credito') {
     ddlFacturaCredito.innerHTML = `<option value="${facSel.id_factura}">${facSel.numero_documento} | ${facSel.fecha_emision}</option>`;
     infoSaldos.textContent = 'Saldo abierto: (se consultará al aplicar)';
@@ -503,7 +531,6 @@ const detalleInput = document.getElementById('detalle_json');
 let items = []; // {id_producto, descripcion, cantidad, precio_unitario, descuento, tipo_iva}
 
 function ivaRate(tipo){
-  // Acepta '10', '10%', '5', '5%', 'EX'
   const t = String(tipo||'').toUpperCase();
   if (t==='10' || t==='10%') return 0.10;
   if (t==='5'  || t==='5%')  return 0.05;
@@ -513,23 +540,44 @@ function fmt2(n){ return Number(n||0).toLocaleString('es-PY',{minimumFractionDig
 
 function render(){
   tbody.innerHTML='';
+  const isNC = selClase.value==='NC';
+
   let tBruto=0, tDesc=0, tIva=0, tNeto=0;
 
   items.forEach((it, i)=>{
-    const bruto = it.cantidad*it.precio_unitario;
-    const base  = Math.max(0, bruto - (it.descuento||0));
+    const bruto = (Number(it.cantidad)||0)*(Number(it.precio_unitario)||0);
+    const base  = Math.max(0, bruto - (Number(it.descuento)||0));
     const iva   = base*ivaRate(it.tipo_iva);
     const neto  = base+iva;
 
-    tBruto+=bruto; tDesc+=(it.descuento||0); tIva+=iva; tNeto+=neto;
+    tBruto+=bruto; tDesc+=(Number(it.descuento)||0); tIva+=iva; tNeto+=neto;
+
+    // Para ND, las celdas son editables (desc, precio, iva, etc)
+    const editable = !isNC;
+
+    const tdDesc = editable
+      ? `<input type="text" value="${it.descripcion||''}" oninput="chgDescTxt(${i},this.value)" style="width:100%;max-width:320px">`
+      : `<span style="text-align:left;display:inline-block;max-width:360px">${it.descripcion||''}</span>`;
+
+    const tdPrecio = editable
+      ? `<input type="number" min="0" step="0.01" value="${Number(it.precio_unitario)||0}" oninput="chgPrecio(${i},this.value)" style="width:120px">`
+      : `${fmt2(it.precio_unitario)}`;
+
+    const tdIva = editable
+      ? `<select onchange="chgIva(${i},this.value)" style="width:90px">
+           <option value="10" ${String(it.tipo_iva||'').includes('10')?'selected':''}>10</option>
+           <option value="5"  ${String(it.tipo_iva||'')==='5'?'selected':''}>5</option>
+           <option value="EX" ${String(it.tipo_iva||'').toUpperCase().startsWith('EX')?'selected':''}>EX</option>
+         </select>`
+      : (String(it.tipo_iva||'EX').toUpperCase().includes('10')?'10':String(it.tipo_iva||'EX').toUpperCase().includes('5')?'5':'EX');
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="text-align:left">${it.descripcion}</td>
-      <td>${fmt2(it.precio_unitario)}</td>
-      <td>${(String(it.tipo_iva||'EX').toUpperCase().includes('10')?'10':String(it.tipo_iva||'EX').toUpperCase().includes('5')?'5':'EX')}</td>
+      <td style="text-align:left">${tdDesc}</td>
+      <td>${tdPrecio}</td>
+      <td>${tdIva}</td>
       <td><input type="number" min="1" step="1" value="${it.cantidad}" oninput="chgCant(${i},this.value)" style="width:90px"></td>
-      <td><input type="number" min="0" step="0.01" value="${it.descuento||0}" oninput="chgDesc(${i},this.value)" style="width:110px"></td>
+      <td><input type="number" min="0" step="0.01" value="${it.descuento||0}" oninput="chgDescImp(${i},this.value)" style="width:110px"></td>
       <td>${fmt2(neto)}</td>
       <td><button class="btn btn-danger btn-sm" type="button" onclick="quitar(${i})">X</button></td>
     `;
@@ -544,15 +592,31 @@ function render(){
   detalleInput.value = JSON.stringify(items);
 }
 function chgCant(i,v){ v=parseInt(v||'0',10); if(!Number.isFinite(v)||v<1) v=1; items[i].cantidad=v; render(); }
-function chgDesc(i,v){ v=parseFloat(v||'0'); if(!Number.isFinite(v)||v<0) v=0; const max=items[i].cantidad*items[i].precio_unitario; if(v>max) v=max; items[i].descuento=v; render(); }
+function chgDescImp(i,v){ v=parseFloat(v||'0'); if(!Number.isFinite(v)||v<0) v=0; const max=items[i].cantidad*items[i].precio_unitario; if(v>max) v=max; items[i].descuento=v; render(); }
+function chgDescTxt(i,v){ items[i].descripcion = v; render(); }
+function chgPrecio(i,v){ v=parseFloat(v||'0'); if(!Number.isFinite(v)||v<0) v=0; items[i].precio_unitario = v; render(); }
+function chgIva(i,v){ items[i].tipo_iva = v; render(); }
 function quitar(i){ items.splice(i,1); render(); }
 function limpiarItems(){ items=[]; render(); }
 
-/* ===== Modal productos ===== */
+// ND: agrega una fila vacía editable
+function agregarConceptoND(){
+  items.push({
+    id_producto: null,
+    descripcion: 'Servicio / Recargo',
+    cantidad: 1,
+    precio_unitario: 0,
+    descuento: 0,
+    tipo_iva: '10'
+  });
+  render();
+}
+
+/* ===== Modal productos (sólo NC) ===== */
 const modal = document.getElementById('modalBuscar');
 const tbodyBuscar = document.getElementById('tbodyBuscar');
 const inpProd = document.getElementById('qProd');
-function abrirBuscador(){ modal.style.display='block'; buscarProductos(); }
+function abrirBuscador(){ if(selClase.value==='NC'){ modal.style.display='block'; buscarProductos(); } }
 function cerrarBuscador(){ modal.style.display='none'; tbodyBuscar.innerHTML=''; inpProd.value=''; }
 
 let prodTimer=null;
@@ -585,8 +649,9 @@ function agregar(prod){
   render();
 }
 
-/* ===== Cargar items desde factura ===== */
+/* ===== Cargar items desde factura (sólo NC) ===== */
 btnCargarItems.addEventListener('click', ()=>{
+  if(selClase.value!=='NC'){ showToast('Sólo disponible para NC','err'); return; }
   if(!facSel || !facSel.detalle){ showToast('Sin detalle de factura','err'); return; }
   items = facSel.detalle.map(d=>({
     id_producto: d.id_producto || null,
@@ -635,7 +700,7 @@ form.addEventListener('submit', async (e)=>{
   const accion = accionSel.value;
   let id_factura_aplicar = null;
   if (accion==='aplicar_cuotas'){
-    // Prioriza la factura seleccionada en el paso 1 si existe y es Crédito
+    if (clase!=='NC'){ showToast('Aplicar a cuotas sólo para NC','err'); return; }
     if (facSel && String(facSel.condicion_venta).toLowerCase()==='credito'){
       id_factura_aplicar = facSel.id_factura;
     } else {
@@ -663,7 +728,7 @@ form.addEventListener('submit', async (e)=>{
       });
       const k = await r2.json();
       if (!k.success){ showToast('NC emitida, pero no se pudo aplicar a cuotas: '+(k.error||''), 'err'); }
-      else { showToast(`✅ NC ${js.numero_documento} emitida y aplicada (Gs ${Number(k.aplicado_total||0).toFixed(2)})`,'ok'); }
+      else { showToast(`✅ NC ${js.numero_documento} emitida y aplicada (Gs ${Number(k.aplicado||0).toFixed(2)})`,'ok'); }
     } else {
       showToast(`✅ ${js.clase} Nº ${js.numero_documento} emitida`,'ok');
     }
@@ -673,6 +738,7 @@ form.addEventListener('submit', async (e)=>{
     preview.style.display='none'; facSel=null; document.getElementById('id_factura').value='';
     clearCreditoSelect();
     accionSel.value='emitir'; boxAplicar.style.display='none';
+    toggleUiByClase();
 
   }catch(err){
     showToast('Error de red/servidor','err');
@@ -684,6 +750,7 @@ form.addEventListener('submit', async (e)=>{
 /* ===== Render inicial ===== */
 render();
 performSearch(true);
+toggleUiByClase(); // asegura estado correcto al cargar
 </script>
 <script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
