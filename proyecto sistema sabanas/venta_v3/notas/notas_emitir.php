@@ -3,6 +3,7 @@
  * notas_emitir.php
  * Emite Nota de Crédito (NC) o Nota de Débito (ND) con numeración por CAJA usando reservar_numero().
  * Cabecera + Detalle + CxC + (Stock en NC si devolución) + Libro Ventas (libro_ventas_new).
+ * Devuelve print_url para abrir/Imprimir la nota.
  */
 
 session_start();
@@ -12,7 +13,6 @@ header('Content-Type: application/json; charset=utf-8');
 /* ---------------- Helpers ---------------- */
 function is_iso_date($s){ return is_string($s) && preg_match('/^\d{4}-\d{2}-\d{2}$/',$s); }
 function stock_tipo_col($conn){
-  // Detecta si la columna de tipo en movimiento_stock es 'tipo_movimiento' o 'tipo'
   $q1 = pg_query_params($conn,"SELECT 1 FROM information_schema.columns
     WHERE table_schema='public' AND table_name='movimiento_stock' AND column_name='tipo_movimiento' LIMIT 1",[]);
   if ($q1 && pg_num_rows($q1)>0) return 'tipo_movimiento';
@@ -20,6 +20,27 @@ function stock_tipo_col($conn){
     WHERE table_schema='public' AND table_name='movimiento_stock' AND column_name='tipo' LIMIT 1",[]);
   if ($q2 && pg_num_rows($q2)>0) return 'tipo';
   throw new Exception("No se encontró la columna de tipo ('tipo_movimiento' o 'tipo') en movimiento_stock");
+}
+
+/** Normaliza tipo_iva del request a '10' | '5' | 'EX' */
+function norm_iva($t){
+  $t = strtoupper(trim((string)$t));
+  if ($t==='10' || $t==='10%') return '10';
+  if ($t==='5'  || $t==='5%')  return '5';
+  return 'EX';
+}
+/** Calcula bruto/base/iva/neto por línea (2 decimales) */
+function calc_linea($cantidad, $precio, $descuento, $tipo_iva){
+  $cantidad = max(0, (float)$cantidad);
+  $precio   = max(0, (float)$precio);
+  $bruto    = round($cantidad * $precio, 2);
+  $descuento= max(0, min((float)$descuento, $bruto));
+  $base     = round($bruto - $descuento, 2);
+  $tipo     = norm_iva($tipo_iva);
+  $rate     = ($tipo==='10' ? 0.10 : ($tipo==='5' ? 0.05 : 0.00));
+  $iva      = round($base * $rate, 2);
+  $neto     = round($base + $iva, 2);
+  return [$tipo, $bruto, $base, $iva, $neto];
 }
 
 try {
@@ -64,28 +85,27 @@ try {
   );
   if (!$rCaja || pg_num_rows($rCaja)===0) { throw new Exception('La caja de la sesión no está Abierta.'); }
 
-  // Si no vinieron totales, calcular
+  // Si no vinieron totales, calcular a partir del detalle (usando la misma fórmula de abajo)
   if ($tot_neto <= 0) {
+    $tb=0; $td=0; $ti=0; $tn=0;
     foreach ($detalle as $it) {
       $cant = (float)($it['cantidad'] ?? 0);
       $pu   = (float)($it['precio_unitario'] ?? 0);
       $desc = (float)($it['descuento'] ?? 0);
-      $sub  = (float)($it['subtotal_neto'] ?? ($cant * $pu - $desc));
-      if ($sub < 0) $sub = 0;
-
-      $tot_neto  += $sub;
-      $tot_bruto += (float)($it['subtotal_bruto'] ?? max(0, $cant * $pu));
-      $tot_desc  += $desc;
-      $tot_iva   += (float)($it['iva_monto'] ?? 0);
+      [$tipo,$bruto,$base,$iva,$neto] = calc_linea($cant,$pu,$desc,($it['tipo_iva'] ?? 'EX'));
+      $tb += $bruto;
+      $td += min($desc,$bruto);
+      $ti += $iva;
+      $tn += $neto;
     }
-    $tot_bruto = round($tot_bruto, 2);
-    $tot_desc  = round($tot_desc, 2);
-    $tot_iva   = round($tot_iva, 2);
-    $tot_neto  = round($tot_neto, 2);
+    $tot_bruto = round($tb,2);
+    $tot_desc  = round($td,2);
+    $tot_iva   = round($ti,2);
+    $tot_neto  = round($tn,2);
   }
   if ($tot_neto <= 0) { throw new Exception('total_neto inválido'); }
 
-  // Si está vinculada a una factura, traigo condicion_venta (para NC). Para ND forzaremos 'Credito' más abajo.
+  // Si está vinculada a una factura, traigo condicion_venta (para NC). Para ND forzamos 'Credito' más abajo.
   $cond_venta_nc = 'Contado';
   if ($id_fact) {
     $rCV = pg_query_params($conn, "SELECT condicion_venta FROM public.factura_venta_cab WHERE id_factura=$1", [$id_fact]);
@@ -107,7 +127,7 @@ try {
   $nro_corr      = (int)$res['nro_corr'];
   $numero_doc    = $res['numero_formateado']; // EEE-PPP-0000001
 
-  // PPP
+  // PPP + N° timbrado
   $rTim = pg_query_params($conn, "SELECT establecimiento, punto_expedicion, numero_timbrado FROM public.timbrado WHERE id_timbrado=$1", [$id_timbrado]);
   if (!$rTim || pg_num_rows($rTim)===0) { throw new Exception('Timbrado no encontrado'); }
   $tim = pg_fetch_assoc($rTim);
@@ -145,7 +165,7 @@ try {
     if (!$rCab) throw new Exception('No se pudo crear NC (cabecera)');
     $id_nota = (int)pg_fetch_result($rCab, 0, 0);
 
-    /* ---- NC: DET ---- */
+    /* ---- NC: DET (calculando IVA/subtotales si no vienen) ---- */
     $sqlDet = "
       INSERT INTO public.nc_venta_det(
         id_nc, id_producto, descripcion, cantidad, precio_unitario,
@@ -153,22 +173,27 @@ try {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     ";
     foreach($detalle as $i=>$it){
+      $cant = (float)($it['cantidad'] ?? 0);
+      $pu   = (float)($it['precio_unitario'] ?? 0);
+      $des  = (float)($it['descuento'] ?? 0);
+      [$tipo,$bruto,$base,$iva,$neto] = calc_linea($cant,$pu,$des,($it['tipo_iva'] ?? 'EX'));
+
+      // Si vinieron montos, los respeto; si no, uso calculados
+      $iva_ins  = isset($it['iva_monto'])       ? (float)$it['iva_monto']       : $iva;
+      $sb_ins   = isset($it['subtotal_bruto'])  ? (float)$it['subtotal_bruto']  : $bruto;
+      $sn_ins   = isset($it['subtotal_neto'])   ? (float)$it['subtotal_neto']   : $neto;
+
       $ok = pg_query_params($conn,$sqlDet,[
         $id_nota,
         isset($it['id_producto']) ? (int)$it['id_producto'] : null,
         $it['descripcion'] ?? null,
-        (float)($it['cantidad'] ?? 0),
-        (float)($it['precio_unitario'] ?? 0),
-        (float)($it['descuento'] ?? 0),
-        $it['tipo_iva'] ?? '10',      // '10'|'5'|'EX'
-        (float)($it['iva_monto'] ?? 0),
-        (float)($it['subtotal_bruto'] ?? 0),
-        (float)($it['subtotal_neto'] ?? 0),
+        $cant, $pu,
+        min($des,$bruto), $tipo, $iva_ins, $sb_ins, $sn_ins,
       ]);
       if (!$ok) throw new Exception('No se pudo insertar detalle NC en fila '.($i+1));
     }
 
-    /* ---- NC: Aplicación sobre CxC de la factura (si corresponde) ---- */
+    /* ---- NC: Aplicación automática sobre CxC de la factura (si corresponde) ---- */
     $credito = (float)$tot_neto;
     if ($credito > 0.009 && $id_fact){
       $rs = pg_query_params($conn, "
@@ -202,8 +227,6 @@ try {
         $credito -= $aplicar;
       }
     }
-    // Si queda crédito sin aplicar, NO creamos CxC negativa.
-    // La NC queda 'Emitida' para egreso de caja posterior o para aplicar luego a otra factura.
 
     /* ---- NC: Stock devolución (entrada) ---- */
     if ($afecta_stock){
@@ -219,15 +242,15 @@ try {
       if ($okStock === false) throw new Exception('No se pudo registrar movimiento de stock (NC)');
     }
 
-    /* ---- NC: Libro Ventas (libro_ventas_new) → negativos con CAST ---- */
+    /* ---- NC: Libro Ventas (libro_ventas_new) → negativos ---- */
     $rSum = pg_query_params($conn, "
       WITH base AS (
         SELECT
-          CASE WHEN d.tipo_iva IN ('10','10%') THEN d.subtotal_neto ELSE 0 END AS g10,
-          CASE WHEN d.tipo_iva IN ('10','10%') THEN d.iva_monto     ELSE 0 END AS i10,
-          CASE WHEN d.tipo_iva IN ('5','5%')   THEN d.subtotal_neto ELSE 0 END AS g5,
-          CASE WHEN d.tipo_iva IN ('5','5%')   THEN d.iva_monto     ELSE 0 END AS i5,
-          CASE WHEN d.tipo_iva ILIKE 'EX%'     THEN d.subtotal_neto ELSE 0 END AS ex
+          CASE WHEN d.tipo_iva IN ('10','10%','10') THEN d.subtotal_neto ELSE 0 END AS g10,
+          CASE WHEN d.tipo_iva IN ('10','10%','10') THEN d.iva_monto     ELSE 0 END AS i10,
+          CASE WHEN d.tipo_iva IN ('5','5%','5')   THEN d.subtotal_neto ELSE 0 END AS g5,
+          CASE WHEN d.tipo_iva IN ('5','5%','5')   THEN d.iva_monto     ELSE 0 END AS i5,
+          CASE WHEN d.tipo_iva ILIKE 'EX%' OR d.tipo_iva='EX' THEN d.subtotal_neto ELSE 0 END AS ex
         FROM public.nc_venta_det d
         WHERE d.id_nc = $1
       )
@@ -262,6 +285,8 @@ try {
     ]);
     if (!$okLibro) throw new Exception('No se pudo registrar NC en libro_ventas_new');
 
+    $print_url = "nota_print.php?clase=NC&id=".$id_nota."&auto=1";
+
   } else {
     /* ---- ND: CAB ---- */
     $rCab = pg_query_params($conn,"
@@ -288,7 +313,7 @@ try {
     if (!$rCab) throw new Exception('No se pudo crear ND (cabecera)');
     $id_nota = (int)pg_fetch_result($rCab,0,0);
 
-    /* ---- ND: DET ---- */
+    /* ---- ND: DET (con cálculo de IVA/subtotales) ---- */
     $sqlDet = "
       INSERT INTO public.nd_venta_det(
         id_nd, id_producto, descripcion, cantidad, precio_unitario,
@@ -296,17 +321,22 @@ try {
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
     ";
     foreach($detalle as $i=>$it){
+      $cant = (float)($it['cantidad'] ?? 0);
+      $pu   = (float)($it['precio_unitario'] ?? 0);
+      $des  = (float)($it['descuento'] ?? 0);
+      [$tipo,$bruto,$base,$iva,$neto] = calc_linea($cant,$pu,$des,($it['tipo_iva'] ?? 'EX'));
+
+      // Si el frontend no manda iva/subtotales, usamos los calculados
+      $iva_ins  = isset($it['iva_monto'])       ? (float)$it['iva_monto']       : $iva;
+      $sb_ins   = isset($it['subtotal_bruto'])  ? (float)$it['subtotal_bruto']  : $bruto;
+      $sn_ins   = isset($it['subtotal_neto'])   ? (float)$it['subtotal_neto']   : $neto;
+
       $ok = pg_query_params($conn,$sqlDet,[
         $id_nota,
         isset($it['id_producto']) ? (int)$it['id_producto'] : null,
         $it['descripcion'] ?? null,
-        (float)($it['cantidad'] ?? 0),
-        (float)($it['precio_unitario'] ?? 0),
-        (float)($it['descuento'] ?? 0),
-        $it['tipo_iva'] ?? '10',
-        (float)($it['iva_monto'] ?? 0),
-        (float)($it['subtotal_bruto'] ?? 0),
-        (float)($it['subtotal_neto'] ?? 0),
+        $cant, $pu,
+        min($des,$bruto), $tipo, $iva_ins, $sb_ins, $sn_ins,
       ]);
       if (!$ok) throw new Exception('No se pudo insertar detalle ND en fila '.($i+1));
     }
@@ -331,11 +361,11 @@ try {
     $rSum = pg_query_params($conn, "
       WITH base AS (
         SELECT
-          CASE WHEN d.tipo_iva IN ('10','10%') THEN d.subtotal_neto ELSE 0 END AS g10,
-          CASE WHEN d.tipo_iva IN ('10','10%') THEN d.iva_monto     ELSE 0 END AS i10,
-          CASE WHEN d.tipo_iva IN ('5','5%')   THEN d.subtotal_neto ELSE 0 END AS g5,
-          CASE WHEN d.tipo_iva IN ('5','5%')   THEN d.iva_monto     ELSE 0 END AS i5,
-          CASE WHEN d.tipo_iva ILIKE 'EX%'     THEN d.subtotal_neto ELSE 0 END AS ex
+          CASE WHEN d.tipo_iva IN ('10','10%','10') THEN d.subtotal_neto ELSE 0 END AS g10,
+          CASE WHEN d.tipo_iva IN ('10','10%','10') THEN d.iva_monto     ELSE 0 END AS i10,
+          CASE WHEN d.tipo_iva IN ('5','5%','5')   THEN d.subtotal_neto ELSE 0 END AS g5,
+          CASE WHEN d.tipo_iva IN ('5','5%','5')   THEN d.iva_monto     ELSE 0 END AS i5,
+          CASE WHEN d.tipo_iva ILIKE 'EX%' OR d.tipo_iva='EX' THEN d.subtotal_neto ELSE 0 END AS ex
         FROM public.nd_venta_det d
         WHERE d.id_nd = $1
       )
@@ -370,6 +400,8 @@ try {
       $id_timbrado, $id_caja
     ]);
     if (!$okLibro) throw new Exception('No se pudo registrar ND en libro_ventas_new');
+
+    $print_url = "nota_print.php?clase=ND&id=".$id_nota."&auto=1";
   }
 
   pg_query($conn,'COMMIT');
@@ -389,7 +421,8 @@ try {
       'descuento'=>(float)$tot_desc,
       'iva'=>(float)$tot_iva,
       'neto'=>(float)$tot_neto
-    ]
+    ],
+    'print_url' => $print_url
   ]);
 
 } catch (Throwable $e) {

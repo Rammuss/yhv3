@@ -34,6 +34,82 @@ if (empty($_SESSION['nombre_usuario'])) {
   .pill{display:inline-block;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:999px;padding:2px 8px;font-size:12px;margin-left:8px}
   .pill.red{background:#fee2e2;border-color:#fecaca;color:#b91c1c}
   .pill.green{background:#dcfce7;border-color:#bbf7d0;color:#14532d}
+
+  /* ===== Modal QR compacto, responsive y con efecto ===== */
+  #qrModalBk{
+    position:fixed; inset:0;
+    background:rgba(0,0,0,.45);
+    display:none; align-items:center; justify-content:center; z-index:9999;
+  }
+  #qrModal{
+    position:relative;
+    background:#151b33; color:#e7e7ef;
+    border:1px solid #30395c; border-radius:16px;
+    width:min(560px, 92vw); max-height:92vh;
+    padding:0; display:flex; flex-direction:column; overflow:hidden;
+    box-shadow:0 10px 35px rgba(0,0,0,.45);
+  }
+  .qrHeader{ padding:14px 16px 8px; text-align:center; border-bottom:1px solid #263055 }
+  .qrBody{ padding:14px 16px; overflow:auto; }
+  .qrFooter{ padding:12px 16px; border-top:1px solid #263055; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+
+  #qrInfo{ font-size:26px; font-weight:800; margin:6px 0 2px }
+
+  /* === QR: caja y resets para centrar de verdad === */
+  #qrBox{
+    display:inline-flex; align-items:center; justify-content:center;
+    background:#fff; border-radius:12px; padding:10px; margin:8px auto;
+    line-height:0;
+  }
+  /* Contenedor cuadrado que centra al hijo (img/canvas/table) */
+  #qrCanvas{
+    display:grid; place-items:center;
+    width:var(--qr-size, 300px);
+    height:var(--qr-size, 300px);
+    line-height:0;
+  }
+  /* Cualquier salida ocupa el tamaño exacto */
+  #qrBox canvas, #qrBox img, #qrBox table{
+    width:var(--qr-size, 300px);
+    height:var(--qr-size, 300px);
+    display:block; margin:0 auto;
+  }
+  /* Si sale como <table>, quitamos espaciados */
+  #qrBox table{ border-collapse:collapse; border-spacing:0; }
+  #qrBox table, #qrBox table td{ padding:0; margin:0; border:0; line-height:0; }
+
+  .breathe{ animation:breathe 1.8s ease-in-out infinite; box-shadow:0 0 0 0 rgba(76,156,255,.25) }
+  @keyframes breathe{
+    0%{ box-shadow:0 0 0 0 rgba(76,156,255,.25) }
+    70%{ box-shadow:0 0 0 14px rgba(76,156,255,0) }
+    100%{ box-shadow:0 0 0 0 rgba(76,156,255,0) }
+  }
+  #qrStatus{ opacity:.9; margin-top:8px }
+  #qrLinks{ word-break:break-all; font-size:12px; opacity:.9; margin-top:8px }
+  .qrBtn{ padding:10px 14px; border-radius:10px; border:0; cursor:pointer }
+  .qrBtn.close{ background:#e5e7eb; color:#111 }
+  .qrBtn.retry{ background:#ffe08a; color:#382b00; display:none }
+  .qrBtn.done{  background:#22c55e; color:#04170b; display:none }
+
+  /* efectos resultado en el MODAL */
+  #qrModal.ok { animation: glowOk 900ms ease-out 1 }
+  #qrModal.bad{ animation: glowBad 600ms ease-out 1 }
+  @keyframes glowOk{
+    0%{ box-shadow:0 0 0 rgba(34,197,94,0) }
+    30%{ box-shadow:0 0 24px rgba(34,197,94,.45) }
+    100%{ box-shadow:0 0 0 rgba(34,197,94,0) }
+  }
+  @keyframes glowBad{
+    0%{ transform:translateX(0) }
+    20%{ transform:translateX(-6px) }
+    40%{ transform:translateX(6px) }
+    60%{ transform:translateX(-4px) }
+    80%{ transform:translateX(4px) }
+    100%{ transform:translateX(0) }
+  }
+
+  /* confetti dentro del modal */
+  #qrConfetti{ position:absolute; inset:0; pointer-events:none }
 </style>
 </head>
 <body>
@@ -85,7 +161,7 @@ if (empty($_SESSION['nombre_usuario'])) {
       </div>
     </div>
 
-    <h3>Pagos (podés combinar medios)</h3>
+    <h3>Pagos </h3>
     <table id="tabPagosFac">
       <thead>
         <tr>
@@ -196,25 +272,47 @@ if (empty($_SESSION['nombre_usuario'])) {
   </div>
 </div>
 
+<!-- ===== Modal QR Transferencia ===== -->
+<div id="qrModalBk">
+  <div id="qrModal">
+    <div class="qrHeader">
+      <h3 style="margin:0">Transferencia por QR</h3>
+      <div id="qrInfo">Monto: Gs. —</div>
+    </div>
+
+    <div class="qrBody">
+      <div id="qrBox" class="breathe">
+        <div id="qrCanvas"></div>
+      </div>
+      <div id="qrStatus">Esperando pago…</div>
+      <div id="qrLinks"></div>
+    </div>
+
+    <div class="qrFooter">
+      <button class="qrBtn close" id="qrClose">Cerrar</button>
+      <button class="qrBtn retry" id="qrRetry">Reintentar</button>
+      <button class="qrBtn done"  id="qrDone">Aplicar y cerrar</button>
+    </div>
+
+    <div id="qrConfetti"></div>
+  </div>
+</div>
+
 <script>
-/* ========= PRINT RECIBO (anti pop-up block) ========= */
-// CAMBIAR si tu recibo_print.php está en otra carpeta
+// ========= PRINT RECIBO =========
 const PRINT_RECIBO_URL = '../ventas/recibo_print.php';
 function abrirImpresionRecibo(idRecibo, auto=true){
   const url = `${PRINT_RECIBO_URL}?id=${encodeURIComponent(idRecibo)}${auto ? '&auto=1' : ''}`;
   let w = window.open('', '_blank');
-  if (w && !w.closed) {
-    try { w.opener = null; w.location.replace(url); }
-    catch(e){ location.href = url; }
-  } else {
-    location.href = url;
-  }
+  if (w && !w.closed) { try { w.opener = null; w.location.replace(url); } catch(e){ location.href = url; } }
+  else { location.href = url; }
 }
-/* ===================================================== */
+// ================================
 
-/* ===== Helpers básicos ===== */
+// ===== Helpers =====
 const $ = id => document.getElementById(id);
-const money = n => Number(n||0).toLocaleString();
+function formatGs(n){ const v = Number(n||0); return v.toLocaleString('es-PY', {maximumFractionDigits: 0}); }
+const money = n => formatGs(n);
 function hoyISO(){ const d=new Date(); return d.toISOString().slice(0,10); }
 function setMoney(id,num){ $(id).textContent = money(num); }
 function getSumPagos(tableId){
@@ -222,7 +320,7 @@ function getSumPagos(tableId){
   return s;
 }
 
-/* ===== Banco por defecto (nuevo) ===== */
+// ===== Banco por defecto =====
 let BANCO_DEFAULT = null; // { id, label }
 async function cargarBancoDefault(){
   try{
@@ -232,40 +330,29 @@ async function cargarBancoDefault(){
     const badge = $('badgeBanco');
 
     if(!j.success){
-      box.style.display='block';
-      badge.className = 'pill red';
-      badge.textContent = 'Error obteniendo banco por defecto';
-      BANCO_DEFAULT = null;
-      return null;
+      box.style.display='block'; badge.className='pill red';
+      badge.textContent='Error obteniendo banco por defecto'; BANCO_DEFAULT=null; return null;
     }
-
     if(!j.id_cuenta_bancaria){
-      box.style.display='block';
-      badge.className = 'pill red';
-      badge.textContent = 'Sin banco por defecto configurado (Transferencias deshabilitadas)';
-      BANCO_DEFAULT = null;
-      return null;
+      box.style.display='block'; badge.className='pill red';
+      badge.textContent='Sin banco por defecto configurado (Transferencias deshabilitadas)';
+      BANCO_DEFAULT=null; return null;
     }
-
-    const c = j.cuenta || {};
-    const label = `${c.banco || 'Banco'} · ${c.numero_cuenta || 's/n'} (${c.moneda || ''} ${c.tipo || ''})`.trim();
-    BANCO_DEFAULT = { id: j.id_cuenta_bancaria, label };
-    box.style.display='block';
-    badge.className = 'pill green';
-    badge.textContent = `Banco por defecto: ${label}`;
+    const c=j.cuenta||{};
+    const label=`${c.banco||'Banco'} · ${c.numero_cuenta||'s/n'} (${c.moneda||''} ${c.tipo||''})`.trim();
+    BANCO_DEFAULT={id:j.id_cuenta_bancaria,label};
+    box.style.display='block'; badge.className='pill green';
+    badge.textContent=`Banco por defecto: ${label}`;
     return BANCO_DEFAULT;
   }catch(e){
-    const box = $('boxBancoDefault');
-    const badge = $('badgeBanco');
-    box.style.display='block';
-    badge.className = 'pill red';
-    badge.textContent = 'No se pudo cargar el banco por defecto';
-    BANCO_DEFAULT = null;
-    return null;
+    const box=$('boxBancoDefault'), badge=$('badgeBanco');
+    box.style.display='block'; badge.className='pill red';
+    badge.textContent='No se pudo cargar el banco por defecto';
+    BANCO_DEFAULT=null; return null;
   }
 }
 
-/* ===== Fila de pago reutilizable (usa banco por defecto en Transferencia) ===== */
+// ===== addPagoRow con botón QR =====
 function addPagoRow(tbodyId, sumaLblId, onChangeCb){
   const tb=document.querySelector('#'+tbodyId+' tbody');
   const tr=document.createElement('tr');
@@ -280,47 +367,74 @@ function addPagoRow(tbodyId, sumaLblId, onChangeCb){
       </select>
     </td>
     <td><input type="number" class="importe" min="0" step="0.01" value="0"/></td>
-    <td><input type="text" class="ref" placeholder="N° cupón / transf"/></td>
+    <td>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input type="text" class="ref" placeholder="N° cupón / transf" style="flex:1"/>
+        <button class="btn genQR" style="display:none">QR</button>
+      </div>
+    </td>
     <td class="cuentaWrap"><span class="mini muted">—</span></td>
     <td><button class="btn del">x</button></td>`;
+
+  const medioSel = tr.querySelector('.medio');
+  const cuentaCell = tr.querySelector('.cuentaWrap');
+  const importeInp = tr.querySelector('.importe');
+  const refInp     = tr.querySelector('.ref');
+  const btnQR      = tr.querySelector('.genQR');
 
   const onAnyChange=()=>{
     setMoney(sumaLblId, getSumPagos(tbodyId));
     if (typeof onChangeCb==='function') onChangeCb();
   };
 
-  // eventos
-  tr.querySelector('.importe').oninput = onAnyChange;
-  tr.querySelector('.del').onclick = ()=>{ tr.remove(); onAnyChange(); };
-
-  const medioSel = tr.querySelector('.medio');
-  const cuentaCell = tr.querySelector('.cuentaWrap');
-
-  const pintarCuentaDefault = () => {
+  function toggleQR(){
     if(medioSel.value==='Transferencia'){
+      btnQR.style.display='inline-block';
       if(BANCO_DEFAULT && BANCO_DEFAULT.id){
         cuentaCell.innerHTML = `<span class="mini">${BANCO_DEFAULT.label}</span>`;
       }else{
         cuentaCell.innerHTML = `<span class="mini muted">Configurar banco por defecto</span>`;
       }
     }else{
+      btnQR.style.display='none';
       cuentaCell.innerHTML = '<span class="mini muted">—</span>';
     }
+  }
+
+  medioSel.addEventListener('change', ()=>{ toggleQR(); onAnyChange(); });
+  tr.querySelector('.importe').oninput = onAnyChange;
+  tr.querySelector('.del').onclick = ()=>{ tr.remove(); onAnyChange(); };
+
+  // === Generar QR ===
+  btnQR.onclick = async ()=>{
+    const amount = Number(importeInp.value||0);
+    if(amount<=0){ alert('Ingresá un importe > 0 antes de generar el QR.'); return; }
+    if(!(BANCO_DEFAULT && BANCO_DEFAULT.id)){
+      alert('No hay banco por defecto configurado para Transferencia.'); return;
+    }
+    try{
+      const res = await openTransferQRModal(amount);
+      if(res && res.status==='confirmed'){
+        refInp.value = 'QR '+res.id;
+        refInp.readOnly = true;
+        importeInp.readOnly = true;
+        medioSel.disabled = true;
+        btnQR.disabled = true;
+        onAnyChange();
+      }
+    }catch(e){ alert('Error: '+e.message); }
   };
 
-  medioSel.addEventListener('change', ()=>{ pintarCuentaDefault(); onAnyChange(); });
-
-  // inicial
   tb.appendChild(tr);
-  pintarCuentaDefault();
+  toggleQR();
   onAnyChange();
 }
 
-/* ===== Tabs ===== */
+// ===== Tabs =====
 $('tabFac').onclick=()=>{ $('tabFac').classList.add('active'); $('tabCuo').classList.remove('active'); $('paneFac').style.display='block'; $('paneCuo').style.display='none'; }
 $('tabCuo').onclick=()=>{ $('tabCuo').classList.add('active'); $('tabFac').classList.remove('active'); $('paneCuo').style.display='block'; $('paneFac').style.display='none'; }
 
-/* ===== FACTURAS ===== */
+// ===== FACTURAS =====
 let facturaSel=null;
 function updateFaltaFac(){
   const objetivo = Number(facturaSel?.pendiente || 0);
@@ -370,12 +484,11 @@ $('btnCobrarFac').onclick=async()=>{
     }
     if(importe>0) pagos.push({medio,importe,referencia,id_cuenta_bancaria});
   });
-  // Validación de banco por defecto cuando hay transferencias
   for(const p of pagos){
     if(p.medio==='Transferencia' && !p.id_cuenta_bancaria){
       alert('No hay banco por defecto configurado. Configuralo antes de registrar transferencias.'); return;
     }
-  }
+    }
   const totalPagos = pagos.reduce((a,b)=>a+b.importe,0);
   if(totalPagos - Number(facturaSel.pendiente) > 0.01){
     alert('La suma de pagos supera el pendiente'); return;
@@ -387,13 +500,12 @@ $('btnCobrarFac').onclick=async()=>{
     const j=await r.json(); if(!j.success) throw new Error(j.error||'No se pudo cobrar');
     alert('Cobro registrado. Recibo #'+j.id_recibo);
     $('statusFac').textContent='OK';
-    // Abrir impresión del recibo
     if (j.id_recibo) abrirImpresionRecibo(j.id_recibo, true);
   }catch(e){ alert(e.message); $('statusFac').textContent='Error: '+e.message; }
   finally{ $('btnCobrarFac').disabled=false; }
 };
 
-/* ===== CUOTAS ===== */
+// ===== CUOTAS =====
 let clienteCuotas=null, cuotas=[];
 function getSumaCuotas(){
   let s=0; document.querySelectorAll('#tabCuotas .apagar').forEach(i=>s+=Number(i.value||0));
@@ -448,7 +560,6 @@ function renderCuotas(){
       chk.checked = Number(inp.value)>0;
       pintaSumaCuotasYFalta();
     };
-    // Guardar índice de la cuota en dataset para mapear luego
     tr.dataset.idx = String(cuotas.indexOf(c));
     tb.appendChild(tr);
   });
@@ -460,41 +571,31 @@ $('btnCobrarCuo').onclick=async()=>{
   if(!clienteCuotas){ alert('Buscá un cliente con cuotas pendientes'); return; }
   const fecha=$('fechaCobroCuo').value; if(!fecha){ alert('Fecha requerida'); return; }
 
-  // cuotas seleccionadas (saltando headers) — FIX: usar dataset.idx para evitar desalineo
   const sel=[];
-  const rows=$('tabCuotas').querySelectorAll('tbody tr');
-  rows.forEach(tr=>{
-    const pick=tr.querySelector('.pick');
-    const inp=tr.querySelector('.apagar');
-    if(!pick || !inp) return; // header
+  $('tabCuotas').querySelectorAll('tbody tr').forEach(tr=>{
+    const pick=tr.querySelector('.pick'); const inp=tr.querySelector('.apagar');
+    if(!pick || !inp) return;
     const imp=Number(inp.value||0);
     if(pick.checked && imp>0){
       const idx = Number(tr.dataset.idx || -1);
-      if (idx>=0) {
-        const c=cuotas[idx];
-        sel.push({id_cuota:c.id_cuota, pagar: imp});
-      }
+      if (idx>=0) { const c=cuotas[idx]; sel.push({id_cuota:c.id_cuota, pagar: imp}); }
     }
   });
   if(!sel.length){ alert('Seleccioná al menos una cuota con importe > 0'); return; }
   const sumaSel=sel.reduce((a,b)=>a+b.pagar,0);
 
-  // medios de pago
   const pagos=[];
   document.querySelectorAll('#tabPagosCuo tbody tr').forEach(tr=>{
     const medio=tr.querySelector('.medio').value;
     const importe=Number(tr.querySelector('.importe').value||0);
     const referencia=tr.querySelector('.ref').value||null;
     let id_cuenta_bancaria=null;
-    if(medio==='Transferencia'){
-      id_cuenta_bancaria = BANCO_DEFAULT && BANCO_DEFAULT.id ? BANCO_DEFAULT.id : null;
-    }
+    if(medio==='Transferencia'){ id_cuenta_bancaria = BANCO_DEFAULT && BANCO_DEFAULT.id ? BANCO_DEFAULT.id : null; }
     if(importe>0) pagos.push({medio,importe,referencia,id_cuenta_bancaria});
   });
-  // Validación de banco por defecto cuando hay transferencias
   for(const p of pagos){
     if(p.medio==='Transferencia' && !p.id_cuenta_bancaria){
-      alert('No hay banco por defecto configurado. Configuralo antes de registrar transferencias.'); return;
+      alert('No hay banco por defecto configurado.'); return;
     }
   }
   const sumaPag = pagos.reduce((a,b)=>a+b.importe,0);
@@ -509,19 +610,191 @@ $('btnCobrarCuo').onclick=async()=>{
     const j=await r.json(); if(!j.success) throw new Error(j.error||'No se pudo cobrar cuotas');
     alert('Cobro registrado. Recibo #'+j.id_recibo);
     $('statusCuo').textContent='OK';
-    // Abrir impresión del recibo
     if (j.id_recibo) abrirImpresionRecibo(j.id_recibo, true);
   }catch(e){ alert(e.message); $('statusCuo').textContent='Error: '+e.message; }
   finally{ $('btnCobrarCuo').disabled=false; }
 };
 
-/* init */
+// ====== MÓDULO TRANSFERENCIA QR ======
+// AJUSTÁ la ruta si tu pos_qr_demo.php está en otra carpeta:
+const POS_QR_URL = '../../venta_v3/qr_demo/pos_qr_demo.php';
+
+/* Fuerza usar imagen para el QR (consistente y sin <table>) */
+const FORCE_IMG_QR = true;
+
+let _qrPoll = null, _qrData = null;
+async function openTransferQRModal(amount){
+  // crear intento
+  const fd = new FormData();
+  fd.append('action','create');
+  fd.append('amount', amount);
+  const r = await fetch(POS_QR_URL, {method:'POST', body:fd});
+  const j = await r.json();
+  if(j.error) throw new Error(j.error);
+
+  // refs
+  const bk = document.getElementById('qrModalBk');
+  const modal = document.getElementById('qrModal');
+  const info = document.getElementById('qrInfo');
+  const status = document.getElementById('qrStatus');
+  const links = document.getElementById('qrLinks');
+  const box = document.getElementById('qrCanvas');
+  const boxWrap = document.getElementById('qrBox');
+  const btnClose = document.getElementById('qrClose');
+  const btnRetry = document.getElementById('qrRetry');
+  const btnDone  = document.getElementById('qrDone');
+  const confetti = document.getElementById('qrConfetti');
+
+  // datos
+  _qrData = { id: j.id, amountText: formatGs(j.amount_raw), review_url: j.review_url };
+
+  // UI inicial
+  modal.classList.remove('ok','bad');
+  info.textContent   = 'Monto: Gs. ' + _qrData.amountText;
+  status.textContent = 'Esperando pago…';
+  links.innerHTML    = `<div class="qrMut">Si el QR no se ve, usá este link:</div><div><a target="_blank" href="${j.review_url}">${j.review_url}</a></div>`;
+  btnRetry.style.display='none'; btnDone.style.display='none';
+  boxWrap.classList.add('breathe');
+  box.innerHTML = '';
+  confetti.innerHTML = '';
+
+  // tamaño QR: clamp por viewport y ancho modal
+  const vw = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
+  const mh = Math.max(document.documentElement.clientHeight || 0, window.innerHeight || 0);
+  const modalW = Math.min(560, vw * 0.92);
+  const maxByHeight = Math.floor(Math.max(220, (mh - 200) * 0.75)); // deja espacio para header+footer
+  const px = Math.max(220, Math.min(360, Math.min(maxByHeight, Math.floor(modalW * 0.8))));
+  boxWrap.style.setProperty('--qr-size', px + 'px');
+
+  // render QR (forzado a imagen o con fallback)
+  try{
+    if (!FORCE_IMG_QR && window.QRCode) {
+      new QRCode(box, { text: j.review_url, width: px, height: px, correctLevel: QRCode.CorrectLevel.L });
+    } else {
+      const img = new Image(); img.width=px; img.height=px; img.alt='QR';
+      img.src = 'https://api.qrserver.com/v1/create-qr-code/?size='+px+'x'+px+'&data='+encodeURIComponent(j.review_url);
+      box.innerHTML = '';
+      box.appendChild(img);
+    }
+  }catch(e){
+    const img = new Image(); img.width=px; img.height=px; img.alt='QR';
+    img.src = 'https://api.qrserver.com/v1/create-qr-code/?size='+px+'x'+px+'&data='+encodeURIComponent(j.review_url);
+    box.innerHTML = '';
+    box.appendChild(img);
+  }
+
+  // --- FIX: si alguna vez QRCodeJS devuelve <table>, normalizamos ---
+  (function fixQRSize(){
+    const el = box.querySelector('img,canvas,table') || box.firstElementChild;
+    if(!el) return;
+    const size = getComputedStyle(box).getPropertyValue('--qr-size') || (px+'px');
+    el.style.width  = size;
+    el.style.height = size;
+    el.style.display = 'block';
+    el.style.margin  = '0 auto';
+    if(el.tagName === 'TABLE'){ el.style.borderCollapse = 'collapse'; }
+  })();
+
+  // abrir modal y bloquear scroll de fondo
+  bk.style.display='flex';
+  const prevOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+
+  // polling
+  if(_qrPoll) clearInterval(_qrPoll);
+  _qrPoll = setInterval(async ()=>{
+    const rs = await fetch(POS_QR_URL+'?action=status&i='+encodeURIComponent(j.id), {cache:'no-store'});
+    const sj = await rs.json();
+    if(sj.error) return;
+    status.textContent = 'Estado: '+sj.status;
+
+    if(sj.status==='confirmed'){
+      clearInterval(_qrPoll);
+      boxWrap.classList.remove('breathe');
+      modal.classList.add('ok');          // efecto glow verde
+      splashConfetti(confetti);           // confetti en el modal
+      btnDone.style.display='inline-block';
+      status.textContent = '✅ Pago confirmado. Podés aplicar el pago.';
+    }
+    if(sj.status==='rejected'){
+      clearInterval(_qrPoll);
+      boxWrap.classList.remove('breathe');
+      modal.classList.add('bad');         // shake corto
+      btnRetry.style.display='inline-block';
+      status.textContent = '❌ Pago rechazado. Podés reintentar.';
+    }
+    if(sj.status==='expired'){
+      clearInterval(_qrPoll);
+      boxWrap.classList.remove('breathe');
+      btnRetry.style.display='inline-block';
+      status.textContent = '⌛ Intento expirado. Reintentá.';
+    }
+  }, 1200);
+
+  // botones
+  return new Promise((resolve)=>{
+    btnClose.onclick = ()=>{
+      if(_qrPoll) clearInterval(_qrPoll);
+      boxWrap.classList.remove('breathe');
+      bk.style.display='none';
+      document.body.style.overflow = prevOverflow;
+      resolve({status:'closed'});
+    };
+    btnRetry.onclick = async ()=>{
+      if(_qrPoll) clearInterval(_qrPoll);
+      boxWrap.classList.remove('breathe');
+      bk.style.display='none';
+      document.body.style.overflow = prevOverflow;
+      openTransferQRModal(amount).then(resolve);
+    };
+    btnDone.onclick = ()=>{
+      if(_qrPoll) clearInterval(_qrPoll);
+      boxWrap.classList.remove('breathe');
+      bk.style.display='none';
+      document.body.style.overflow = prevOverflow;
+      resolve({status:'confirmed', id:_qrData.id});
+    };
+  });
+}
+
+// confetti dentro del modal
+function splashConfetti(container){
+  container.innerHTML = '';
+  const colors = ['#ff7676','#ffd166','#4ade80','#60a5fa','#c084fc','#f472b6'];
+  const n = 60, W = container.clientWidth || 560;
+  for(let i=0;i<n;i++){
+    const s = document.createElement('i');
+    s.style.position='absolute';
+    s.style.width = '10px';
+    s.style.height= '14px';
+    s.style.left = (Math.random()*W) + 'px';
+    s.style.top  = '0px';
+    s.style.opacity = '.9';
+    s.style.background = colors[(Math.random()*colors.length)|0];
+    s.style.transform = 'translateY(-10vh) rotate('+((Math.random()*240)|0)+'deg)';
+    s.style.animation = 'fallModal 1200ms linear forwards';
+    s.style.animationDelay = (Math.random()*0.5)+'s';
+    container.appendChild(s);
+  }
+  const styleId = 'fallModalKeyframes';
+  if(!document.getElementById(styleId)){
+    const st = document.createElement('style'); st.id = styleId;
+    st.textContent = '@keyframes fallModal{ to{ transform:translateY(80vh) rotate(360deg); opacity:1; } }';
+    document.head.appendChild(st);
+  }
+  setTimeout(()=>{ container.innerHTML=''; }, 2000);
+}
+
 window.addEventListener('DOMContentLoaded', async ()=>{
   $('fechaCobroFac').value=hoyISO();
   $('fechaCobroCuo').value=hoyISO();
-  await cargarBancoDefault(); // <- carga y pinta el banco por defecto
+  await cargarBancoDefault();
 });
 </script>
+
+<!-- QR lib (no se usa si FORCE_IMG_QR=true, pero la dejamos por si cambiás) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
 <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
 </html>

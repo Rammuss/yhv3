@@ -189,6 +189,13 @@ if (empty($_SESSION['nombre_usuario'])) {
         <select id="ddlFacturaCredito"><option value="">— Seleccioná —</option></select>
         <div class="muted" id="infoSaldos" style="margin-top:6px">Saldo abierto: —</div>
       </div>
+
+      <div style="align-self:flex-end">
+        <label class="muted" style="margin:0 0 6px">Impresión</label>
+        <label style="display:flex; gap:8px; align-items:center;">
+          <input type="checkbox" id="autoPrint" checked> Imprimir al emitir
+        </label>
+      </div>
     </div>
 
     <!-- DETALLE -->
@@ -293,31 +300,22 @@ const boxBtnsFactura = document.getElementById('boxBtnsFactura');
 
 function toggleUiByClase(){
   const isNC = selClase.value==='NC';
-  // Stock sólo NC
   chkAfecta.disabled = !isNC;
   if (!isNC) chkAfecta.checked = false;
 
-  // Acciones post-emisión
   if (isNC){
-    // permitir aplicar a cuotas
     [...accionSel.options].forEach(o=>o.disabled=false);
   } else {
-    // ND: sólo “emitir”
     accionSel.value = 'emitir';
-    [...accionSel.options].forEach(o=>{
-      o.disabled = (o.value==='aplicar_cuotas');
-    });
+    [...accionSel.options].forEach(o=>{ o.disabled = (o.value==='aplicar_cuotas'); });
     boxAplicar.style.display='none';
   }
 
-  // Toolbar de items
   btnBuscarPS.style.display       = isNC ? 'inline-block' : 'none';
   btnAgregarConceptoND.style.display = isNC ? 'none' : 'inline-block';
-
-  // Botones de la vista previa (tiene sentido cargar ítems desde factura sólo para NC)
   boxBtnsFactura.style.display = isNC ? 'flex' : 'none';
 
-  render(); // re-renderiza filas en modo editable si ND
+  render();
 }
 selClase.addEventListener('change', toggleUiByClase);
 
@@ -460,7 +458,7 @@ async function selectFactura(id){
   facSel = js.data;
   idFacturaInput.value = facSel.id_factura;
   renderFacturaPreview(facSel);
-  maybeLoadCreditoList(); // por si quiere aplicar
+  maybeLoadCreditoList();
 }
 
 function renderFacturaPreview(fac){
@@ -552,7 +550,6 @@ function render(){
 
     tBruto+=bruto; tDesc+=(Number(it.descuento)||0); tIva+=iva; tNeto+=neto;
 
-    // Para ND, las celdas son editables (desc, precio, iva, etc)
     const editable = !isNC;
 
     const tdDesc = editable
@@ -599,7 +596,7 @@ function chgIva(i,v){ items[i].tipo_iva = v; render(); }
 function quitar(i){ items.splice(i,1); render(); }
 function limpiarItems(){ items=[]; render(); }
 
-// ND: agrega una fila vacía editable
+// ND: fila vacía editable
 function agregarConceptoND(){
   items.push({
     id_producto: null,
@@ -696,7 +693,6 @@ form.addEventListener('submit', async (e)=>{
     detalle: items
   };
 
-  // Validación: si va a aplicar a cuotas, necesitamos una factura Crédito
   const accion = accionSel.value;
   let id_factura_aplicar = null;
   if (accion==='aplicar_cuotas'){
@@ -714,12 +710,12 @@ form.addEventListener('submit', async (e)=>{
 
   btnEmitir.disabled=true; btnEmitir.textContent='Emitiendo...';
   try{
-    // 1) Emitir NC/ND
     const res = await fetch(URL_NOTAS_EMITIR, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     const js = await res.json();
     if(!js.success){ showToast(js.error||'Error al emitir','err'); return; }
 
-    // 2) Si corresponde, aplicar automáticamente a cuotas
+    let printUrl = js.print_url || null;
+
     if (accion==='aplicar_cuotas' && js.clase==='NC' && id_factura_aplicar){
       const r2 = await fetch(URL_NOTAS_APLICAR, {
         method:'POST',
@@ -727,10 +723,18 @@ form.addEventListener('submit', async (e)=>{
         body: JSON.stringify({ id_nc: js.id_nota, id_factura: id_factura_aplicar })
       });
       const k = await r2.json();
-      if (!k.success){ showToast('NC emitida, pero no se pudo aplicar a cuotas: '+(k.error||''), 'err'); }
-      else { showToast(`✅ NC ${js.numero_documento} emitida y aplicada (Gs ${Number(k.aplicado||0).toFixed(2)})`,'ok'); }
+      if (!k.success){
+        showToast('NC emitida, pero no se pudo aplicar a cuotas: '+(k.error||''), 'err');
+      } else {
+        showToast(`✅ NC ${js.numero_documento} emitida y aplicada (Gs ${Number(k.aplicado||0).toFixed(2)})`,'ok');
+      }
     } else {
       showToast(`✅ ${js.clase} Nº ${js.numero_documento} emitida`,'ok');
+    }
+
+    // Abrir impresión si está activado
+    if (document.getElementById('autoPrint').checked && printUrl){
+      window.open(printUrl, '_blank');
     }
 
     // Reset UI
@@ -750,7 +754,7 @@ form.addEventListener('submit', async (e)=>{
 /* ===== Render inicial ===== */
 render();
 performSearch(true);
-toggleUiByClase(); // asegura estado correcto al cargar
+toggleUiByClase();
 </script>
 <script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
