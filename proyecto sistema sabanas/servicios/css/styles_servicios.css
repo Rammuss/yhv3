@@ -1,0 +1,217 @@
+/* Importar la fuente Poppins de Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
+
+/* Estilos básicos para la barra de navegación */
+body {
+  background-color: #f4f4f4; /* Fondo claro para contrastar con la nav bar */
+  padding: 20px;
+  margin: 0;
+  font-family: 'Poppins', sans-serif; /* Fuente moderna */
+}
+
+.navbar {
+  background-color: #ffffff; /* Fondo blanco */
+  border-bottom: 4px solid #2ecc71; /* Borde gris claro */
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra suave */
+}
+
+.navbar ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+
+.navbar li {
+  position: relative;
+}
+
+.navbar a {
+  display: flex;
+  padding: 15px 20px;
+  color: #333333; /* Texto oscuro */
+  text-decoration: none;
+  transition: background-color 0.3s ease, transform 0.1s ease;
+  border-radius: 4px;
+  margin: 0 5px;
+  font-weight: 500; /* Texto semi-negrita */
+}
+
+.navbar a:hover {
+  background-color: #f0f0f0; /* Fondo gris claro al hacer hover */
+  transform: scale(1.05);
+}
+
+.dropdown-content {
+  display: none;
+  position: absolute;
+  background-color: #ffffff; /* Fondo blanco para los dropdowns */
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  z-index: 1;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Sombra suave */
+}
+
+.dropdown-content a {
+  color: #333333; /* Texto oscuro */
+  padding: 12px 16px;
+  text-decoration: none;
+  display: block;
+  border-bottom: 1px solid #e0e0e0; /* Borde entre elementos */
+}
+
+.dropdown-content a:hover {
+  background-color: #f0f0f0; /* Fondo gris claro al hacer hover */
+}
+
+.dropdown:hover .dropdown-content {
+  display: block;
+}
+
+.navbar ul li a.cerrar-sesion {
+  color: #e74c3c; /* Rojo para el botón de cerrar sesión */
+  font-weight: bold;
+}
+
+.navbar img {
+  max-width: 50%;
+  max-height: 50%;
+  object-fit: cover;
+}
+
+.perfil_contenedor {
+  display: flex;
+  align-items: center;
+  max-width: 250px;
+}
+
+#imagen-perfil {
+  margin-left: 0%;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+#nombre-usuario {
+  font-size: 16px;
+  color: #333333; /* Texto oscuro */
+}
+
+/* Estilo para p_perfil */
+.p_perfil {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Estilo para p2_perfil */
+.p2_perfil {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: auto;
+  height: auto;
+  padding: 0 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Media queries para pantallas pequeñas */
+@media (max-width: 768px) {
+  .navbar {
+    flex-direction: column;
+    padding: 10px;
+  }
+
+  .navbar ul {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .navbar li {
+    margin-bottom: 10px;
+  }
+
+  .navbar a {
+    width: 100%;
+    text-align: center;
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .perfil_contenedor {
+    flex-direction: column;
+    align-items: center;
+    max-width: 100%;
+  }
+
+  .p_perfil {
+    width: 40px;
+    height: 40px;
+  }
+
+  #nombre-usuario {
+    font-size: 14px;
+    margin-top: 5px;
+    text-align: center;
+  }
+}
+
+/* Media query para pantallas muy pequeñas (por debajo de 480px) */
+@media (max-width: 480px) {
+  .navbar a {
+    font-size: 12px;
+    padding: 8px;
+  }
+
+  .p_perfil {
+    width: 35px;
+    height: 35px;
+  }
+
+  #nombre-usuario {
+    font-size: 12px;
+  }
+}
+
+.img_perfil {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* ===== Toast centrado ===== */
+  .toast-layer{
+    position: fixed; inset: 0; z-index: 9999;
+    display: grid; place-items: center;
+    pointer-events: none;
+  }
+  .toast-container{
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: min(90vw, 480px);
+    pointer-events: none;
+  }
+  .toast{
+    pointer-events: auto;
+    background:#fff; border:1px solid #e5e7eb; border-left:4px solid var(--g);
+    box-shadow: var(--shadow); border-radius:12px; padding:12px 14px;
+    display:flex; align-items:flex-start; gap:10px;
+    animation: toastIn .18s ease-out;
+  }
+  .toast.error{ border-left-color: var(--r); }
+  .toast .title{ font-weight:600; margin-bottom:2px; }
+  .toast .msg{ font-size:13px; color:#374151; }
+  .toast .close{
+    margin-left:auto; border:none; background:transparent; cursor:pointer;
+    font-size:18px; line-height:1; color:#6b7280;
+  }
+  @keyframes toastIn{ from{opacity:0; transform: translateY(-6px) scale(.98);} to{opacity:1; transform: translateY(0) scale(1);} }
+  @keyframes toastOut{ to{opacity:0; transform: translateY(-6px) scale(.98);} }
