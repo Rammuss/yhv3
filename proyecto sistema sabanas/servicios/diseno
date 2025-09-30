@@ -1,0 +1,15 @@
+Solicitud de cliente: lista previa de cosas/productos que el cliente quiere llevar cuando termine.
+
+Orden de reserva: agenda (fecha/hora + profesional + servicios).
+
+Presupuesto: (opcional) cotización previa con promo/cupón “congelado”.
+
+Servicio al cliente: la atención en sí (se registra dentro de la OT).
+
+Orden de trabajo (OT): documento interno para ejecutar el servicio.
+
+Registra insumos utilizados: consumo interno (tintes/ampollas) que descuentan stock por OT.
+
+Registrar descuentos y promociones: snapshot informativo (o definitivo más adelante en Pedido).
+
+Reclamos de cliente: pos-servicio (y pos-venta cuando exista la factura).

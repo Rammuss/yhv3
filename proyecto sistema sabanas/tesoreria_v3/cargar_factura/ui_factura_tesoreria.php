@@ -13,7 +13,7 @@ header('Content-Type: text/html; charset=utf-8');
 /* ============ CONFIG: AJUSTAR RUTAS SEGÚN TU PROYECTO ============ */
 $URL_PROVEEDORES   = '../cargar_factura/proveedores_options.php';
 $URL_PREPARAR_OC   = '../cargar_factura/factura_preparar.php';
-$URL_GUARDAR       = 'factura_guardar.php';
+$URL_GUARDAR       = '../cargar_factura/factura_guardar.php';
 /* ================================================================== */
 ?>
 <!doctype html>
