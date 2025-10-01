@@ -1,15 +1,68 @@
-Solicitud de cliente: lista previa de cosas/productos que el cliente quiere llevar cuando termine.
+Flujo Servicios
 
-Orden de reserva: agenda (fecha/hora + profesional + servicios).
+Solicitud Cliente
 
-Presupuesto: (opcional) cotización previa con promo/cupón “congelado”.
+Tabla liviana (solicitud_cab + solicitud_det).
+Cabecera: id_cliente, fecha, estado, notas.
+Detalle: registros id_producto (producto normal o tipo S), cantidad estimada.
+Objetivo: captura previa de lo que el cliente cree que va a consumir (sirve como checklist e insumo para presupuesto/pedido).
+Acciones:
+• Convertir en Presupuesto → copiar cabecera/detalle a presupuesto.
+• Convertir en Pedido (ventas) → alimentar el módulo actual, ya que los productos son los mismos.
+Presupuesto
 
-Servicio al cliente: la atención en sí (se registra dentro de la OT).
+Tabla propia (presupuesto_cab + presupuesto_det) para no tocar ventas.
+Cabecera: id_cliente, fecha, validez, estado (Borrador, Enviado, Aprobado, Rechazado), cupón/promoción aplicada, total estimado.
+Detalle: ítems con id_producto, cantidad, precio unitario snapshot, descuentos aplicados.
+Se puede originar desde Solicitud (copia) o darse de alta manualmente.
+Acciones:
+• Enviar al cliente (generar PDF/Email).
+• Convertir en OT (cuando el cliente aprueba) → copia la lista de servicios a la OT.
+• Convertir en Pedido (ventas) si querés “congelar” precios antes de facturar.
+• Generar Reserva (si aún no existe) usando los servicios estimados.
+Reserva
 
-Orden de trabajo (OT): documento interno para ejecutar el servicio.
+Lo que construimos hoy: reserva_cab + reserva_det.
+Cabecera: id_cliente, id_profesional, fecha_reserva, inicio_ts, fin_ts, estado (Pendiente, Confirmada, etc.), notas.
+Detalle: servicios [productos tipo S], cantidad, duración, precio snapshot.
+Origen:
+• Directo (nueva reserva).
+• Desde Solicitud (usar lista estimada).
+• Desde Presupuesto (usar servicios aprobados).
+Acciones:
+• Convertir en OT (cuando llega la fecha/cliente se presenta).
+• Actualizar estado (Pendiente → Confirmada → Completada/Cancelada).
+• Vincular con Pedido si ya querés generar la venta antes de la ejecución.
+Orden de Trabajo (OT)
 
-Registra insumos utilizados: consumo interno (tintes/ampollas) que descuentan stock por OT.
+Tabla propia (ot_cab, ot_det).
+Cabecera: id_reserva opcional, id_cliente, id_profesional, fecha_inicio_real, fecha_fin_real, estado (Programada, En ejecución, Completada, Cancelada), notas internas.
+Detalle: servicios aprobados (copiados desde reserva/presupuesto) + posibilidad de agregar adicionales.
+Acciones:
+• Registrar asistencia, duración real, observaciones.
+• Añadir ot_insumo (ver abajo).
+• Generar Pedido (ventas) al cerrar OT → se envían los ítems como productos a tu módulo de pedidos.
+• Cerrar OT → marcar estado final, calcular costos, etc.
+Insumos utilizados
 
-Registrar descuentos y promociones: snapshot informativo (o definitivo más adelante en Pedido).
+Tabla ot_insumo: id_ot, id_producto (insumo), cantidad, depósito, lote (si aplica).
+Opcional: disparar movimiento de inventario de tipo “consumo interno”.
+Descuentos y promociones
 
-Reclamos de cliente: pos-servicio (y pos-venta cuando exista la factura).
+Captura al nivel donde tenga sentido (presupuesto, reserva o pedido).
+Si querés snapshot independiente: tabla ot_descuento/reserva_descuento con cupón, porcentaje/monto, condiciones.
+Cuando generás el pedido (ventas), replicás esos descuentos en la cabecera/detalle para facturación.
+Reclamos
+
+Tabla reclamo_servicio: id_ot/id_reserva, id_cliente, fecha reclamo, tipo, canal, descripción, estado (Abierto, En gestión, Resuelto), responsable, resolución.
+Se alimenta post-servicio; no afecta ventas pero te da seguimiento.
+Relaciones Clave
+
+solicitud → presupuesto (opcional)
+solicitud → reserva (opcional)
+presupuesto → reserva (opcional)
+reserva → ot (principal)
+ot → pedido (ventas)
+ot → ot_insumo (descuento de stock)
+ot → reclamo (post-servicio)
+Cada transición puede mantenerse como vínculo (id_origen) para rastrear de dónde surgió cada documento. Los productos siguen viviendo en la misma tabla (producto), diferenciándolos por tipo_item='S' para servicios. Así el módulo de ventas recibe exactamente el mismo formato que ya maneja, sin cambios dentro de Pedidos/Facturación. Conservá esta hoja de ruta y mañana definimos las tablas y endpoints prioritarios según qué parte quieras implementar primero.

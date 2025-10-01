@@ -1,5 +1,7 @@
 <?php
-// producto_manager_ui.php — UI (GET) + API (POST) para crear y gestionar productos (toast centrado)
+// producto_manager_ui.php — UI (GET) + API (POST) para crear y gestionar productos (con duración para Servicios)
+// Requiere columna: ALTER TABLE public.producto ADD COLUMN IF NOT EXISTS duracion_min integer CHECK (duracion_min IS NULL OR duracion_min > 0);
+
 session_start();
 require_once __DIR__ . '/../../conexion/configv2.php'; // <-- AJUSTAR
 header('X-Content-Type-Options: nosniff');
@@ -30,6 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   try {
     switch ($op) {
+      // Crear
       case 'create': {
         $nombre = s($in['nombre'] ?? '');
         $precio_unitario = (float)($in['precio_unitario'] ?? -1);
@@ -38,6 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tipo_iva   = s($in['tipo_iva'] ?? '10%');
         $categoria  = s($in['categoria'] ?? null);
         $tipo_item  = s($in['tipo_item'] ?? 'P');
+        $duracion_min = isset($in['duracion_min']) && $in['duracion_min'] !== ''
+                        ? (int)$in['duracion_min'] : null;
 
         if ($nombre === '') json_error('Nombre requerido');
         if ($precio_unitario < 0 || $precio_compra < 0) json_error('Precios inválidos (>= 0)');
@@ -45,14 +50,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($tipo_iva, $IVA_VALIDOS, true)) json_error('Tipo de IVA inválido');
         if (!in_array($tipo_item, $TIPOS_ITEM_VALIDOS, true)) json_error('Tipo de ítem inválido (P/S)');
 
-        $sql = "INSERT INTO public.producto (nombre, precio_unitario, precio_compra, estado, tipo_iva, categoria, tipo_item)
-                VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id_producto";
-        $r = pg_query_params($conn, $sql, [$nombre, $precio_unitario, $precio_compra, $estado, $tipo_iva, $categoria, $tipo_item]);
+        // Si es Servicio, permitimos duracion_min; si es Producto, forzamos NULL
+        if ($tipo_item === 'S') {
+          if ($duracion_min !== null && $duracion_min <= 0) json_error('Duración inválida');
+        } else {
+          $duracion_min = null;
+        }
+
+        $sql = "INSERT INTO public.producto
+                  (nombre, precio_unitario, precio_compra, estado, tipo_iva, categoria, tipo_item, duracion_min)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                RETURNING id_producto";
+        $r = pg_query_params($conn, $sql,
+              [$nombre, $precio_unitario, $precio_compra, $estado, $tipo_iva, $categoria, $tipo_item, $duracion_min]);
         if (!$r) json_error('No se pudo crear el producto');
         $id = (int)pg_fetch_result($r, 0, 0);
         json_ok(['id_producto' => $id, 'nombre'=>$nombre]);
       }
 
+      // Actualizar
       case 'update': {
         $id = (int)($in['id_producto'] ?? 0);
         if ($id <= 0) json_error('id_producto inválido');
@@ -64,6 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $tipo_iva   = s($in['tipo_iva'] ?? '10%');
         $categoria  = s($in['categoria'] ?? null);
         $tipo_item  = s($in['tipo_item'] ?? 'P');
+        $duracion_min = isset($in['duracion_min']) && $in['duracion_min'] !== ''
+                        ? (int)$in['duracion_min'] : null;
 
         if ($nombre === '') json_error('Nombre requerido');
         if ($precio_unitario < 0 || $precio_compra < 0) json_error('Precios inválidos (>= 0)');
@@ -71,15 +89,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!in_array($tipo_iva, $IVA_VALIDOS, true)) json_error('Tipo de IVA inválido');
         if (!in_array($tipo_item, $TIPOS_ITEM_VALIDOS, true)) json_error('Tipo de ítem inválido (P/S)');
 
+        if ($tipo_item === 'S') {
+          if ($duracion_min !== null && $duracion_min <= 0) json_error('Duración inválida');
+        } else {
+          $duracion_min = null;
+        }
+
         $sql = "UPDATE public.producto
                    SET nombre=$2, precio_unitario=$3, precio_compra=$4,
-                       estado=$5, tipo_iva=$6, categoria=$7, tipo_item=$8
+                       estado=$5, tipo_iva=$6, categoria=$7, tipo_item=$8, duracion_min=$9
                  WHERE id_producto=$1";
-        $r = pg_query_params($conn, $sql, [$id, $nombre, $precio_unitario, $precio_compra, $estado, $tipo_iva, $categoria, $tipo_item]);
+        $r = pg_query_params($conn, $sql,
+              [$id, $nombre, $precio_unitario, $precio_compra, $estado, $tipo_iva, $categoria, $tipo_item, $duracion_min]);
         if (!$r) json_error('No se pudo actualizar el producto');
         json_ok(['updated' => true, 'nombre'=>$nombre]);
       }
 
+      // Activar / Inactivar
       case 'toggle_estado': {
         $id = (int)($in['id_producto'] ?? 0);
         $nuevo = s($in['estado'] ?? '');
@@ -90,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_ok(['estado' => $nuevo]);
       }
 
+      // Obtener 1
       case 'get': {
         $id = (int)($in['id_producto'] ?? 0);
         if ($id <= 0) json_error('id_producto inválido');
@@ -98,6 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_ok(['row' => pg_fetch_assoc($r)]);
       }
 
+      // Listar
       case 'list': {
         $q = mb_strtolower(s($in['q'] ?? '')) ?? '';
         $estado = s($in['estado'] ?? '');
@@ -119,7 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if(!$rC) json_error('Error al contar');
         $total = (int)pg_fetch_result($rC, 0, 0);
 
-        $sqlList = "SELECT id_producto, nombre, precio_unitario, precio_compra, estado, tipo_iva, categoria, tipo_item
+        $sqlList = "SELECT id_producto, nombre, precio_unitario, precio_compra, estado, tipo_iva, categoria, tipo_item, duracion_min
                     FROM public.producto
                     $where
                     ORDER BY nombre ASC
@@ -131,30 +159,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $rows=[]; while($x=pg_fetch_assoc($rL)) $rows[]=$x;
         json_ok(['total'=>$total,'rows'=>$rows]);
-      }
-
-      case 'seed_peluqueria': {
-        $preset = [
-          ['Shampoo Nutritivo',        45000, 30000, '10%', 'Peluquería', 'P'],
-          ['Acondicionador Hidratante',42000, 28000, '10%', 'Peluquería', 'P'],
-          ['Mascarilla Capilar',       60000, 40000, '10%', 'Peluquería', 'P'],
-          ['Aceite Reparador',         75000, 50000, '10%', 'Peluquería', 'P'],
-          ['Spray Termoprotector',     55000, 36000, '10%', 'Peluquería', 'P'],
-          ['Gel Fijador',              38000, 24000, '10%', 'Peluquería', 'P'],
-          ['Cera Modeladora',          39000, 25000, '10%', 'Peluquería', 'P'],
-          ['Serum Brillo',             68000, 45000, '10%', 'Peluquería', 'P'],
-        ];
-        $ok=0;
-        foreach($preset as $p){
-          $r = pg_query_params($conn,
-            "INSERT INTO public.producto(nombre,precio_unitario,precio_compra,estado,tipo_iva,categoria,tipo_item)
-             VALUES ($1,$2,$3,'Activo',$4,$5,$6)
-             ON CONFLICT DO NOTHING",
-            [$p[0],$p[1],$p[2],$p[3],$p[4],$p[5]]
-          );
-          if($r) $ok++;
-        }
-        json_ok(['insertados'=>$ok]);
       }
 
       default: json_error('op no reconocido');
@@ -188,7 +192,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   th{ background:#f3f4f6; text-align:left }
   .muted{ color:#6b7280; font-size:12px }
 
-  
+  /* Toast centrado */
+  .toast-layer{ position:fixed; inset:0; pointer-events:none; display:flex; align-items:center; justify-content:center; z-index:9999; }
+  .toast-container{ display:flex; flex-direction:column; gap:10px; max-width:min(520px,95vw); width:100%; align-items:center; }
+  .toast{
+    pointer-events:auto; background:#111; color:#fff; padding:12px 14px; border-radius:12px;
+    box-shadow:var(--shadow); display:flex; gap:10px; align-items:flex-start; animation:toastIn .18s ease-out both;
+    max-width:520px; width:100%;
+  }
+  .toast.error{ background:#991b1b }
+  .toast .title{ font-weight:600; margin-bottom:2px }
+  .toast .msg{ opacity:.95 }
+  .toast .close{ margin-left:auto; background:transparent; color:#fff; border:none; font-size:18px; line-height:1; cursor:pointer }
+  @keyframes toastIn{ from{ opacity:0; transform:translateY(8px) scale(.98) } to{ opacity:1; transform:translateY(0) scale(1) } }
+  @keyframes toastOut{ to{ opacity:0; transform:translateY(-6px) scale(.98) } }
 </style>
 </head>
 <body>
@@ -200,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="row">
       <div>
         <label>Nombre *</label>
-        <input id="p_nombre" placeholder="Ej: Shampoo Nutritivo" />
+        <input id="p_nombre" placeholder="Ej: Corte de cabello / Shampoo Nutritivo" />
       </div>
       <div>
         <label>Precio venta *</label>
@@ -231,9 +248,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
       <div>
         <label>Tipo ítem *</label>
-        <select id="p_tipo">
+        <select id="p_tipo" onchange="toggleDuracionCreate()">
           <option value="P" selected>Producto (mueve stock)</option>
           <option value="S">Servicio (no mueve stock)</option>
+        </select>
+      </div>
+      <div id="wrap_p_duracion" style="display:none">
+        <label>Duración (min) *</label>
+        <select id="p_duracion">
+          <option value="15">15</option>
+          <option value="30" selected>30</option>
+          <option value="45">45</option>
+          <option value="60">60</option>
+          <option value="90">90</option>
+          <option value="120">120</option>
         </select>
       </div>
       <div>
@@ -244,10 +272,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       </div>
       <div style="flex:0; display:flex; gap:8px">
         <button onclick="crear()">Guardar</button>
-        <!-- <button class="sec" onclick="seed()">Cargar básicos de Peluquería</button> -->
       </div>
     </div>
-    <div class="muted">Los campos con * son obligatorios. Respetan las restricciones de tu tabla.</div>
+    <div class="muted">Para <strong>Servicio</strong> se habilita la <strong>Duración</strong>. En Producto queda oculto.</div>
   </div>
 
   <!-- Filtros/Listado -->
@@ -279,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       <thead>
         <tr>
           <th>#</th><th>Nombre</th><th>Cat.</th><th>IVA</th><th>Tipo</th>
-          <th>Venta</th><th>Compra</th><th>Estado</th><th style="width:210px">Acciones</th>
+          <th>Venta</th><th>Compra</th><th>Dur (min)</th><th>Estado</th><th style="width:250px">Acciones</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
@@ -289,7 +316,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   <!-- Modal de edición -->
   <div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.35); align-items:center; justify-content:center;">
-    <div style="background:#fff; padding:16px; border-radius:10px; width:min(640px,95vw);">
+    <div style="background:#fff; padding:16px; border-radius:10px; width:min(680px,95vw);">
       <h3>Editar producto</h3>
       <div class="row">
         <input id="e_id" type="hidden" />
@@ -316,7 +343,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </div>
         <div>
           <label>Tipo</label>
-          <select id="e_tipo"><option value="P">P</option><option value="S">S</option></select>
+          <select id="e_tipo" onchange="toggleDuracionEdit()"><option value="P">P</option><option value="S">S</option></select>
+        </div>
+        <div id="wrap_e_duracion" style="display:none">
+          <label>Duración (min) *</label>
+          <select id="e_duracion">
+            <option value="15">15</option>
+            <option value="30">30</option>
+            <option value="45">45</option>
+            <option value="60">60</option>
+            <option value="90">90</option>
+            <option value="120">120</option>
+          </select>
         </div>
         <div>
           <label>Estado</label>
@@ -352,7 +390,7 @@ function showToast(message, type='success', title=null, timeout=3000){
     </div>
     <button class="close" aria-label="Cerrar" onclick="closeToast(this)">×</button>
   `;
-  cont.prepend(toast); // el último arriba
+  cont.prepend(toast);
   const t = setTimeout(()=>{
     toast.style.animation = 'toastOut .18s ease-in forwards';
     setTimeout(()=> toast.remove(), 180);
@@ -365,6 +403,16 @@ function closeToast(btn){
   clearTimeout(toast._timer);
   toast.style.animation = 'toastOut .18s ease-in forwards';
   setTimeout(()=> toast.remove(), 180);
+}
+
+/* ===== UI helpers ===== */
+function toggleDuracionCreate(){
+  const isServicio = $('p_tipo').value === 'S';
+  $('wrap_p_duracion').style.display = isServicio ? '' : 'none';
+}
+function toggleDuracionEdit(){
+  const isServicio = $('e_tipo').value === 'S';
+  $('wrap_e_duracion').style.display = isServicio ? '' : 'none';
 }
 
 /* ===== API helper ===== */
@@ -382,6 +430,7 @@ async function api(op, payload={}){
 /* ===== Alta ===== */
 async function crear(){
   try{
+    const isServicio = $('p_tipo').value === 'S';
     const payload = {
       nombre: $('p_nombre').value.trim(),
       precio_unitario: Number($('p_pu').value || 0),
@@ -389,28 +438,27 @@ async function crear(){
       tipo_iva: $('p_iva').value,
       categoria: $('p_cat').value || null,
       tipo_item: $('p_tipo').value,
-      estado: $('p_estado').value
+      estado: $('p_estado').value,
+      duracion_min: isServicio ? Number($('p_duracion').value) : null
     };
+
+    // Si es servicio y el usuario dejó compra > 0, lo dejamos; en general suele ser 0
     const r = await api('create', payload);
 
     // limpiar y refrescar
-    $('p_nombre').value=''; $('p_pu').value='0'; $('p_pc').value='0';
-    $('p_iva').value='10%'; $('p_cat').value='Peluquería'; $('p_tipo').value='P'; $('p_estado').value='Activo';
+    $('p_nombre').value='';
+    $('p_pu').value='0';
+    $('p_pc').value='0';
+    $('p_iva').value='10%';
+    $('p_cat').value='Peluquería';
+    $('p_tipo').value='P';
+    $('p_estado').value='Activo';
+    $('p_duracion').value='30';
+    toggleDuracionCreate();
     $('p_nombre').focus();
 
     await list();
-    showToast(`Producto "${r.nombre ?? payload.nombre}" creado correctamente.`, 'success', '¡Guardado!');
-  }catch(e){
-    showToast(e.message, 'error');
-  }
-}
-
-/* ===== Seed ===== */
-async function seed(){
-  try{
-    const r = await api('seed_peluqueria');
-    await list();
-    showToast(`Se cargaron ${r.insertados} productos básicos de Peluquería.`, 'success', 'Carga inicial');
+    showToast(`"${r.nombre ?? payload.nombre}" creado correctamente.`, 'success', '¡Guardado!');
   }catch(e){
     showToast(e.message, 'error');
   }
@@ -436,6 +484,7 @@ async function list(){
         <td>${row.tipo_item}</td>
         <td>${Number(row.precio_unitario).toLocaleString()}</td>
         <td>${Number(row.precio_compra).toLocaleString()}</td>
+        <td>${row.tipo_item==='S' ? (row.duracion_min ?? '-') : '-'}</td>
         <td>${row.estado}</td>
         <td>
           <button class="sec" onclick="openEdit(${row.id_producto})">Editar</button>
@@ -478,6 +527,14 @@ async function openEdit(id){
     $('e_cat').value = p.categoria || 'Peluquería';
     $('e_tipo').value = p.tipo_item;
     $('e_estado').value = p.estado;
+
+    // duracion
+    const isServicio = (p.tipo_item === 'S');
+    $('wrap_e_duracion').style.display = isServicio ? '' : 'none';
+    if (isServicio) {
+      $('e_duracion').value = String(p.duracion_min || 30);
+    }
+
     $('modal').style.display='flex';
   }catch(e){
     showToast(e.message, 'error');
@@ -487,6 +544,7 @@ function closeModal(){ $('modal').style.display='none'; }
 
 async function saveEdit(){
   try{
+    const isServicio = $('e_tipo').value === 'S';
     const payload = {
       id_producto: Number($('e_id').value||0),
       nombre: $('e_nombre').value.trim(),
@@ -495,18 +553,22 @@ async function saveEdit(){
       tipo_iva: $('e_iva').value,
       categoria: $('e_cat').value || null,
       tipo_item: $('e_tipo').value,
-      estado: $('e_estado').value
+      estado: $('e_estado').value,
+      duracion_min: isServicio ? Number($('e_duracion').value) : null
     };
     await api('update', payload);
     closeModal(); await list();
-    showToast(`Producto "${payload.nombre}" actualizado.`, 'success', 'Cambios guardados');
+    showToast(`"${payload.nombre}" actualizado.`, 'success', 'Cambios guardados');
   }catch(e){
     showToast(e.message, 'error');
   }
 }
 
 /* ===== Inicial ===== */
-window.addEventListener('DOMContentLoaded', ()=>{ list(); });
+window.addEventListener('DOMContentLoaded', ()=>{
+  toggleDuracionCreate();
+  list();
+});
 </script>
 </body>
 </html>
