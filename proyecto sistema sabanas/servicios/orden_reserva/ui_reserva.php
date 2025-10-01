@@ -1,7 +1,7 @@
 <?php
 // reserva_ui.php — UI (GET) + API (POST) para Orden de Reserva (sin tabla de slots)
-// Requiere tablas: profesional, reserva_cab, reserva_det, agenda_bloqueo, producto(tipo_item='S')
-// Opcional en producto: duracion_min (minutos). Si no existe o es NULL, se usa 30.
+// Requiere tablas: profesional, reserva_cab, reserva_det, agenda_bloqueo, producto(tipo_item='S' o 'D')
+// Opcional en producto: duracion_min (minutos). Si no existe o es NULL, se usa 30 para servicios.
 // Usa clientes_buscar.php para buscar clientes.
 
 session_start();
@@ -33,15 +33,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_ok(['rows'=>$rows]);
       }
 
-      // 2) Servicios (producto.tipo_item='S')
+      // 2) Servicios y promociones (producto.tipo_item='S' o 'D')
       case 'list_servicios': {
-        $sql = "SELECT id_producto, nombre, COALESCE(duracion_min,30) AS duracion_min, precio_unitario
+        $sql = "SELECT id_producto,
+                       nombre,
+                       CASE WHEN tipo_item='S' THEN COALESCE(duracion_min,30) ELSE 0 END AS duracion_min,
+                       precio_unitario,
+                       tipo_item
                 FROM public.producto
-                WHERE estado='Activo' AND tipo_item='S'
-                ORDER BY nombre";
+                WHERE estado='Activo' AND tipo_item IN ('S','D')
+                ORDER BY CASE WHEN tipo_item='S' THEN 0 ELSE 1 END, nombre";
         $r = pg_query($conn,$sql);
-        if(!$r) json_error('No se pudo listar servicios');
-        $rows=[]; while($x=pg_fetch_assoc($r)) $rows[] = $x;
+        if(!$r) json_error('No se pudieron listar servicios/promos');
+        $rows=[];
+        while($x=pg_fetch_assoc($r)){
+          $x['id_producto']    = (int)$x['id_producto'];
+          $x['duracion_min']   = (int)$x['duracion_min'];
+          $x['precio_unitario']= (float)$x['precio_unitario'];
+          $rows[] = $x;
+        }
         json_ok(['rows'=>$rows]);
       }
 
@@ -56,20 +66,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha)) json_error('fecha inválida (YYYY-MM-DD)');
         if (!preg_match('/^\d{2}:\d{2}$/',$desde) || !preg_match('/^\d{2}:\d{2}$/',$hasta)) json_error('rango horario inválido');
 
-        // duración total
         $dur_total = 0;
+        $hay_servicio = false;
         foreach ($items as $it) {
           $idp = (int)($it['id_producto'] ?? 0);
           $qty = (float)($it['cantidad'] ?? 0);
           if ($idp<=0 || $qty<=0) continue;
-          $r = pg_query_params($conn,"SELECT COALESCE(duracion_min,30)::int FROM public.producto WHERE id_producto=$1",[$idp]);
-          $dmin = 30;
-          if ($r && pg_num_rows($r)>0) $dmin = (int)pg_fetch_result($r,0,0);
-          $dur_total += $dmin * $qty;
+          $r = pg_query_params($conn,"SELECT tipo_item, COALESCE(duracion_min,30)::int AS dur FROM public.producto WHERE id_producto=$1 AND estado='Activo' LIMIT 1",[$idp]);
+          if(!$r || pg_num_rows($r)===0) json_error("Producto #$idp no válido");
+          $row = pg_fetch_assoc($r);
+          if ($row['tipo_item'] === 'S') {
+            $hay_servicio = true;
+            $dur_total += ((int)$row['dur']) * $qty;
+          }
         }
+        if (!$hay_servicio) json_error('Agregá al menos un servicio');
         if ($dur_total<=0) $dur_total = 30;
 
-        // IMPORTANTE: usamos tstzrange (timestamptz). Construimos los slots como timestamptz en la zona $TZ
         $sql = "
 WITH cfg AS (
   SELECT
@@ -85,7 +98,6 @@ pros AS (
 ),
 slots AS (
   SELECT
-    -- inicio y fin como timestamptz locales a cfg.tz
     ((to_char(cfg.dia,'YYYY-MM-DD')||' '||cfg.desde::text||' '||cfg.tz)::timestamptz + make_interval(mins => n*cfg.step_min))                AS inicio_tz,
     ((to_char(cfg.dia,'YYYY-MM-DD')||' '||cfg.desde::text||' '||cfg.tz)::timestamptz + make_interval(mins => n*cfg.step_min + cfg.dur_min)) AS fin_tz
   FROM cfg,
@@ -147,7 +159,6 @@ ORDER BY inicio;
         $rows=[];
         while($x=pg_fetch_assoc($r)){
           $x['profesionales_libres'] = (int)$x['profesionales_libres'];
-          // normalizar horas (ISO) para JS
           $x['inicio'] = substr($x['inicio'],0,19);
           $x['fin']    = substr($x['fin'],0,19);
           $rows[]=$x;
@@ -158,7 +169,7 @@ ORDER BY inicio;
       // 4) Crear reserva
       case 'create_reserva': {
         $id_cliente = (int)($in['id_cliente'] ?? 0);
-        $inicio_ts  = s($in['inicio_ts'] ?? ''); // viene como local YYYY-MM-DD HH:MM
+        $inicio_ts  = s($in['inicio_ts'] ?? '');
         $id_prof    = (int)($in['id_profesional'] ?? 0);
         $estado     = s($in['estado'] ?? 'Pendiente');
         $items      = arr($in['items'] ?? []);
@@ -168,32 +179,46 @@ ORDER BY inicio;
         if (!preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/',$inicio_ts)) json_error('inicio_ts inválido (YYYY-MM-DD HH:MM)');
         if (!in_array($estado, ['Pendiente','Confirmada'], true)) $estado='Pendiente';
 
-        // duración total + snapshots
-        $dur_total = 0; $snap_items = [];
+        $dur_total = 0;
+        $hay_servicio = false;
+        $snap_items = [];
+
         foreach ($items as $it) {
           $idp = (int)($it['id_producto'] ?? 0);
           $qty = (float)($it['cantidad'] ?? 0);
           if ($idp<=0 || $qty<=0) continue;
 
           $r = pg_query_params($conn,
-            "SELECT nombre, precio_unitario, tipo_iva, COALESCE(duracion_min,30)::int AS dur
+            "SELECT tipo_item, nombre, precio_unitario, tipo_iva, COALESCE(duracion_min,30)::int AS dur
              FROM public.producto
-             WHERE id_producto=$1 AND tipo_item='S' AND estado='Activo'
+             WHERE id_producto=$1 AND estado='Activo'
              LIMIT 1", [$idp]
           );
-          if(!$r || pg_num_rows($r)===0) json_error("Servicio #$idp no válido");
+          if(!$r || pg_num_rows($r)===0) json_error("Producto #$idp no válido");
           $row = pg_fetch_assoc($r);
-          $dur_total += ((int)$row['dur']) * $qty;
+          $tipo_item = $row['tipo_item'];
+
+          if ($tipo_item === 'S') {
+            $hay_servicio = true;
+            $duracion = (int)$row['dur'];
+            $dur_total += $duracion * $qty;
+          } elseif ($tipo_item === 'D') {
+            $duracion = 0;
+          } else {
+            json_error("Producto #$idp no habilitado para reservas");
+          }
 
           $snap_items[] = [
             'id_producto'     => $idp,
             'descripcion'     => $row['nombre'],
             'precio_unitario' => (float)$row['precio_unitario'],
             'tipo_iva'        => $row['tipo_iva'],
-            'duracion_min'    => (int)$row['dur'],
+            'duracion_min'    => $duracion,
             'cantidad'        => $qty
           ];
         }
+
+        if(!$hay_servicio) json_error('Agregá al menos un servicio');
         if ($dur_total<=0) $dur_total = 30;
 
         $fin_ts_local = date('Y-m-d H:i', strtotime("$inicio_ts +$dur_total minutes"));
@@ -201,7 +226,6 @@ ORDER BY inicio;
 
         pg_query($conn,'BEGIN');
 
-        // Si no enviaron profesional, elegimos uno libre revalidando con tstzrange y zona local
         if ($id_prof<=0) {
           $q = "
             WITH rango AS (
@@ -230,13 +254,11 @@ ORDER BY inicio;
             ORDER BY p.id_profesional
             LIMIT 1
           ";
-          // $1=inicio_local, $2=fin_local, $3=TZ
           $rp = pg_query_params($conn, $q, [$inicio_ts, $fin_ts_local, $TZ]);
           if(!$rp || pg_num_rows($rp)===0){ pg_query($conn,'ROLLBACK'); json_error('No hay profesional libre en ese rango'); }
           $id_prof = (int)pg_fetch_result($rp,0,0);
         }
 
-        // Insert cabecera: convertimos los locales a timestamptz agregando la zona
         $sqlCab = "
           INSERT INTO public.reserva_cab
             (id_cliente, id_profesional, fecha_reserva, inicio_ts, fin_ts, estado, notas)
@@ -256,7 +278,6 @@ ORDER BY inicio;
         if(!$rCab){ pg_query($conn,'ROLLBACK'); json_error('No se pudo crear la reserva (cabecera)'); }
         $id_reserva = (int)pg_fetch_result($rCab,0,0);
 
-        // Detalle
         $sqlDet = "
           INSERT INTO public.reserva_det
             (id_reserva, id_producto, descripcion, precio_unitario, tipo_iva, duracion_min, cantidad)
@@ -329,17 +350,21 @@ ORDER BY inicio;
   button{ background:#111; color:#fff; border:none; cursor:pointer; }
   button.sec{ background:#f3f4f6; color:#111 }
   table{ width:100%; border-collapse:collapse; margin-top:8px }
-  th,td{ border:1px solid #e5e7eb; padding:8px; font-size:14px }
-  th{ background:#f3f4f6; text-align:left }
+  th,td{ border:1px solid #e5e7eb; padding:8px; font-size:14px; text-align:left }
+  th{ background:#f3f4f6; text-transform:uppercase; font-size:12px; letter-spacing:.05em }
   .grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:10px; }
   .svc{ border:1px solid #e5e7eb; border-radius:10px; padding:10px; background:#fff; transition:transform .06s; }
   .svc:hover{ transform:scale(1.01) }
   .svc h4{ margin:0 0 6px; font-size:14px; }
+  .svc.promo{ border-color:#fecaca; background:#fef2f2; }
+  .svc-section{ margin-bottom:14px; }
+  .svc-section h3{ margin:0 0 8px; font-size:15px; }
   .muted{ color:#6b7280; font-size:12px }
   .qtybtn{ padding:4px 8px; border-radius:6px; margin:0 3px; }
   .danger{ background:#fee2e2; color:#991b1b; }
+  .stat{ flex:0 0 210px; font-weight:600; font-size:14px; }
+  .stat span{ font-weight:700; }
 
-  /* Toast center floating */
   .toast-layer{ position:fixed; inset:0; pointer-events:none; display:grid; place-items:center; z-index:9999; }
   .toast-container{ display:flex; flex-direction:column; gap:10px; }
   .toast{ pointer-events:auto; min-width:280px; max-width:min(92vw,520px); background:#111; color:#fff; border-radius:12px; padding:12px 14px; box-shadow:var(--shadow); display:flex; align-items:flex-start; gap:12px; animation:toastIn .18s ease-out both; }
@@ -403,18 +428,29 @@ ORDER BY inicio;
     </div>
   </div>
 
-  <!-- 2) Servicios (carrito) -->
+  <!-- 2) Servicios y promociones -->
   <div class="card">
-    <h3>2) Servicios</h3>
-    <div class="muted">Clic en “＋” para agregar; “－” para quitar. La duración total se calcula automáticamente.</div>
-    <div id="servicios" class="grid" style="margin-top:10px"></div>
+    <h3>2) Servicios y descuentos</h3>
+    <div class="muted">Clic en “＋” para agregar; “－” para quitar. Solo los servicios suman minutos.</div>
+    <div id="servicios" style="margin-top:10px"></div>
 
     <table>
-      <thead><tr><th>Servicio</th><th>Dur. (min)</th><th>Cant.</th><th>Acciones</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Ítem</th>
+          <th>Tipo</th>
+          <th>Dur. (min)</th>
+          <th>Cant.</th>
+          <th>Precio (Gs)</th>
+          <th>Subtotal</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
       <tbody id="tbody_items"></tbody>
     </table>
-    <div class="row">
-      <div><strong>Duración total (min):</strong> <span id="dur_total">0</span></div>
+    <div class="row" style="margin-top:8px">
+      <div class="stat">Duración total (min): <span id="dur_total">0</span></div>
+      <div class="stat">Total estimado (Gs): <span id="monto_total">0</span></div>
       <div>
         <label>Notas</label>
         <input id="notas" placeholder="Observación del cliente..." />
@@ -489,7 +525,7 @@ const API = location.pathname;
 const CLIENTES_API = '../../venta_v3/cliente/clientes_buscar.php'; // <-- AJUSTAR
 const $ = (id)=>document.getElementById(id);
 
-let servicios = [];           // [{id_producto,nombre, duracion_min, precio_unitario}]
+let productos = [];           // [{id_producto,nombre,tipo_item,duracion_min, precio_unitario}]
 let carrito = {};             // { id_producto: cantidad }
 let ultimoSlots = [];         // cache de slots
 let mapaProsPorSlot = {};     // key inicioISO => [ids]
@@ -510,7 +546,7 @@ function showToast(message, type='success', title=null, timeout=2200){
 }
 function closeToast(btn){ const el=btn.closest('.toast'); if(!el) return; clearTimeout(el._timer); el.style.animation='toastOut .18s ease-in forwards'; setTimeout(()=>el.remove(),180); }
 
-function fmt(n){ return Number(n).toLocaleString() }
+function fmt(n){ return Number(n||0).toLocaleString('es-PY'); }
 async function api(op, payload={}){
   const res = await fetch(API, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({op, ...payload})});
   const data = await res.json();
@@ -541,29 +577,59 @@ function usarCliente(){
   if(id>0){ $('id_cliente').value = id; showToast('Cliente seleccionado.'); }
 }
 
-/* Servicios */
-async function cargarServicios(){
+/* Productos (servicios + promos) */
+async function cargarProductos(){
   try{
     const r = await api('list_servicios');
-    servicios = r.rows||[];
-    renderServicios();
+    productos = (r.rows||[]).map(item=>({
+      ...item,
+      id_producto: Number(item.id_producto),
+      duracion_min: Number(item.duracion_min||0),
+      precio_unitario: Number(item.precio_unitario||0)
+    }));
+    renderProductos();
   }catch(e){ showToast(e.message,'error'); }
 }
-function renderServicios(){
-  const cont = $('servicios'); cont.innerHTML='';
-  servicios.forEach(sv=>{
-    const card = document.createElement('div');
-    card.className = 'svc';
-    card.innerHTML = `
-      <h4>${sv.nombre}</h4>
-      <div class="muted">Dur: ${sv.duracion_min||30} min • Gs ${fmt(sv.precio_unitario)}</div>
-      <div style="margin-top:8px">
-        <button class="qtybtn" onclick="addItem(${sv.id_producto},1)">＋</button>
-        <button class="qtybtn" onclick="addItem(${sv.id_producto},-1)">－</button>
-      </div>
-    `;
-    cont.appendChild(card);
-  });
+function renderProductos(){
+  const cont = $('servicios');
+  cont.innerHTML = '';
+
+  const servicios = productos.filter(x=>x.tipo_item==='S');
+  const promos    = productos.filter(x=>x.tipo_item==='D');
+
+  const buildSection = (items, title) => {
+    if(items.length===0) return;
+    const section = document.createElement('div');
+    section.className = 'svc-section';
+    const header = document.createElement('h3');
+    header.textContent = title;
+    section.appendChild(header);
+    const grid = document.createElement('div');
+    grid.className = 'grid';
+    items.forEach(sv=>{
+      const card = document.createElement('div');
+      card.className = 'svc';
+      if (sv.tipo_item === 'D') card.classList.add('promo');
+      const detalle = sv.tipo_item === 'S'
+        ? `Dur: ${sv.duracion_min||30} min • Gs ${fmt(sv.precio_unitario)}`
+        : `Monto: Gs ${fmt(sv.precio_unitario)}`;
+      card.innerHTML = `
+        <h4>${sv.nombre}</h4>
+        <div class="muted">${detalle}</div>
+        <div style="margin-top:8px">
+          <button class="qtybtn" onclick="addItem(${sv.id_producto},1)">＋</button>
+          <button class="qtybtn" onclick="addItem(${sv.id_producto},-1)">－</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+    section.appendChild(grid);
+    cont.appendChild(section);
+  };
+
+  buildSection(servicios, 'Servicios');
+  buildSection(promos, 'Promociones / Descuentos');
+
   renderCarrito();
 }
 function addItem(id_producto, delta){
@@ -574,17 +640,28 @@ function addItem(id_producto, delta){
 function renderCarrito(){
   const tb = $('tbody_items'); tb.innerHTML='';
   let totalMin = 0;
+  let totalGs  = 0;
+
   Object.keys(carrito).map(Number).forEach(id=>{
-    const sv = servicios.find(x=>x.id_producto==id);
-    if(!sv) return;
+    const prod = productos.find(x=>x.id_producto===id);
+    if(!prod) return;
     const cant = carrito[id];
-    const dmin = (sv.duracion_min || 30) * cant;
-    totalMin += dmin;
+    const esServicio = prod.tipo_item === 'S';
+    const duracion = esServicio ? (prod.duracion_min || 30) * cant : 0;
+    const precio = prod.precio_unitario;
+    const subtotal = precio * cant;
+
+    if(esServicio) totalMin += duracion;
+    totalGs += subtotal;
+
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${sv.nombre}</td>
-      <td>${sv.duracion_min||30}</td>
+      <td>${prod.nombre}</td>
+      <td>${esServicio ? 'Servicio' : 'Promo'}</td>
+      <td>${esServicio ? prod.duracion_min || 30 : '–'}</td>
       <td>${cant}</td>
+      <td>${fmt(precio)}</td>
+      <td>${fmt(subtotal)}</td>
       <td>
         <button class="qtybtn" onclick="addItem(${id},+1)">＋</button>
         <button class="qtybtn" onclick="addItem(${id},-1)">－</button>
@@ -594,6 +671,7 @@ function renderCarrito(){
     tb.appendChild(tr);
   });
   $('dur_total').textContent = totalMin;
+  $('monto_total').textContent = fmt(totalGs);
   const recomendadoSpan = $('step_recomendado');
   if (recomendadoSpan) {
     const recomendado = totalMin > 0 ? totalMin : 30;
@@ -609,6 +687,12 @@ async function verSlots(){
     if(!fecha) throw new Error('Elegí la fecha');
     const items = Object.keys(carrito).map(id=>({id_producto:Number(id), cantidad:Number(carrito[id])}));
     if(items.length===0) throw new Error('Agregá al menos un servicio');
+
+    const hayServicio = Object.keys(carrito).some(id=>{
+      const prod = productos.find(x=>x.id_producto===Number(id));
+      return prod && prod.tipo_item==='S';
+    });
+    if(!hayServicio) throw new Error('Agregá al menos un servicio');
 
     const payload = {
       fecha,
@@ -676,6 +760,12 @@ async function crearReserva(){
     const items = Object.keys(carrito).map(id=>({id_producto:Number(id), cantidad:Number(carrito[id])}));
     if(items.length===0) throw new Error('Agregá servicios');
 
+    const hayServicio = Object.keys(carrito).some(id=>{
+      const prod = productos.find(x=>x.id_producto===Number(id));
+      return prod && prod.tipo_item==='S';
+    });
+    if(!hayServicio) throw new Error('Agregá al menos un servicio');
+
     const id_prof = Number($('sel_profesional').value||0);
     const r = await api('create_reserva', {
       id_cliente,
@@ -688,7 +778,6 @@ async function crearReserva(){
 
     showToast(`Reserva #${r.id_reserva} creada para ${r.inicio_ts}.`, 'success', '¡Listo!');
 
-    // limpiar UI
     $('sel_cliente').innerHTML=''; $('id_cliente').value='';
     carrito = {}; renderCarrito();
     $('fecha').value=''; $('inicio_sel').value='';
@@ -699,7 +788,7 @@ async function crearReserva(){
 }
 
 /* Init */
-window.addEventListener('DOMContentLoaded', async ()=>{ await cargarServicios(); });
+window.addEventListener('DOMContentLoaded', async ()=>{ await cargarProductos(); });
 </script>
 </body>
 </html>

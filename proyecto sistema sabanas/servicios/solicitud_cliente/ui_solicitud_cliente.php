@@ -186,26 +186,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_ok(['items'=>$items,'stats'=>$stats]);
       }
 
-      case 'buscar_productos': { // catálogo completo (peluquería)
+            case 'buscar_productos': { // catálogo completo (peluquería)
         $q  = mb_strtolower(s($in['q'] ?? '')) ?? '';
         $ps = max(1, min(500, num($in['page_size'] ?? 500)));
         $off= max(0, num($in['offset'] ?? 0));
         $likeAny = '%'.$q.'%';
+
         $sql = "
-          SELECT id_producto, nombre, precio_unitario
-          FROM public.producto
-          WHERE estado='Activo'
-            AND tipo_item='P'
-            AND (categoria ILIKE 'pelu%' OR categoria ILIKE 'peluquer%' OR categoria ILIKE '%pelu%')
-            AND ($1 = '' OR lower(nombre) LIKE $2)
-          ORDER BY nombre ASC
+          WITH disp AS ($SQL_DISP)
+          SELECT p.id_producto,
+                 p.nombre,
+                 p.precio_unitario,
+                 COALESCE(d.disponible,0)::numeric(14,2) AS disponible
+          FROM public.producto p
+          LEFT JOIN disp d ON d.id_producto = p.id_producto
+          WHERE p.estado='Activo'
+            AND p.tipo_item='P'
+            AND (p.categoria ILIKE 'pelu%' OR p.categoria ILIKE 'peluquer%' OR p.categoria ILIKE '%pelu%')
+            AND ($1 = '' OR lower(p.nombre) LIKE $2)
+          ORDER BY p.nombre ASC
           LIMIT $3 OFFSET $4
         ";
+
         $r = pg_query_params($conn,$sql,[$q,$likeAny,$ps,$off]);
         if(!$r) json_error('No se pudo buscar productos');
-        $rows=[]; while($x=pg_fetch_assoc($r)) $rows[]=$x;
+
+        $rows=[];
+        while($x=pg_fetch_assoc($r)){
+          $x['disponible'] = (float)$x['disponible'];
+          $rows[] = $x;
+        }
         json_ok(['rows'=>$rows]);
       }
+
 
       default: json_error('op no reconocido');
     }
@@ -456,14 +469,19 @@ function renderCatalogo(){
     const card = document.createElement('div');
     card.className = 'prod';
     card.onclick = ()=>agregarLocal(p.id_producto, 1);
+    const stockTxt = (p.disponible !== undefined)
+      ? `<div class="muted">Stock: ${Number(p.disponible).toLocaleString()}</div>`
+      : '';
     card.innerHTML = `
       <h4>${p.nombre}</h4>
       <div class="price">Gs ${fmt(p.precio_unitario)}</div>
+      ${stockTxt}
       <div class="muted">Clic para agregar ＋1</div>
     `;
     cont.appendChild(card);
   });
 }
+
 
 /* ===== 3) GRILLA (local) ===== */
 function agregarLocal(id_producto, qty){
