@@ -18,207 +18,223 @@ session_start();
 require_once __DIR__ . '/../../conexion/configv2.php';
 header_remove('X-Powered-By');
 
-function json_out($data, $code=200){ http_response_code($code); header('Content-Type: application/json; charset=utf-8'); echo json_encode($data, JSON_UNESCAPED_UNICODE); exit; }
-function is_post(){ return ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST'; }
-function body_json(){ $raw=file_get_contents('php://input'); return $raw? (json_decode($raw,true) ?: []) : []; }
+function json_out($data, $code = 200) {
+    http_response_code($code);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+}
+function is_post() {
+    return ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST';
+}
+function body_json() {
+    $raw = file_get_contents('php://input');
+    return $raw ? (json_decode($raw, true) ?: []) : [];
+}
 
 $action = $_GET['action'] ?? $_POST['action'] ?? null;
 
 /* ============================ API: TIMBRADO ============================ */
 if ($action === 'timbrado.list') {
-  $q = $_GET['q'] ?? null; // buscar por numero_timbrado o PPP
-  $estado = (isset($_GET['estado']) && $_GET['estado'] !== '') ? $_GET['estado'] : null;
-  $limit = (int)($_GET['limit'] ?? 300);
-  $offset = (int)($_GET['offset'] ?? 0);
+    $q = $_GET['q'] ?? null;
+    $estado = (isset($_GET['estado']) && $_GET['estado'] !== '') ? $_GET['estado'] : null;
+    $limit = (int)($_GET['limit'] ?? 300);
+    $offset = (int)($_GET['offset'] ?? 0);
 
-  $sql = "SELECT id_timbrado, numero_timbrado, tipo_comprobante, tipo_documento,
-                 establecimiento, punto_expedicion, nro_desde, nro_hasta, nro_actual,
-                 fecha_inicio, fecha_fin, estado
-          FROM public.timbrado
-          WHERE ($1::text IS NULL
-                  OR numero_timbrado ILIKE '%'||$1||'%'
-                  OR (establecimiento||'-'||punto_expedicion) ILIKE '%'||$1||'%')
-            AND (NULLIF($2::text,'') IS NULL OR estado = $2)
-          ORDER BY id_timbrado DESC
-          LIMIT $3 OFFSET $4";
-  $res = pg_query_params($conn, $sql, [$q, $estado, $limit, $offset]);
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  json_out(['ok'=>true, 'items'=>pg_fetch_all($res) ?: []]);
+    $sql = "SELECT id_timbrado, numero_timbrado, tipo_comprobante, tipo_documento,
+                   establecimiento, punto_expedicion, nro_desde, nro_hasta, nro_actual,
+                   fecha_inicio, fecha_fin, estado
+            FROM public.timbrado
+            WHERE ($1::text IS NULL
+                    OR numero_timbrado ILIKE '%'||$1||'%'
+                    OR (establecimiento||'-'||punto_expedicion) ILIKE '%'||$1||'%')
+              AND (NULLIF($2::text,'') IS NULL OR estado = $2)
+            ORDER BY id_timbrado DESC
+            LIMIT $3 OFFSET $4";
+    $res = pg_query_params($conn, $sql, [$q, $estado, $limit, $offset]);
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    json_out(['ok' => true, 'items' => pg_fetch_all($res) ?: []]);
 }
 
 if ($action === 'timbrado.save' && is_post()) {
-  $in = body_json();
-  $id    = $in['id_timbrado'] ?? null;
-  $num   = trim($in['numero_timbrado'] ?? '');
-  $tcomp = trim($in['tipo_comprobante'] ?? '');
-  $tdoc  = trim($in['tipo_documento'] ?? '');
-  $estab = trim($in['establecimiento'] ?? '');
-  $pexp  = trim($in['punto_expedicion'] ?? '');
-  $desde = (int)($in['nro_desde'] ?? 0);
-  $hasta = (int)($in['nro_hasta'] ?? 0);
-  $actual= (int)($in['nro_actual'] ?? 0);
-  $fi    = $in['fecha_inicio'] ?? null;
-  $ff    = $in['fecha_fin'] ?? null;
-  $estado= $in['estado'] ?? 'Vigente';
+    $in    = body_json();
+    $id    = $in['id_timbrado'] ?? null;
+    $num   = trim($in['numero_timbrado'] ?? '');
+    $tcomp = trim($in['tipo_comprobante'] ?? '');
+    $tdoc  = trim($in['tipo_documento'] ?? '');
+    $estab = trim($in['establecimiento'] ?? '');
+    $pexp  = trim($in['punto_expedicion'] ?? '');
+    $desde = (int)($in['nro_desde'] ?? 0);
+    $hasta = (int)($in['nro_hasta'] ?? 0);
+    $actual= (int)($in['nro_actual'] ?? 0);
+    $fi    = $in['fecha_inicio'] ?? null;
+    $ff    = $in['fecha_fin'] ?? null;
+    $estado= $in['estado'] ?? 'Vigente';
 
-  if ($num==='' || $tcomp==='' || $tdoc==='' || $estab==='' || $pexp==='' || $desde<1 || $hasta<$desde || !$fi || !$ff) {
-    json_out(['ok'=>false, 'error'=>'Datos incompletos o inválidos. Verificá los campos.'], 400);
-  }
-  if ($actual < 0 || $actual > $hasta) json_out(['ok'=>false, 'error'=>'nro_actual fuera de rango.'], 400);
+    if ($num === '' || $tcomp === '' || $tdoc === '' || $estab === '' || $pexp === '' || $desde < 1 || $hasta < $desde || !$fi || !$ff) {
+        json_out(['ok' => false, 'error' => 'Datos incompletos o inválidos. Verificá los campos.'], 400);
+    }
+    if ($actual < 0 || $actual > $hasta) json_out(['ok' => false, 'error' => 'nro_actual fuera de rango.'], 400);
 
-  $hoy_res = pg_query($conn, "SELECT current_date::date AS hoy");
-  $hoy = pg_fetch_assoc($hoy_res)['hoy'];
-  if ($ff < $hoy) $estado = 'Vencido';
+    $hoy_res = pg_query($conn, "SELECT current_date::date AS hoy");
+    $hoy     = pg_fetch_assoc($hoy_res)['hoy'];
+    if ($ff < $hoy) $estado = 'Vencido';
 
-  if ($id) {
-    $sql = "UPDATE public.timbrado
-            SET numero_timbrado=$2, tipo_comprobante=$3, tipo_documento=$4,
-                establecimiento=$5, punto_expedicion=$6, nro_desde=$7, nro_hasta=$8,
-                nro_actual=$9, fecha_inicio=$10, fecha_fin=$11, estado=$12
-            WHERE id_timbrado=$1
-            RETURNING id_timbrado";
-    $res = pg_query_params($conn, $sql, [$id,$num,$tcomp,$tdoc,$estab,$pexp,$desde,$hasta,$actual,$fi,$ff,$estado]);
-  } else {
-    $sql = "INSERT INTO public.timbrado
-              (numero_timbrado, tipo_comprobante, tipo_documento, establecimiento, punto_expedicion,
-               nro_desde, nro_hasta, nro_actual, fecha_inicio, fecha_fin, estado)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-            RETURNING id_timbrado";
-    $res = pg_query_params($conn, $sql, [$num,$tcomp,$tdoc,$estab,$pexp,$desde,$hasta,$actual,$fi,$ff,$estado]);
-  }
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  $row = pg_fetch_assoc($res);
-  json_out(['ok'=>true, 'id_timbrado'=>$row['id_timbrado'] ?? null, 'Estado'=>$estado]);
+    if ($id) {
+        $sql = "UPDATE public.timbrado
+                SET numero_timbrado=$2, tipo_comprobante=$3, tipo_documento=$4,
+                    establecimiento=$5, punto_expedicion=$6, nro_desde=$7, nro_hasta=$8,
+                    nro_actual=$9, fecha_inicio=$10, fecha_fin=$11, estado=$12
+                WHERE id_timbrado=$1
+                RETURNING id_timbrado";
+        $res = pg_query_params($conn, $sql, [$id,$num,$tcomp,$tdoc,$estab,$pexp,$desde,$hasta,$actual,$fi,$ff,$estado]);
+    } else {
+        $sql = "INSERT INTO public.timbrado
+                  (numero_timbrado, tipo_comprobante, tipo_documento, establecimiento, punto_expedicion,
+                   nro_desde, nro_hasta, nro_actual, fecha_inicio, fecha_fin, estado)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+                RETURNING id_timbrado";
+        $res = pg_query_params($conn, $sql, [$num,$tcomp,$tdoc,$estab,$pexp,$desde,$hasta,$actual,$fi,$ff,$estado]);
+    }
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    $row = pg_fetch_assoc($res);
+    json_out(['ok' => true, 'id_timbrado' => $row['id_timbrado'] ?? null, 'Estado' => $estado]);
 }
 
 if ($action === 'timbrado.toggle' && is_post()) {
-  $in = body_json();
-  $id = $in['id_timbrado'] ?? null;
-  $estado = $in['estado'] ?? null;
-  if (!$id || !$estado) json_out(['ok'=>false, 'error'=>'Parámetros inválidos.'], 400);
+    $in = body_json();
+    $id = $in['id_timbrado'] ?? null;
+    $estado = $in['estado'] ?? null;
+    if (!$id || !$estado) json_out(['ok' => false, 'error' => 'Parámetros inválidos.'], 400);
 
-  $q = pg_query_params($conn, "SELECT fecha_fin FROM public.timbrado WHERE id_timbrado=$1", [$id]);
-  if (!$q) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  $ff = pg_fetch_assoc($q)['fecha_fin'] ?? null;
-  $hoy_res = pg_query($conn, "SELECT current_date::date AS hoy");
-  $hoy = pg_fetch_assoc($hoy_res)['hoy'];
-  if ($ff && $ff < $hoy) $estado = 'Vencido';
+    $q = pg_query_params($conn, "SELECT fecha_fin FROM public.timbrado WHERE id_timbrado=$1", [$id]);
+    if (!$q) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    $ff = pg_fetch_assoc($q)['fecha_fin'] ?? null;
+    $hoy_res = pg_query($conn, "SELECT current_date::date AS hoy");
+    $hoy = pg_fetch_assoc($hoy_res)['hoy'];
+    if ($ff && $ff < $hoy) $estado = 'Vencido';
 
-  $res = pg_query_params($conn, "UPDATE public.timbrado SET estado=$2 WHERE id_timbrado=$1", [$id, $estado]);
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  json_out(['ok'=>true, 'estado'=>$estado]);
+    $res = pg_query_params($conn, "UPDATE public.timbrado SET estado=$2 WHERE id_timbrado=$1", [$id, $estado]);
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    json_out(['ok' => true, 'estado' => $estado]);
 }
 
-/* ===== Enums dinámicos para selects (tipos, docs, números) ===== */
+/* ===== Enums dinámicos para selects ===== */
 if ($action === 'timbrado.enums') {
-  $q1 = pg_query($conn, "SELECT DISTINCT tipo_comprobante FROM public.timbrado WHERE tipo_comprobante <> '' ORDER BY 1 ASC");
-  $q2 = pg_query($conn, "SELECT DISTINCT tipo_documento  FROM public.timbrado WHERE tipo_documento  <> '' ORDER BY 1 ASC");
-  $q3 = pg_query($conn, "SELECT DISTINCT numero_timbrado  FROM public.timbrado WHERE numero_timbrado <> '' ORDER BY 1 DESC");
-  if (!$q1 || !$q2 || !$q3) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
+    $q1 = pg_query($conn, "SELECT DISTINCT tipo_comprobante FROM public.timbrado WHERE tipo_comprobante <> '' ORDER BY 1 ASC");
+    $q2 = pg_query($conn, "SELECT DISTINCT tipo_documento  FROM public.timbrado WHERE tipo_documento  <> '' ORDER BY 1 ASC");
+    $q3 = pg_query($conn, "SELECT DISTINCT numero_timbrado  FROM public.timbrado WHERE numero_timbrado <> '' ORDER BY 1 DESC");
+    if (!$q1 || !$q2 || !$q3) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
 
-  $tipos = array_map(fn($r)=>$r['tipo_comprobante'], pg_fetch_all($q1) ?: []);
-  $docs  = array_map(fn($r)=>$r['tipo_documento'],  pg_fetch_all($q2) ?: []);
-  $nums  = array_map(fn($r)=>$r['numero_timbrado'], pg_fetch_all($q3) ?: []);
-  json_out(['ok'=>true, 'tipos'=>$tipos, 'docs'=>$docs, 'numeros'=>$nums]);
+    $tipos = array_map(fn($r)=>$r['tipo_comprobante'], pg_fetch_all($q1) ?: []);
+    $docs  = array_map(fn($r)=>$r['tipo_documento'],  pg_fetch_all($q2) ?: []);
+    $nums  = array_map(fn($r)=>$r['numero_timbrado'], pg_fetch_all($q3) ?: []);
+    json_out(['ok' => true, 'tipos' => $tipos, 'docs' => $docs, 'numeros' => $nums]);
 }
 
 /* ============================ API: ASIGNACIÓN =========================== */
 if ($action === 'asig.list') {
-  $id_caja = isset($_GET['id_caja']) && $_GET['id_caja']!=='' ? (int)$_GET['id_caja'] : null;
-  $id_tim = isset($_GET['id_timbrado']) && $_GET['id_timbrado']!=='' ? (int)$_GET['id_timbrado'] : null;
-  $estado = (isset($_GET['estado']) && $_GET['estado'] !== '') ? $_GET['estado'] : null;
+    $id_caja = isset($_GET['id_caja']) && $_GET['id_caja'] !== '' ? (int)$_GET['id_caja'] : null;
+    $id_tim  = isset($_GET['id_timbrado']) && $_GET['id_timbrado'] !== '' ? (int)$_GET['id_timbrado'] : null;
+    $estado  = (isset($_GET['estado']) && $_GET['estado'] !== '') ? $_GET['estado'] : null;
 
-  $sql = "SELECT a.id_asignacion, a.id_caja, a.id_timbrado, a.estado,
-                 c.nombre AS caja_nombre,
-                 t.numero_timbrado, t.tipo_comprobante, t.tipo_documento,
-                 t.establecimiento, t.punto_expedicion,
-                 t.nro_desde, t.nro_hasta, t.nro_actual,
-                 t.fecha_inicio, t.fecha_fin, t.estado AS estado_timbrado
-          FROM public.timbrado_asignacion a
-          JOIN public.caja c ON c.id_caja = a.id_caja
-          JOIN public.timbrado t ON t.id_timbrado = a.id_timbrado
-          WHERE ($1::int IS NULL OR a.id_caja = $1)
-            AND ($2::int IS NULL OR a.id_timbrado = $2)
-            AND (NULLIF($3::text,'') IS NULL OR a.estado = $3)
-          ORDER BY a.id_asignacion DESC";
-  $res = pg_query_params($conn, $sql, [$id_caja, $id_tim, $estado]);
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  json_out(['ok'=>true, 'items'=>pg_fetch_all($res) ?: []]);
+    $sql = "SELECT a.id_asignacion, a.id_caja, a.id_timbrado, a.estado,
+                   c.nombre AS caja_nombre,
+                   t.numero_timbrado, t.tipo_comprobante, t.tipo_documento,
+                   t.establecimiento, t.punto_expedicion,
+                   t.nro_desde, t.nro_hasta, t.nro_actual,
+                   t.fecha_inicio, t.fecha_fin, t.estado AS estado_timbrado
+            FROM public.timbrado_asignacion a
+            JOIN public.caja c ON c.id_caja = a.id_caja
+            JOIN public.timbrado t ON t.id_timbrado = a.id_timbrado
+            WHERE ($1::int IS NULL OR a.id_caja = $1)
+              AND ($2::int IS NULL OR a.id_timbrado = $2)
+              AND (NULLIF($3::text,'') IS NULL OR a.estado = $3)
+            ORDER BY a.id_asignacion DESC";
+    $res = pg_query_params($conn, $sql, [$id_caja, $id_tim, $estado]);
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    json_out(['ok' => true, 'items' => pg_fetch_all($res) ?: []]);
 }
 
 if ($action === 'asig.save' && is_post()) {
-  $in = body_json();
-  $id = $in['id_asignacion'] ?? null;
-  $id_caja = $in['id_caja'] ?? null;
-  $id_tim = $in['id_timbrado'] ?? null;
-  $estado = $in['estado'] ?? 'Vigente';
+    $in = body_json();
+    $id      = $in['id_asignacion'] ?? null;
+    $id_caja = $in['id_caja'] ?? null;
+    $id_tim  = $in['id_timbrado'] ?? null;
+    $estado  = $in['estado'] ?? 'Vigente';
 
-  if (!$id_caja || !$id_tim) json_out(['ok'=>false, 'error'=>'Caja y Timbrado son obligatorios.'], 400);
+    if (!$id_caja || !$id_tim) json_out(['ok' => false, 'error' => 'Caja y Timbrado son obligatorios.'], 400);
 
-  if ($id) {
-    $sql = "UPDATE public.timbrado_asignacion
-            SET id_caja=$2, id_timbrado=$3, estado=$4
-            WHERE id_asignacion=$1
-            RETURNING id_asignacion";
-    $res = pg_query_params($conn, $sql, [$id, $id_caja, $id_tim, $estado]);
-  } else {
-    $sql = "INSERT INTO public.timbrado_asignacion (id_timbrado, id_caja, estado)
-            VALUES ($1,$2,$3)
-            RETURNING id_asignacion";
-    $res = pg_query_params($conn, $sql, [$id_tim, $id_caja, $estado]);
+    if ($id) {
+        $sql = "UPDATE public.timbrado_asignacion
+                SET id_caja=$2, id_timbrado=$3, estado=$4
+                WHERE id_asignacion=$1
+                RETURNING id_asignacion";
+        $res = pg_query_params($conn, $sql, [$id, $id_caja, $id_tim, $estado]);
+    } else {
+        $sql = "INSERT INTO public.timbrado_asignacion (id_timbrado, id_caja, estado)
+                VALUES ($1,$2,$3)
+                RETURNING id_asignacion";
+        $res = pg_query_params($conn, $sql, [$id_tim, $id_caja, $estado]);
 
-    if (!$res && strpos(pg_last_error($conn), 'ux_asignacion_caja_ppp_vig') !== false && strtolower($estado)==='vigente') {
-      pg_query_params($conn, "UPDATE public.timbrado_asignacion
-                              SET estado='Inactivo'
-                              WHERE id_timbrado=$1 AND id_caja=$2 AND lower(estado)='vigente'",
-                              [$id_tim, $id_caja]);
-      $res = pg_query_params($conn, $sql, [$id_tim, $id_caja, $estado]);
+        if (!$res && strpos(pg_last_error($conn), 'ux_asignacion_caja_ppp_vig') !== false && strtolower($estado) === 'vigente') {
+            pg_query_params(
+                $conn,
+                "UPDATE public.timbrado_asignacion
+                 SET estado='Inactivo'
+                 WHERE id_timbrado=$1 AND id_caja=$2 AND lower(estado)='vigente'",
+                [$id_tim, $id_caja]
+            );
+            $res = pg_query_params($conn, $sql, [$id_tim, $id_caja, $estado]);
+        }
     }
-  }
 
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  $row = pg_fetch_assoc($res);
-  json_out(['ok'=>true, 'id_asignacion'=>$row['id_asignacion'] ?? null]);
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    $row = pg_fetch_assoc($res);
+    json_out(['ok' => true, 'id_asignacion' => $row['id_asignacion'] ?? null]);
 }
 
 if ($action === 'asig.toggle' && is_post()) {
-  $in = body_json();
-  $id = $in['id_asignacion'] ?? null;
-  $estado = $in['estado'] ?? null;
-  if (!$id || !$estado) json_out(['ok'=>false, 'error'=>'Parámetros inválidos'], 400);
+    $in = body_json();
+    $id = $in['id_asignacion'] ?? null;
+    $estado = $in['estado'] ?? null;
+    if (!$id || !$estado) json_out(['ok' => false, 'error' => 'Parámetros inválidos'], 400);
 
-  if (strtolower($estado) === 'vigente') {
-    $q = pg_query_params($conn, "SELECT id_timbrado, id_caja FROM public.timbrado_asignacion WHERE id_asignacion=$1", [$id]);
-    if (!$q) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-    $row = pg_fetch_assoc($q);
-    if ($row) {
-      pg_query_params($conn, "UPDATE public.timbrado_asignacion
-                              SET estado='Inactivo'
-                              WHERE id_timbrado=$1 AND id_caja=$2 AND lower(estado)='vigente' AND id_asignacion<>$3",
-                              [$row['id_timbrado'], $row['id_caja'], $id]);
+    if (strtolower($estado) === 'vigente') {
+        $q = pg_query_params($conn, "SELECT id_timbrado, id_caja FROM public.timbrado_asignacion WHERE id_asignacion=$1", [$id]);
+        if (!$q) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+        $row = pg_fetch_assoc($q);
+        if ($row) {
+            pg_query_params(
+                $conn,
+                "UPDATE public.timbrado_asignacion
+                 SET estado='Inactivo'
+                 WHERE id_timbrado=$1 AND id_caja=$2 AND lower(estado)='vigente' AND id_asignacion<>$3",
+                [$row['id_timbrado'], $row['id_caja'], $id]
+            );
+        }
     }
-  }
 
-  $res = pg_query_params($conn, "UPDATE public.timbrado_asignacion SET estado=$2 WHERE id_asignacion=$1", [$id, $estado]);
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  json_out(['ok'=>true]);
+    $res = pg_query_params($conn, "UPDATE public.timbrado_asignacion SET estado=$2 WHERE id_asignacion=$1", [$id, $estado]);
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    json_out(['ok' => true]);
 }
 
 if ($action === 'combo.cajas') {
-  $res = pg_query($conn, "SELECT id_caja, nombre FROM public.caja ORDER BY nombre ASC");
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  json_out(['ok'=>true, 'items'=>pg_fetch_all($res) ?: []]);
+    $res = pg_query($conn, "SELECT id_caja, nombre FROM public.caja ORDER BY nombre ASC");
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    json_out(['ok' => true, 'items' => pg_fetch_all($res) ?: []]);
 }
 
 if ($action === 'combo.timbrados') {
-  $todos = ($_GET['todos'] ?? '') === 'true';
-  if ($todos) {
-    $res = pg_query($conn, "SELECT id_timbrado, numero_timbrado, establecimiento, punto_expedicion, tipo_comprobante, tipo_documento, estado FROM public.timbrado ORDER BY id_timbrado DESC");
-  } else {
-    $res = pg_query($conn, "SELECT id_timbrado, numero_timbrado, establecimiento, punto_expedicion, tipo_comprobante, tipo_documento, estado FROM public.timbrado WHERE estado='Vigente' ORDER BY id_timbrado DESC");
-  }
-  if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
-  json_out(['ok'=>true, 'items'=>pg_fetch_all($res) ?: []]);
+    $todos = ($_GET['todos'] ?? '') === 'true';
+    if ($todos) {
+        $res = pg_query($conn, "SELECT id_timbrado, numero_timbrado, establecimiento, punto_expedicion, tipo_comprobante, tipo_documento, estado FROM public.timbrado ORDER BY id_timbrado DESC");
+    } else {
+        $res = pg_query($conn, "SELECT id_timbrado, numero_timbrado, establecimiento, punto_expedicion, tipo_comprobante, tipo_documento, estado FROM public.timbrado WHERE estado='Vigente' ORDER BY id_timbrado DESC");
+    }
+    if (!$res) json_out(['ok' => false, 'error' => pg_last_error($conn)], 500);
+    json_out(['ok' => true, 'items' => pg_fetch_all($res) ?: []]);
 }
 ?>
 <!doctype html>
@@ -238,7 +254,6 @@ if ($action === 'combo.timbrados') {
   h1{font-size:18px;margin:0}
   main{padding:18px;max-width:1200px;margin:0 auto}
 
-  /* Toolbar */
   .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px 0}
   .chip{display:inline-flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:6px 10px}
   .chip select,.chip input{border:none;background:transparent;outline:none;font:inherit}
@@ -247,12 +262,10 @@ if ($action === 'combo.timbrados') {
   .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
   .btn.icon{display:inline-flex;align-items:center;gap:8px}
 
-  /* Tabs */
   .tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:0 0 14px 0}
   .tab{padding:10px 12px;border:1px solid var(--line);border-bottom:none;background:#fafafa;border-top-left-radius:8px;border-top-right-radius:8px;cursor:pointer}
   .tab.active{background:#fff;font-weight:600}
 
-  /* Cards */
   .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
   .card .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -265,7 +278,6 @@ if ($action === 'combo.timbrados') {
   .ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
   .off{background:#fff1f2;color:#9f1239;border-color:#fecdd3}
 
-  /* Modal */
   .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.38);z-index:30;padding:16px}
   .modal .card{max-width:760px;width:100%;box-shadow:0 15px 50px rgba(0,0,0,.2)}
   .modal .card header{padding-bottom:10px;border-bottom:1px solid var(--line);font-weight:600}
@@ -274,12 +286,13 @@ if ($action === 'combo.timbrados') {
   label.l{display:grid;gap:6px;font-size:13px}
   input[type="text"],input[type="date"],input[type="number"],select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
 
-  /* Small helpers */
   .spacer{flex:1}
 </style>
 </head>
 <body>
 <header class="top">
+  <button class="btn icon" onclick="goBack()">← Volver</button>
+  <div class="spacer"></div>
   <h1>Timbrados & Asignaciones</h1>
   <div class="spacer"></div>
   <button class="btn icon" onclick="refreshActive()">⟲ Refrescar</button>
@@ -293,7 +306,6 @@ if ($action === 'combo.timbrados') {
     <div id="tabAsig" class="tab" onclick="showTab('asig')">Asignaciones</div>
   </div>
 
-  <!-- TIMBRADOS -->
   <section id="viewTim">
     <div class="toolbar">
       <div class="chip">🔎
@@ -312,7 +324,6 @@ if ($action === 'combo.timbrados') {
     <div id="cardsTim" class="cards"></div>
   </section>
 
-  <!-- ASIGNACIONES -->
   <section id="viewAsig" style="display:none">
     <div class="toolbar">
       <div class="chip">Caja:
@@ -335,7 +346,6 @@ if ($action === 'combo.timbrados') {
   </section>
 </main>
 
-<!-- MODAL TIMBRADO -->
 <div class="modal" id="modalTim">
   <div class="card" role="dialog" aria-modal="true" aria-labelledby="timTitle">
     <header id="timTitle">Nuevo Timbrado</header>
@@ -401,7 +411,6 @@ if ($action === 'combo.timbrados') {
   </div>
 </div>
 
-<!-- MODAL ASIGNACIÓN -->
 <div class="modal" id="modalAsig">
   <div class="card" role="dialog" aria-modal="true" aria-labelledby="asigTitle">
     <header id="asigTitle">Nueva Asignación</header>
@@ -431,9 +440,16 @@ if ($action === 'combo.timbrados') {
 </div>
 
 <script>
-/* ==================== ENUMS / HELPERS ==================== */
 let ENUMS = { tipos:[], docs:[], numeros:[] };
 const OPT_NUEVO = '__nuevo__';
+
+function goBack(){
+  if (window.history.length > 1){
+    window.history.back();
+  } else {
+    window.location.href = '/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboardv1.php';
+  }
+}
 
 async function loadEnums(){
   const res = await fetch('?action=timbrado.enums');
@@ -474,7 +490,6 @@ function asAttr(r){
   return JSON.stringify(r).replace(/</g,'\\u003c').replace(/>/g,'\\u003e').replace(/&/g,'\\u0026').replace(/'/g,'\\u0027');
 }
 
-/* ==================== TABS ==================== */
 function showTab(which){
   document.getElementById('tabTim').classList.toggle('active', which==='tim');
   document.getElementById('tabAsig').classList.toggle('active', which==='asig');
@@ -486,7 +501,6 @@ function refreshActive(){
   else loadAsignaciones();
 }
 
-/* ==================== TIMBRADOS ==================== */
 async function loadTimbrados(){
   const q = document.getElementById('tim_q').value.trim();
   const estado = document.getElementById('tim_estado').value;
@@ -638,7 +652,6 @@ async function toggleTimEstado(id, value){
   loadTimbrados(); await loadTimCombo();
 }
 
-/* ==================== ASIGNACIONES ==================== */
 async function loadCajas(){
   const res = await fetch('?action=combo.cajas');
   const j = await res.json();
@@ -732,15 +745,21 @@ async function saveAsig(){
   closeAsig(); loadAsignaciones();
 }
 
-/* ==================== Utils ==================== */
+async function toggleAsigEstado(id, value){
+  if(!value) return;
+  const res = await fetch('?action=asig.toggle', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id_asignacion:id, estado:value})});
+  const j = await res.json();
+  if(!j.ok){ alert(j.error||'Error cambiando estado'); return; }
+  loadAsignaciones();
+}
+
 function toNull(v){ return (v===''||v===null||v===undefined) ? null : (/^-?\d+$/.test(v) ? Number(v) : v); }
 
-/* ==================== Cierre de Modales ==================== */
 function bindModalClose(){
   ['modalTim','modalAsig'].forEach(id=>{
     const overlay = document.getElementById(id);
     const card = overlay.querySelector('.card');
-    card.addEventListener('click', e=> e.stopPropagation()); // no cerrar si clic dentro
+    card.addEventListener('click', e=> e.stopPropagation());
     overlay.addEventListener('click', ()=> {
       if (id==='modalTim') closeTim(); else closeAsig();
     });
@@ -757,7 +776,6 @@ function bindModalClose(){
   });
 }
 
-/* ==================== Init ==================== */
 (async function init(){
   showTab('tim');
   await loadEnums();

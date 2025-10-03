@@ -35,7 +35,6 @@ function body_json(){
 $action = $_GET['action'] ?? $_POST['action'] ?? null;
 
 if ($action === 'list') {
-  // GET /?action=list&q=&activa=true&limit=50&offset=0
   $q = $_GET['q'] ?? null;
   $activa = isset($_GET['activa']) ? ($_GET['activa'] === 'true' ? 't' : 'f') : null;
   $limit = (int)($_GET['limit'] ?? 50);
@@ -55,7 +54,6 @@ if ($action === 'list') {
 }
 
 if ($action === 'save' && is_post()) {
-  // POST JSON /?action=save  {id_caja?, nombre, id_sucursal?, observacion?}
   $in = body_json();
   $id = $in['id_caja'] ?? null;
   $nombre = trim($in['nombre'] ?? '');
@@ -82,7 +80,6 @@ if ($action === 'save' && is_post()) {
 }
 
 if ($action === 'toggle' && is_post()) {
-  // POST JSON /?action=toggle {id_caja, activa: true|false}
   $in = body_json();
   $id = $in['id_caja'] ?? null;
   $activa = $in['activa'] ?? null;
@@ -93,8 +90,6 @@ if ($action === 'toggle' && is_post()) {
   if (!$res) json_out(['ok'=>false, 'error'=>pg_last_error($conn)], 500);
   json_out(['ok'=>true]);
 }
-
-/* ---------------- Si no es endpoint, renderiza la UI ---------------- */
 ?>
 <!doctype html>
 <html lang="es">
@@ -127,7 +122,6 @@ if ($action === 'toggle' && is_post()) {
   .badge.off{background:#fff1f2;color:#9f1239;border-color:#fecdd3}
   .muted{color:var(--muted)}
   .right{margin-left:auto}
-  /* Modal */
   .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.38);z-index:30}
   .card{background:#fff;border-radius:14px;box-shadow:0 15px 50px rgba(0,0,0,.2);width:100%;max-width:520px}
   .card header{padding:14px 16px;border-bottom:1px solid var(--line);font-weight:600}
@@ -145,6 +139,7 @@ if ($action === 'toggle' && is_post()) {
 </head>
 <body>
 <header class="top">
+  <button class="btn" onclick="goBack()">← Volver</button>
   <h1>Administración de Cajas</h1>
   <div class="right"></div>
   <button class="btn" onclick="loadGrid()">Refrescar</button>
@@ -174,7 +169,6 @@ if ($action === 'toggle' && is_post()) {
   </table>
 </main>
 
-<!-- Modal Form -->
 <div class="modal" id="modal">
   <div class="card">
     <header id="modalTitle">Nueva Caja</header>
@@ -199,6 +193,14 @@ if ($action === 'toggle' && is_post()) {
 
 <script>
 const endpoint = (a) => `?action=${encodeURIComponent(a)}`;
+
+function goBack(){
+  if (window.history.length > 1){
+    window.history.back();
+  } else {
+    window.location.href = '/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/dashboard/dashboardv1.php';
+  }
+}
 
 async function loadGrid(){
   const q = document.getElementById('q').value.trim();
@@ -269,11 +271,10 @@ async function toggleActiva(id, on){
   if (!j.ok){ alert(j.error || 'No se pudo actualizar'); loadGrid(); }
 }
 
-/* ---------------- Utils UI ---------------- */
 function toNull(v){ return (v===''||v===null||v===undefined) ? null : (/^-?\d+$/.test(v) ? Number(v) : v); }
 function fmtDateTime(s){
   if(!s) return '';
-  const d = new Date(s.replace(' ', 'T')+'Z'); // best effort
+  const d = new Date(s.replace(' ', 'T')+'Z');
   if (isNaN(d)) return s;
   return d.toLocaleString();
 }
