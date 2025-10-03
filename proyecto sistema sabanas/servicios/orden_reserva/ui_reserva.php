@@ -339,6 +339,7 @@ ORDER BY inicio;
 <meta charset="UTF-8" />
 <title>Orden de Reserva</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" type="text/css" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/css/styles_servicios.css" />
 <style>
   :root{ --g:#10b981; --r:#ef4444; --b:#111; --shadow:0 10px 20px rgba(0,0,0,.12); }
   body{ font-family:system-ui,Segoe UI,Roboto,Arial; margin:20px; color:#111; background:#fff }
@@ -405,6 +406,8 @@ ORDER BY inicio;
 </style>
 </head>
 <body>
+   <div id="navbar-container"></div>
+<script src="../../servicios/navbar/navbar.js"></script>
   <h1>Orden de Reserva</h1>
 
   <!-- 1) Cliente -->

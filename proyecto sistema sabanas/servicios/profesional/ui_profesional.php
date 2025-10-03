@@ -10,6 +10,7 @@ if (empty($_SESSION['nombre_usuario'])) {
 <head>
 <meta charset="utf-8">
 <title>Profesionales</title>
+<link rel="stylesheet" type="text/css" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/css/styles_servicios.css" />
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
   body{margin:0;padding:24px;font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto;background:#f8fafc;color:#0f172a;}
@@ -34,6 +35,8 @@ if (empty($_SESSION['nombre_usuario'])) {
 </style>
 </head>
 <body>
+    <div id="navbar-container"></div>
+<script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/navbar/navbar.js"></script>
   <h1>Gestión de profesionales</h1>
   <div class="layout">
     <div class="card">
@@ -232,6 +235,5 @@ async function toggleEstado(id){
 
 window.addEventListener('DOMContentLoaded', loadProfesionales);
 </script>
-<script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
 </html>

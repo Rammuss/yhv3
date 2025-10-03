@@ -11,6 +11,7 @@ if (empty($_SESSION['nombre_usuario'])) {
 <meta charset="utf-8">
 <title>Presupuestos de Servicios</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" type="text/css" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/css/styles_servicios.css" />
 <style>
   :root{
     --bg:#f1f5f9; --surface:#fff; --border:#dbeafe; --shadow:0 12px 28px rgba(15,23,42,.12);
@@ -62,6 +63,9 @@ if (empty($_SESSION['nombre_usuario'])) {
 </style>
 </head>
 <body>
+    
+<div id="navbar-container"></div>
+<script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/navbar/navbar.js"></script>
 <h1>Presupuestos de Servicios</h1>
 
 <div class="layout">
@@ -481,6 +485,5 @@ window.addEventListener('DOMContentLoaded', ()=>{
   loadPresupuestos();
 });
 </script>
-<script src="/../TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
 </body>
 </html>

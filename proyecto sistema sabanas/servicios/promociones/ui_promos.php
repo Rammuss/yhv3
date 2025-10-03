@@ -142,6 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <meta charset="UTF-8">
 <title>Promociones / Descuentos</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" type="text/css" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/css/styles_servicios.css" />
 <style>
   :root{ --shadow:0 8px 20px rgba(0,0,0,.12); --gray:#6b7280; }
   body{ font-family:system-ui,Segoe UI,Roboto,Arial; margin:20px; color:#111; background:#fff; }
@@ -173,6 +174,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </style>
 </head>
 <body>
+    <div id="navbar-container"></div>
+<script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/navbar/navbar.js"></script>
   <h1>Promociones / Descuentos</h1>
   <div class="flex">
     <div class="card" style="max-width:420px">
