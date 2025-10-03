@@ -14,7 +14,7 @@ Acciones:
 Tabla propia (presupuesto_cab + presupuesto_det) para no tocar ventas.
 Cabecera: id_cliente, fecha, validez, estado (Borrador, Enviado, Aprobado, Rechazado), cupón/promoción aplicada, total estimado.
 Detalle: ítems con id_producto, cantidad, precio unitario snapshot, descuentos aplicados.
-Se puede originar desde Solicitud (copia) o darse de alta manualmente.
+Se puede originar desde Solicitud (copia) o darse de alta manualmente. 
 Acciones:
 • Enviar al cliente (generar PDF/Email).
 • Convertir en OT (cuando el cliente aprueba) → copia la lista de servicios a la OT.

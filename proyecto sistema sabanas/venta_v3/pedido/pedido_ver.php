@@ -13,6 +13,25 @@ if ($id_pedido <= 0) {
   echo "ID inválido"; exit;
 }
 
+function normalizar_tipo_iva($tipo){
+  $tipo = strtoupper(trim((string)$tipo));
+  if ($tipo === 'IVA10' || $tipo === 'IVA 10' || $tipo === '10%' || $tipo === '10' || strpos($tipo,'10')!==false) return 'IVA10';
+  if ($tipo === 'IVA5'  || $tipo === 'IVA 5'  || $tipo === '5%'  || $tipo === '5'  || strpos($tipo,'5')!==false)  return 'IVA5';
+  return 'EXE';
+}
+function etiqueta_iva($tipo){
+  $tipo = normalizar_tipo_iva($tipo);
+  if ($tipo==='IVA10') return '10%';
+  if ($tipo==='IVA5')  return '5%';
+  return 'Exento';
+}
+function tasa_iva($tipo){
+  $tipo = normalizar_tipo_iva($tipo);
+  if ($tipo==='IVA10') return 0.10;
+  if ($tipo==='IVA5')  return 0.05;
+  return 0.0;
+}
+
 // --- Cabecera del pedido ---
 $sqlCab = "
   SELECT pc.*, 
@@ -37,7 +56,53 @@ $sqlDet = "
   ORDER BY d.id_pedido_det
 ";
 $resDet = pg_query_params($conn, $sqlDet, [$id_pedido]);
-$detalles = $resDet ? pg_fetch_all($resDet) : [];
+$detallesDb = $resDet ? pg_fetch_all($resDet) : [];
+
+$detalles = [];
+$sumBase = 0.0;
+$sumDesc = 0.0;
+$sumIva  = 0.0;
+$sumTotal = 0.0;
+
+foreach ($detallesDb as $d) {
+  $cantidad = (float)$d['cantidad'];
+  $precio   = (float)$d['precio_unitario'];  // precio con IVA
+  $descuento= (float)$d['descuento'];
+  $tipoIva  = normalizar_tipo_iva($d['tipo_iva']);
+  $rate     = tasa_iva($tipoIva);
+
+  $importeSinDesc = $cantidad * $precio;
+  $descuento      = min($descuento, $importeSinDesc);
+  $importeFinal   = max(0.0, $importeSinDesc - $descuento); // total con IVA
+
+  if ($rate > 0) {
+    $base = round($importeFinal / (1 + $rate), 2);
+    $ivaMonto = round($importeFinal - $base, 2);
+  } else {
+    $base = round($importeFinal, 2);
+    $ivaMonto = 0.0;
+  }
+
+  $detalles[] = [
+    'producto'   => $d['producto'],
+    'cantidad'   => $cantidad,
+    'precio'     => $precio,
+    'descuento'  => $descuento,
+    'iva_label'  => etiqueta_iva($tipoIva),
+    'subtotal'   => $importeFinal,
+    'iva_monto'  => $ivaMonto,
+  ];
+
+  $sumBase  += $base;
+  $sumDesc  += $descuento;
+  $sumIva   += $ivaMonto;
+  $sumTotal += $importeFinal;
+}
+
+$sumBase  = round($sumBase, 2);
+$sumDesc  = round($sumDesc, 2);
+$sumIva   = round($sumIva, 2);
+$sumTotal = round($sumTotal, 2);
 ?>
 <!doctype html>
 <html lang="es">
@@ -46,7 +111,7 @@ $detalles = $resDet ? pg_fetch_all($resDet) : [];
 <title>Pedido #<?= htmlspecialchars($id_pedido) ?></title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  body{font-family:Arial, sans-serif;margin:20px;background:#f9fafb;color:#111}
+  body{font-family:Arial,sans-serif;margin:20px;background:#f9fafb;color:#111}
   .doc{max-width:900px;margin:auto;background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
   h1{margin:0 0 10px}
   .muted{color:#6b7280;font-size:.9rem}
@@ -88,7 +153,7 @@ $detalles = $resDet ? pg_fetch_all($resDet) : [];
     </div>
   </div>
 
-  <?php if ($cab['observacion']): ?>
+  <?php if (!empty($cab['observacion'])): ?>
     <p class="muted"><b>Observación:</b> <?= htmlspecialchars($cab['observacion']) ?></p>
   <?php endif; ?>
 
@@ -97,21 +162,21 @@ $detalles = $resDet ? pg_fetch_all($resDet) : [];
       <tr>
         <th>Producto</th>
         <th>Cant.</th>
-        <th>Precio</th>
+        <th>Precio (c/IVA)</th>
         <th>Desc.</th>
-        <th>IVA</th>
-        <th>Subtotal</th>
+        <th>IVA %</th>
+        <th>Subtotal (c/IVA)</th>
       </tr>
     </thead>
     <tbody>
       <?php foreach ($detalles as $d): ?>
         <tr>
           <td><?= htmlspecialchars($d['producto']) ?></td>
-          <td><?= (int)$d['cantidad'] ?></td>
-          <td><?= number_format($d['precio_unitario'],2,',','.') ?></td>
+          <td><?= rtrim(rtrim(number_format($d['cantidad'],2,'.',''),'0'),'.') ?></td>
+          <td><?= number_format($d['precio'],2,',','.') ?></td>
           <td><?= number_format($d['descuento'],2,',','.') ?></td>
-          <td><?= htmlspecialchars($d['tipo_iva']) ?></td>
-          <td><?= number_format($d['subtotal_neto'],2,',','.') ?></td>
+          <td><?= htmlspecialchars($d['iva_label']) ?></td>
+          <td><?= number_format($d['subtotal'],2,',','.') ?></td>
         </tr>
       <?php endforeach; ?>
     </tbody>
@@ -119,10 +184,10 @@ $detalles = $resDet ? pg_fetch_all($resDet) : [];
 
   <div class="totals">
     <table>
-      <tr><th>Total Bruto</th><td><?= number_format($cab['total_bruto'],2,',','.') ?></td></tr>
-      <tr><th>Descuento</th><td><?= number_format($cab['total_descuento'],2,',','.') ?></td></tr>
-      <tr><th>IVA</th><td><?= number_format($cab['total_iva'],2,',','.') ?></td></tr>
-      <tr><th>Total Neto</th><td><b><?= number_format($cab['total_neto'],2,',','.') ?></b></td></tr>
+      <tr><th>Total Base (sin IVA)</th><td><?= number_format($sumBase,2,',','.') ?></td></tr>
+      <tr><th>Descuentos</th><td><?= number_format($sumDesc,2,',','.') ?></td></tr>
+      <tr><th>IVA</th><td><?= number_format($sumIva,2,',','.') ?></td></tr>
+      <tr><th>Total Neto</th><td><b><?= number_format($sumTotal,2,',','.') ?></b></td></tr>
     </table>
   </div>
 

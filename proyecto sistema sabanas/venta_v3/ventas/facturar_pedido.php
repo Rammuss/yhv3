@@ -107,35 +107,43 @@ try {
 
   // 2) Totales desde pedido_det (NORMALIZADOS: base e IVA correctos SIN duplicar)
   $sqlTot = "
-  WITH lineas AS (
-    SELECT
-      -- normalizamos tipo_iva
-      CASE
-        WHEN d.tipo_iva IN ('10%','10','10.0') THEN '10'
-        WHEN d.tipo_iva IN ('5%','5','5.0')   THEN '5'
-        WHEN d.tipo_iva ILIKE 'EX%' OR d.tipo_iva ILIKE 'EXENTO%' THEN 'EX'
-        ELSE d.tipo_iva
-      END AS tipo_iva_norm,
-      d.subtotal_neto::numeric(14,2) AS imp,    -- importe visible (incluye IVA si grava)
-      COALESCE(NULLIF(d.iva_monto,0),
-        CASE
-          WHEN d.tipo_iva IN ('10%','10','10.0') THEN round(d.subtotal_neto/11.0,2)
-          WHEN d.tipo_iva IN ('5%','5','5.0')    THEN round(d.subtotal_neto/21.0,2)
-          ELSE 0
-        END
-      )::numeric(14,2) AS iva_calc
-    FROM public.pedido_det d
-    WHERE d.id_pedido = $1
-  )
+WITH lineas AS (
   SELECT
-    COALESCE(SUM(CASE WHEN tipo_iva_norm='10' THEN imp-iva_calc ELSE 0 END),0)::numeric(14,2) AS total_grav10,
-    COALESCE(SUM(CASE WHEN tipo_iva_norm='10' THEN iva_calc    ELSE 0 END),0)::numeric(14,2) AS total_iva10,
-    COALESCE(SUM(CASE WHEN tipo_iva_norm='5'  THEN imp-iva_calc ELSE 0 END),0)::numeric(14,2) AS total_grav5,
-    COALESCE(SUM(CASE WHEN tipo_iva_norm='5'  THEN iva_calc    ELSE 0 END),0)::numeric(14,2) AS total_iva5,
-    COALESCE(SUM(CASE WHEN tipo_iva_norm='EX' THEN imp         ELSE 0 END),0)::numeric(14,2) AS total_exentas,
-    COALESCE(SUM(imp),0)::numeric(14,2) AS total_factura
+    CASE
+      WHEN UPPER(d.tipo_iva) IN ('IVA10','10%','10','IVA 10','10.0') THEN '10'
+      WHEN UPPER(d.tipo_iva) IN ('IVA5','5%','5','IVA 5','5.0')     THEN '5'
+      ELSE 'EX'
+    END AS tipo_iva_norm,
+    (d.cantidad * d.precio_unitario - COALESCE(d.descuento,0))::numeric(14,2) AS imp_total
+  FROM public.pedido_det d
+  WHERE d.id_pedido = $1
+),
+descomp AS (
+  SELECT
+    tipo_iva_norm,
+    CASE
+      WHEN tipo_iva_norm = '10' THEN round(imp_total / 1.10, 2)
+      WHEN tipo_iva_norm = '5'  THEN round(imp_total / 1.05, 2)
+      ELSE imp_total
+    END AS base,
+    CASE
+      WHEN tipo_iva_norm = '10' THEN round(imp_total - imp_total / 1.10, 2)
+      WHEN tipo_iva_norm = '5'  THEN round(imp_total - imp_total / 1.05, 2)
+      ELSE 0
+    END AS iva,
+    imp_total
   FROM lineas
+)
+SELECT
+  COALESCE(SUM(CASE WHEN tipo_iva_norm='10' THEN base ELSE 0 END),0)::numeric(14,2) AS total_grav10,
+  COALESCE(SUM(CASE WHEN tipo_iva_norm='10' THEN iva  ELSE 0 END),0)::numeric(14,2) AS total_iva10,
+  COALESCE(SUM(CASE WHEN tipo_iva_norm='5'  THEN base ELSE 0 END),0)::numeric(14,2) AS total_grav5,
+  COALESCE(SUM(CASE WHEN tipo_iva_norm='5'  THEN iva  ELSE 0 END),0)::numeric(14,2) AS total_iva5,
+  COALESCE(SUM(CASE WHEN tipo_iva_norm='EX' THEN imp_total ELSE 0 END),0)::numeric(14,2) AS total_exentas,
+  COALESCE(SUM(imp_total),0)::numeric(14,2) AS total_factura
+FROM descomp
 ";
+
 
   $rTot = pg_query_params($conn, $sqlTot, [$id_pedido]);
   if (!$rTot) {
@@ -184,26 +192,34 @@ try {
 
   // 4) Validar reservas activas suficientes
   $sqlCheckReserva = "
-    WITH req AS (
-      SELECT d.id_producto, SUM(d.cantidad)::numeric(14,2) AS qty_requerida
+  WITH req AS (
+    SELECT d.id_producto,
+           SUM(d.cantidad)::numeric(14,2) AS qty_requerida
       FROM public.pedido_det d
-      WHERE d.id_pedido = $1
-      GROUP BY d.id_producto
-    ),
-    res AS (
-      SELECT r.id_producto, COALESCE(SUM(r.cantidad),0)::numeric(14,2) AS qty_reservada
+      JOIN public.producto p ON p.id_producto = d.id_producto
+     WHERE d.id_pedido = $1
+       AND COALESCE(p.tipo_item,'P') NOT IN ('S','D')   -- excluir servicios y descuentos
+     GROUP BY d.id_producto
+  ),
+  res AS (
+    SELECT r.id_producto,
+           COALESCE(SUM(r.cantidad),0)::numeric(14,2) AS qty_reservada
       FROM public.reserva_stock r
-      WHERE r.id_pedido = $1 AND lower(r.estado) = 'activa'
-      GROUP BY r.id_producto
-    )
-    SELECT p.id_producto, p.nombre,
-           req.qty_requerida,
-           COALESCE(res.qty_reservada,0) AS qty_reservada
+      JOIN public.producto p ON p.id_producto = r.id_producto
+     WHERE r.id_pedido = $1
+       AND lower(r.estado) = 'activa'
+       AND COALESCE(p.tipo_item,'P') NOT IN ('S','D')   -- misma condición
+     GROUP BY r.id_producto
+  )
+  SELECT p.id_producto, p.nombre,
+         req.qty_requerida,
+         COALESCE(res.qty_reservada,0) AS qty_reservada
     FROM req
     LEFT JOIN res ON res.id_producto = req.id_producto
     JOIN public.producto p ON p.id_producto = req.id_producto
-    WHERE COALESCE(res.qty_reservada,0) < req.qty_requerida
-  ";
+   WHERE COALESCE(res.qty_reservada,0) < req.qty_requerida
+";
+
   $rCheck = pg_query_params($conn, $sqlCheckReserva, [$id_pedido]);
   if ($rCheck === false) {
     throw new Exception('No se pudo validar reservas');
@@ -266,16 +282,36 @@ try {
 
   // 6) Detalle
   $sqlDet = "
-    INSERT INTO public.factura_venta_det(
-      id_factura, id_producto, tipo_item, descripcion, unidad,
-      cantidad, precio_unitario, tipo_iva, iva_monto, subtotal_neto
-    )
-    SELECT $1, d.id_producto, COALESCE(p.tipo_item,'P'), p.nombre, 'UNI',
-           d.cantidad, d.precio_unitario, d.tipo_iva, d.iva_monto, d.subtotal_neto
-    FROM public.pedido_det d
-    JOIN public.producto p ON p.id_producto = d.id_producto
-    WHERE d.id_pedido = $2
-  ";
+  INSERT INTO public.factura_venta_det(
+    id_factura, id_producto, tipo_item, descripcion, unidad,
+    cantidad, precio_unitario, tipo_iva, iva_monto, subtotal_neto
+  )
+  SELECT
+    $1,
+    d.id_producto,
+    COALESCE(p.tipo_item,'P'),
+    p.nombre,
+    'UNI',
+    d.cantidad,
+    d.precio_unitario,
+    CASE
+      WHEN UPPER(d.tipo_iva) IN ('IVA10','10%','10','IVA 10','10.0') THEN 'IVA10'
+      WHEN UPPER(d.tipo_iva) IN ('IVA5','5%','5','IVA 5','5.0')     THEN 'IVA5'
+      ELSE 'EXE'
+    END AS tipo_iva_norm,
+    CASE
+      WHEN UPPER(d.tipo_iva) IN ('IVA10','10%','10','IVA 10','10.0')
+        THEN round((d.cantidad*d.precio_unitario - COALESCE(d.descuento,0)) * 0.10 / 1.10, 2)
+      WHEN UPPER(d.tipo_iva) IN ('IVA5','5%','5','IVA 5','5.0')
+        THEN round((d.cantidad*d.precio_unitario - COALESCE(d.descuento,0)) * 0.05 / 1.05, 2)
+      ELSE 0
+    END AS iva_monto_calc,
+    round(d.cantidad*d.precio_unitario - COALESCE(d.descuento,0), 2) AS subtotal_con_iva
+  FROM public.pedido_det d
+  JOIN public.producto p ON p.id_producto = d.id_producto
+  WHERE d.id_pedido = $2
+";
+
   $okDet = pg_query_params($conn, $sqlDet, [$id_factura, $id_pedido]);
   if (!$okDet) {
     throw new Exception('No se pudo insertar el detalle de la factura');

@@ -38,10 +38,16 @@ session_start();
   .toast.error{ background:#b91c1c; }
   .toast button{ background:transparent; color:#fff; border:none; font-size:18px; cursor:pointer; padding:0; margin-left:12px; }
   @keyframes toast-in{ from{ transform:translateY(12px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
-  .section-title{ font-size:15px; font-weight:600; margin:16px 0 8px; display:flex; align-items:center; justify-content:space-between; }
+  .section-title{ font-size:15px; font-weight:600; margin:16px 0 8px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .inline-form{ display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:8px; }
   .inline-form > div{ flex:1; min-width:160px; }
   .tag{ display:inline-flex; padding:2px 6px; font-size:11px; border-radius:6px; background:#f1f5f9; color:#0f172a; text-transform:uppercase; letter-spacing:.05em; }
+  .solicitud-list{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .solicitud-card{ border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#f8fafc; display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
+  .solicitud-card input{ margin-top:4px; }
+  .solicitud-card strong{ display:block; margin-bottom:4px; font-size:13px; color:#0f172a; }
+  .solicitud-items{ font-size:12px; color:#475569; }
+  .solicitud-items span{ display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 6px; background:#e2e8f0; border-radius:6px; }
 </style>
 </head>
 <body>
@@ -173,10 +179,19 @@ session_start();
             <label>Fin real</label>
             <input id="d_fin_real" readonly>
           </div>
-          <div style="flex:0; display:flex; gap:8px; align-items:flex-end;">
-            <button onclick="marcarEnEjecucion()">Iniciar</button>
-            <button onclick="marcarCompletada()">Finalizar</button>
-            <button class="sec" onclick="marcarCancelada()">Cancelar</button>
+          <div>
+            <label>Pedido asociado</label>
+            <input id="d_id_pedido" readonly>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div>
+            <label>Acciones</label>
+            <div style="display:flex; gap:8px;">
+              <button onclick="marcarEnEjecucion()">Iniciar</button>
+              <button onclick="marcarCompletada()">Finalizar</button>
+              <button class="sec" onclick="marcarCancelada()">Cancelar</button>
+            </div>
           </div>
         </div>
 
@@ -258,6 +273,13 @@ session_start();
         </div>
 
         <div class="section-title">
+          <span>Pedido y solicitudes</span>
+          <button id="btn_generar_pedido" onclick="generarPedidoDesdeOT()">Generar pedido</button>
+        </div>
+        <div id="pedido_resumen" class="muted"></div>
+        <div id="solicitudes_wrapper"></div>
+
+        <div class="section-title">
           <span>Notas</span>
         </div>
         <textarea id="d_notas" placeholder="Observaciones internas..."></textarea>
@@ -281,6 +303,8 @@ let otSeleccionada = null;
 let items = [];
 let insumos = [];
 let reservasEncontradas = [];
+let solicitudesCliente = [];
+let solicitudSeleccionada = '';
 
 function showToast(msg,type='ok'){
   const layer = $('toasts');
@@ -343,7 +367,6 @@ function renderSelectServicios(){
   }
 }
 
-
 function updateItemHint(){
   const hint = $('hint_item');
   const sel = $('new_item_prod');
@@ -367,7 +390,6 @@ function renderSelectInsumos(){
   }
   updateInsumoStockHint();
 }
-
 
 function updateInsumoStockHint(){
   const info = $('new_ins_stock');
@@ -434,6 +456,8 @@ async function verDetalle(id_ot){
     items = data.det || [];
     insumos = data.insumos || [];
     pintarDetalle();
+    await loadSolicitudesCliente();
+    updatePedidoControls();
   }catch(e){
     showToast(e.message,'error');
   }
@@ -456,6 +480,7 @@ function pintarDetalle(){
   $('d_inicio_real').value = otSeleccionada.inicio_real || '';
   $('d_fin_real').value = otSeleccionada.fin_real || '';
   $('d_notas').value = otSeleccionada.notas || '';
+  $('d_id_pedido').value = otSeleccionada.id_pedido ? `#${otSeleccionada.id_pedido}` : '';
 
   const selProf = $('d_profesional');
   const actual = otSeleccionada.id_profesional;
@@ -474,6 +499,7 @@ function pintarDetalle(){
 
   renderItems();
   renderInsumos();
+  renderSolicitudes();
 }
 
 function renderItems(){
@@ -501,6 +527,7 @@ function renderItems(){
     tbody.appendChild(tr);
   });
   $('total_ot_servicios').textContent = `Gs ${total.toLocaleString('es-PY')}`;
+  updatePedidoControls();
 }
 
 function renderInsumos(){
@@ -601,7 +628,6 @@ function addItem(){
     verDetalle(otSeleccionada.id_ot);
   }).catch(e=>showToast(e.message,'error'));
 }
-
 
 function editInsumo(item_nro, campo, valor){
   const item = insumos.find(x=>x.item_nro===item_nro);
@@ -739,7 +765,7 @@ async function marcarEnEjecucion(){
 async function marcarCompletada(){
   if(!otSeleccionada) return;
   try{
-   	await api('update_ot_state',{id_ot: otSeleccionada.id_ot, estado:'Completada', finalizar_con_fecha:true});
+    await api('update_ot_state',{id_ot: otSeleccionada.id_ot, estado:'Completada', finalizar_con_fecha:true});
     showToast('OT completada');
     verDetalle(otSeleccionada.id_ot);
   }catch(e){ showToast(e.message,'error'); }
@@ -753,6 +779,128 @@ async function marcarCancelada(){
     showToast('OT cancelada');
     verDetalle(otSeleccionada.id_ot);
   }catch(e){ showToast(e.message,'error'); }
+}
+
+async function loadSolicitudesCliente(){
+  solicitudesCliente = [];
+  solicitudSeleccionada = '';
+  if(!otSeleccionada) return;
+  try{
+    const data = await api('list_solicitudes_cliente',{id_ot: otSeleccionada.id_ot});
+    solicitudesCliente = data.rows || [];
+    renderSolicitudes();
+  }catch(e){
+    showToast(e.message,'error');
+  }
+}
+
+function renderSolicitudes(){
+  const cont = $('solicitudes_wrapper');
+  if(!cont) return;
+  cont.innerHTML = '';
+  if(!otSeleccionada){
+    updatePedidoControls();
+    return;
+  }
+
+  if(!Array.isArray(solicitudesCliente)){
+    solicitudesCliente = [];
+  }
+
+  if(otSeleccionada.id_pedido){
+    cont.innerHTML = '<div class="muted">La OT ya cuenta con un pedido asociado.</div>';
+    updatePedidoControls();
+    return;
+  }
+
+  const list = document.createElement('div');
+  list.className = 'solicitud-list';
+
+  const noneLabel = document.createElement('label');
+  noneLabel.className = 'solicitud-card';
+  noneLabel.innerHTML = `
+    <input type="radio" name="solicitud_sel" value="" ${solicitudSeleccionada===''?'checked':''}>
+    <div>
+      <strong>Sin solicitud</strong>
+      <div class="solicitud-items">Generar pedido solo con los ítems de la OT.</div>
+    </div>
+  `;
+  noneLabel.querySelector('input').addEventListener('change',()=>{
+    solicitudSeleccionada = '';
+    updatePedidoControls();
+  });
+  list.appendChild(noneLabel);
+
+  solicitudesCliente.forEach(sol=>{
+    const descripcion = sol.items && sol.items.length
+      ? sol.items.map(it=>`<span>${it.cantidad}× ${it.nombre||('#'+it.id_producto)}</span>`).join('')
+      : '<span>Sin ítems cargados</span>';
+    const card = document.createElement('label');
+    card.className = 'solicitud-card';
+    card.innerHTML = `
+      <input type="radio" name="solicitud_sel" value="${sol.id_solicitud}" ${solicitudSeleccionada===String(sol.id_solicitud)?'checked':''}>
+      <div>
+        <strong>Solicitud #${sol.id_solicitud} • ${sol.estado}</strong>
+        <div class="solicitud-items">${descripcion}</div>
+        ${sol.notas ? `<div class="muted" style="margin-top:4px">${sol.notas}</div>` : ''}
+      </div>
+    `;
+    card.querySelector('input').addEventListener('change',()=>{
+      solicitudSeleccionada = String(sol.id_solicitud);
+      updatePedidoControls();
+    });
+    list.appendChild(card);
+  });
+
+  cont.appendChild(list);
+  updatePedidoControls();
+}
+
+function updatePedidoControls(){
+  const resumen = $('pedido_resumen');
+  const btn = $('btn_generar_pedido');
+  if(!otSeleccionada || !resumen || !btn){
+    return;
+  }
+
+  const hasPedido = !!otSeleccionada.id_pedido;
+  const hasItemsConProducto = items.some(it=>it.id_producto);
+  const haySolicitudSeleccionada = solicitudSeleccionada !== '';
+
+  if(hasPedido){
+    resumen.textContent = `Pedido asociado: #${otSeleccionada.id_pedido}.`;
+    btn.disabled = true;
+    btn.textContent = 'Pedido generado';
+    return;
+  }
+
+  resumen.textContent = 'Sin pedido asociado. Seleccioná una solicitud si querés anexarla o generá solo con los ítems de la OT.';
+  btn.textContent = 'Generar pedido';
+  btn.disabled = !(hasItemsConProducto || haySolicitudSeleccionada);
+}
+
+async function generarPedidoDesdeOT(){
+  if(!otSeleccionada) return;
+  const btn = $('btn_generar_pedido');
+  if(btn.disabled) return;
+
+  const payload = { id_ot: otSeleccionada.id_ot };
+  if(solicitudSeleccionada !== ''){
+    payload.id_solicitud = Number(solicitudSeleccionada);
+  }
+
+  try{
+    btn.disabled = true;
+    btn.textContent = 'Generando...';
+    const res = await api('create_pedido_from_ot', payload);
+    showToast(`Pedido generado #${res.id_pedido}`);
+    await loadOTs();
+    await verDetalle(otSeleccionada.id_ot);
+  }catch(e){
+    showToast(e.message,'error');
+    btn.disabled = false;
+    btn.textContent = 'Generar pedido';
+  }
 }
 
 window.addEventListener('DOMContentLoaded', async ()=>{

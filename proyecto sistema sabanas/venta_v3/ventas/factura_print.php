@@ -1,5 +1,4 @@
 <?php
-// factura_print.php — Vista A4, lista para imprimir (totales recalculados desde detalle, sin duplicar IVA)
 session_start();
 if (empty($_SESSION['nombre_usuario'])) {
   header('Location: /TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/acceso/acceso.html');
@@ -9,17 +8,34 @@ require_once __DIR__.'/../../conexion/configv2.php';
 
 function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 function n($x, $d=0){ return number_format((float)$x, $d, ',', '.'); }
+function normaIva($tipo){
+  $tipo = strtoupper(trim((string)$tipo));
+  if ($tipo === 'IVA10' || $tipo === 'IVA 10' || $tipo === '10%' || $tipo === '10' || strpos($tipo,'10')!==false) return 'IVA10';
+  if ($tipo === 'IVA5'  || $tipo === 'IVA 5'  || $tipo === '5%'  || $tipo === '5'  || strpos($tipo,'5')!==false)  return 'IVA5';
+  return 'EXE';
+}
+function ivaLabel($tipo){
+  $cod = normaIva($tipo);
+  if ($cod === 'IVA10') return '10%';
+  if ($cod === 'IVA5')  return '5%';
+  return 'Exento';
+}
+function ivaRate($tipo){
+  $cod = normaIva($tipo);
+  if ($cod === 'IVA10') return 0.10;
+  if ($cod === 'IVA5')  return 0.05;
+  return 0.0;
+}
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if ($id<=0){ http_response_code(400); die('ID inválido'); }
 
-// Cabecera + cliente + timbrado
 $sql = "
   SELECT
     f.*,
     c.nombre, c.apellido, c.ruc_ci,
     COALESCE(c.direccion,'') AS direccion,
-    t.establecimiento, t.punto_expedicion, t.numero_timbrado, t.fecha_inicio, t.fecha_fin
+    t.establecimiento, t.punto_expedicion, t.numero_timbrado, t.fecha_fin
   FROM public.factura_venta_cab f
   JOIN public.clientes c ON c.id_cliente = f.id_cliente
   LEFT JOIN public.timbrado t ON t.id_timbrado = f.id_timbrado
@@ -30,7 +46,6 @@ $r = pg_query_params($conn, $sql, [$id]);
 if (!$r || pg_num_rows($r)===0){ http_response_code(404); die('Factura no encontrada'); }
 $F = pg_fetch_assoc($r);
 
-// Detalle
 $sqlD = "
   SELECT descripcion, unidad, cantidad, precio_unitario, tipo_iva, iva_monto, subtotal_neto
   FROM public.factura_venta_det
@@ -39,50 +54,48 @@ $sqlD = "
 ";
 $rd = pg_query_params($conn, $sqlD, [$id]);
 
-// Normalizar totales desde DETALLE (evita sumar IVA dos veces)
 $rows = [];
 $g10 = 0.0; $i10 = 0.0; $g5 = 0.0; $i5 = 0.0; $ex = 0.0; $total_visible = 0.0;
 
 if ($rd){
   while($d = pg_fetch_assoc($rd)){
-    $cantidad = (float)$d['cantidad'];
-    $precio   = (float)$d['precio_unitario'];
-    $desc     = 0.0; // el print no recibe el descuento por línea; ya viene neteado en subtotal_neto
-    $tiva_raw = strtoupper(trim((string)$d['tipo_iva'])); // '10%'|'5%'|'EXENTO'|'EXENTO'|'EX'
-    $importe  = (float)$d['subtotal_neto'];               // visible (con IVA si corresponde)
-    if ($importe < 0) $importe = 0.0;
+    $qty     = (float)$d['cantidad'];
+    $precio  = (float)$d['precio_unitario'];   // precio con IVA
+    $tipoIva = normaIva($d['tipo_iva']);
+    $rate    = ivaRate($tipoIva);
 
-    // IVA de la línea: si viene >0, usarlo; si no, descomponer por /11 o /21
-    $iva = (float)$d['iva_monto'];
-    if ($iva <= 0.0){
-      if ($tiva_raw === '10%' || $tiva_raw === '10') {
-        $iva = round($importe / 11.0, 2);
-      } elseif ($tiva_raw === '5%' || $tiva_raw === '5') {
-        $iva = round($importe / 21.0, 2);
+    $importe = (float)$d['subtotal_neto'];     // con IVA (puede ser negativo)
+    $iva     = (float)$d['iva_monto'];
+
+    if ($rate > 0){
+      if ($iva == 0.0) {
+        // recalculamos si no vino guardado
+        $base = round($importe / (1 + $rate), 2);
+        $iva  = round($importe - $base, 2);
       } else {
-        $iva = 0.0;
+        $base = round($importe - $iva, 2);
       }
+    } else {
+      $base = round($importe, 2);
+      $iva  = 0.0;
     }
-    $base = round($importe - $iva, 2);
 
-    if ($tiva_raw === '10%' || $tiva_raw === '10') { $g10 += $base; $i10 += $iva; }
-    elseif ($tiva_raw === '5%' || $tiva_raw === '5') { $g5 += $base; $i5 += $iva; }
+    if ($tipoIva === 'IVA10'){ $g10 += $base; $i10 += $iva; }
+    elseif ($tipoIva === 'IVA5'){ $g5 += $base; $i5 += $iva; }
     else { $ex += $base; }
 
     $total_visible += $importe;
-
     $rows[] = [
-      'cantidad' => $cantidad,
+      'cantidad' => $qty,
       'descripcion' => $d['descripcion'],
       'unidad' => $d['unidad'],
       'precio' => $precio,
-      'tipo_iva' => $d['tipo_iva'],
+      'tipo_iva_label' => ivaLabel($tipoIva),
       'importe' => $importe
     ];
   }
 }
 
-// Redondeos finales
 $g10 = round($g10, 2); $i10 = round($i10, 2);
 $g5  = round($g5 , 2); $i5  = round($i5 , 2);
 $ex  = round($ex , 2);
@@ -93,12 +106,10 @@ $esAnulada = ($estado === 'anulada');
 $cliente = trim(($F['nombre'] ?? '').' '.($F['apellido'] ?? ''));
 $esCredito = (strcasecmp($F['condicion_venta'] ?? '', 'Credito') === 0);
 
-// Diferencia entre cabecera y recalculado (si existiera)
-$header_total = isset($F['total_neto']) ? (float)$F['total_neto'] : (float)$F['total_factura'] ?? 0.0;
+$header_total = isset($F['total_neto']) ? (float)$F['total_neto'] : (float)($F['total_factura'] ?? 0.0);
 $diffTotal = round($total_visible - $header_total, 2);
 $hayDiferencia = (abs($diffTotal) > 0.01);
 
-// --- CONTADO: calcular saldo pendiente (por si no se pagó todavía)
 $pendienteContado = null;
 if (!$esCredito) {
   $rp = pg_query_params($conn, "
@@ -117,7 +128,6 @@ if (!$esCredito) {
   }
 }
 
-// --- CREDITO: traer plan de cuotas (o único vencimiento)
 $cuotas = [];
 if ($esCredito) {
   $rCxc = pg_query_params($conn, "
@@ -147,7 +157,7 @@ if ($esCredito) {
 <link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
 <style>
   :root{ --text:#111827; --muted:#6b7280; --em:#2563eb; --danger:#b91c1c; --ok:#166534; --warn:#9a6700; }
-  body{ margin:0; color:var(--text); font: 14px/1.45 system-ui,-apple-system,Segoe UI,Roboto; background:#fff; }
+  body{ margin:0; color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto; background:#fff; }
   .sheet{ width:210mm; min-height:297mm; margin:0 auto; padding:16mm 14mm; box-sizing:border-box; position:relative; }
   .head{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-bottom:2px solid #eee; padding-bottom:10px; }
   .brand h2{ margin:0 0 6px; font-size:20px; }
@@ -163,22 +173,17 @@ if ($esCredito) {
   th{ background:#f8fafc; font-weight:600; }
   tfoot td{ border:none; }
   .right{ text-align:right; }
-  .muted{ color:var(--muted); }
+  .muted{ color:#6b7280; }
   .badge{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #e5e7eb; }
   .badge.anulada{ color:#b91c1c; border-color:#fecaca; background:#fef2f2; }
   .badge.ok{ color:#166534; border-color:#bbf7d0; background:#f0fdf4; }
   .badge.warn{ color:#9a6700; border-color:#fde68a; background:#fef9c3; }
-
-  /* Marca de agua ANULADA */
-  .watermark{
-    position:absolute; inset:0; pointer-events:none; display:<?= $esAnulada ? 'block':'none' ?>;
-  }
+  .watermark{ position:absolute; inset:0; pointer-events:none; display:<?= $esAnulada ? 'block':'none' ?>; }
   .watermark::after{
     content:'ANULADA';
     position:absolute; top:40%; left:50%; transform:translate(-50%,-50%) rotate(-20deg);
     font-size:120px; color:rgba(185,28,28,.12); font-weight:800; letter-spacing:6px;
   }
-
   .actions{ position:sticky; top:0; background:#fff; border-bottom:1px solid #eee; padding:8px 14px; display:flex; gap:8px; flex-wrap:wrap; }
   .btn{ display:inline-block; padding:8px 12px; border-radius:8px; border:1px solid #e5e7eb; text-decoration:none; color:#111; }
   .btn.primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
@@ -201,7 +206,6 @@ if ($esCredito) {
   <?php else: ?>
     <span class="badge">Estado: <?= e($F['estado']) ?></span>
   <?php endif; ?>
-
   <?php if(!$esCredito && !$esAnulada && $pendienteContado !== null): ?>
     <?php if ($pendienteContado <= 0.01): ?>
       <span class="badge ok">Contado: PAGADA</span>
@@ -209,9 +213,8 @@ if ($esCredito) {
       <span class="badge warn">Contado: Saldo pendiente Gs <?= n($pendienteContado,0) ?></span>
     <?php endif; ?>
   <?php endif; ?>
-
   <?php if($hayDiferencia): ?>
-    <span class="badge warn">Ajuste de totales en impresión: cab <?= n($header_total,0) ?> · calc <?= n($total_visible,0) ?></span>
+    <span class="badge warn">Ajuste de totales: cab <?= n($header_total,0) ?> · calc <?= n($total_visible,0) ?></span>
   <?php endif; ?>
 </div>
 
@@ -223,7 +226,6 @@ if ($esCredito) {
       <h2>Tu Empresa</h2>
       <small class="muted">
         RUC: 80000000-1 · Tel: (021) 000-000 · Asunción, PY<br>
-        <!-- Traé estos datos desde tu tabla de empresa si la tenés -->
         Email: ventas@tuempresa.com
       </small>
     </div>
@@ -260,20 +262,6 @@ if ($esCredito) {
       <?php if (!empty($F['observacion'])): ?>
         <div class="muted">Obs.: <?= e($F['observacion']) ?></div>
       <?php endif; ?>
-
-      <?php if($esCredito && !$esAnulada): ?>
-        <?php if (count($cuotas) <= 1): ?>
-          <?php $c = $cuotas[0] ?? null; ?>
-          <div style="margin-top:6px; padding:6px; border:1px dashed #e5e7eb; border-radius:8px;">
-            <strong>Vencimiento:</strong> <?= e($c['fecha_vencimiento'] ?? '-') ?><br>
-            <strong>Total a crédito:</strong> Gs <?= n($c['total_cuota'] ?? $total_visible, 0) ?>
-          </div>
-        <?php else: ?>
-          <div style="margin-top:6px; padding:6px; border:1px dashed #e5e7eb; border-radius:8px;">
-            <strong>Plan de cuotas:</strong> <?= count($cuotas) ?> cuotas
-          </div>
-        <?php endif; ?>
-      <?php endif; ?>
     </div>
   </div>
 
@@ -283,7 +271,7 @@ if ($esCredito) {
         <th style="width:8%">Cant.</th>
         <th>Descripción</th>
         <th style="width:10%">Uni.</th>
-        <th class="right" style="width:16%">Precio</th>
+        <th class="right" style="width:16%">Precio c/IVA</th>
         <th class="right" style="width:10%">IVA</th>
         <th class="right" style="width:16%">Subtotal</th>
       </tr>
@@ -296,7 +284,7 @@ if ($esCredito) {
             <td><?= e($d['descripcion']) ?></td>
             <td><?= e($d['unidad']) ?></td>
             <td class="right"><?= e(n($d['precio'], 0)) ?></td>
-            <td class="right"><?= e($d['tipo_iva']) ?></td>
+            <td class="right"><?= e($d['tipo_iva_label']) ?></td>
             <td class="right"><?= e(n($d['importe'], 0)) ?></td>
           </tr>
         <?php endforeach; ?>
@@ -390,7 +378,6 @@ if ($esCredito) {
 
 <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js" class="no-print"></script>
 <script>
-// Auto-print si viene ?auto=1
 (function(){
   try{
     const p = new URLSearchParams(location.search);
