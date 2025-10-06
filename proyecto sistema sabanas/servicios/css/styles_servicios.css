@@ -29,6 +29,18 @@ body {
   background: var(--bg-gradient);
   position: relative;
 }
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  filter: blur(120px);
+  z-index: -1;          /* opcional, para enviarlos detrás */
+  opacity: 0.5;
+  pointer-events: none; /* clave: ya no bloquean el mouse */
+}
 
 body::before,
 body::after {

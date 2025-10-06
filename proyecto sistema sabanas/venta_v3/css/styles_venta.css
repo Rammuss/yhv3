@@ -39,8 +39,9 @@ body::after {
   height: 360px;
   border-radius: 50%;
   filter: blur(120px);
-  z-index: 0;
   opacity: 0.48;
+  z-index: -1;          /* opcional: los manda detrás de todo */
+  pointer-events: none; /* evita que intercepten clics */
 }
 
 body::before {
@@ -54,6 +55,7 @@ body::after {
   right: -120px;
   background: rgba(255, 208, 99, 0.28);
 }
+
 
 .navbar {
   position: relative;

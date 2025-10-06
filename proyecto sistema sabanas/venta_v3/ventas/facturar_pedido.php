@@ -26,7 +26,11 @@ try {
     ? $in['fecha_emision'] : date('Y-m-d');
 
   // Plan de cuotas (opcional en Crédito)
+
   $plan = (isset($in['plan_cuotas']) && is_array($in['plan_cuotas'])) ? $in['plan_cuotas'] : [];
+
+  $ignorarReservaInput = !empty($in['ignorar_reserva']);   // <-- agregá esto
+
 
   // Contado diferido (opcional)
   $contado_diferido = !empty($in['contado_diferido']) ? (bool)$in['contado_diferido'] : false;
@@ -99,11 +103,22 @@ try {
   if (!$rPed || pg_num_rows($rPed) === 0) {
     throw new Exception('Pedido no encontrado');
   }
-  $ped = pg_fetch_assoc($rPed);
+    $ped = pg_fetch_assoc($rPed);
   if (in_array($ped['estado'], ['Anulado', 'Facturado'], true)) {
     throw new Exception('El pedido no está disponible para facturar (Anulado o ya Facturado)');
   }
   $id_cliente = (int)$ped['id_cliente'];
+
+  $obsPedido = $ped['observacion'] ?? '';
+  if (!$obs && $obsPedido) {            // si no vino obs nueva, reutilizá la del pedido
+    $obs = $obsPedido;
+  }
+
+  $ignorarReserva = $ignorarReservaInput;
+  if (!$ignorarReserva && stripos($obsPedido, 'generado desde ot') !== false) {
+    $ignorarReserva = true;             // pedidos “Generado desde OT #...”
+  }
+
 
   // 2) Totales desde pedido_det (NORMALIZADOS: base e IVA correctos SIN duplicar)
   $sqlTot = "
@@ -220,17 +235,22 @@ FROM descomp
    WHERE COALESCE(res.qty_reservada,0) < req.qty_requerida
 ";
 
-  $rCheck = pg_query_params($conn, $sqlCheckReserva, [$id_pedido]);
-  if ($rCheck === false) {
-    throw new Exception('No se pudo validar reservas');
-  }
-  if (pg_num_rows($rCheck) > 0) {
-    $faltantes = [];
-    while ($row = pg_fetch_assoc($rCheck)) {
-      $faltantes[] = $row['nombre'] . " (req: " . $row['qty_requerida'] . ", res: " . $row['qty_reservada'] . ")";
+    if (!$ignorarReserva) {
+    $rCheck = pg_query_params($conn, $sqlCheckReserva, [$id_pedido]);
+    if ($rCheck === false) {
+      throw new Exception('No se pudo validar reservas');
     }
-    throw new Exception('Reserva insuficiente para: ' . implode(', ', $faltantes));
+    if (pg_num_rows($rCheck) > 0) {
+      $faltantes = [];
+      while ($row = pg_fetch_assoc($rCheck)) {
+        $faltantes[] = $row['nombre'] .
+                       " (req: " . $row['qty_requerida'] .
+                       ", res: " . $row['qty_reservada'] . ")";
+      }
+      throw new Exception('Reserva insuficiente para: ' . implode(', ', $faltantes));
+    }
   }
+
 
   // 5) Cabecera de FACTURA — AHORA incluyendo total_iva y total_factura
   $sqlFacCab = "

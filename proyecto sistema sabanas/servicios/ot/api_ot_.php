@@ -2,7 +2,7 @@
 // api_ot.php — API (POST) para Orden de Trabajo
 
 session_start();
-require_once __DIR__ . '/../../conexion/configv2.php'; // <-- AJUSTAR
+require_once __DIR__ . '/../../conexion/configv2.php';
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
@@ -25,7 +25,10 @@ function arr($x)
 {
     return is_array($x) ? $x : [];
 }
-
+function normalizar_bool($valor)
+{
+    return $valor === true || $valor === 't' || $valor === '1' || $valor === 1;
+}
 function normalizar_estado($estado)
 {
     $estado = ucfirst(strtolower($estado));
@@ -197,16 +200,37 @@ try {
                     $det[] = $row;
                 }
 
-                $sqlIns = "SELECT item_nro, id_producto, cantidad, deposito, lote, comentario
-                 FROM public.ot_insumo
-                 WHERE id_ot=$1
-                 ORDER BY item_nro";
+                $sqlIns = "WITH stock AS (
+                      SELECT id_producto,
+                             COALESCE(SUM(CASE WHEN tipo_movimiento='entrada' THEN cantidad
+                                               WHEN tipo_movimiento='salida' THEN -cantidad
+                                               ELSE 0 END),0) AS stock_actual
+                        FROM public.movimiento_stock
+                       GROUP BY id_producto
+                    )
+                    SELECT i.item_nro,
+                           i.id_producto,
+                           i.cantidad,
+                           i.deposito,
+                           i.lote,
+                           i.comentario,
+                           p.nombre      AS producto_nombre,
+                           COALESCE(p.unidad_base,'') AS unidad_base,
+                           COALESCE(p.es_fraccion,false) AS es_fraccion,
+                           COALESCE(s.stock_actual,0)    AS stock_actual
+                      FROM public.ot_insumo i
+                      JOIN public.producto p ON p.id_producto = i.id_producto
+                      LEFT JOIN stock s      ON s.id_producto = i.id_producto
+                     WHERE i.id_ot=$1
+                     ORDER BY i.item_nro";
                 $ins = [];
                 $rIns = pg_query_params($conn, $sqlIns, [$id_ot]);
                 while ($row = pg_fetch_assoc($rIns)) {
-                    $row['item_nro'] = (int)$row['item_nro'];
-                    $row['id_producto'] = (int)$row['id_producto'];
-                    $row['cantidad'] = (float)$row['cantidad'];
+                    $row['item_nro']      = (int)$row['item_nro'];
+                    $row['id_producto']   = (int)$row['id_producto'];
+                    $row['cantidad']      = (float)$row['cantidad'];
+                    $row['es_fraccion']   = normalizar_bool($row['es_fraccion']);
+                    $row['stock_actual']  = (float)$row['stock_actual'];
                     $ins[] = $row;
                 }
 
@@ -219,6 +243,7 @@ try {
                   FROM public.producto
                   WHERE estado='Activo' AND tipo_item IN ('S','D')
                   ORDER BY CASE WHEN tipo_item='S' THEN 0 ELSE 1 END, nombre";
+
                 $sqlIns = "WITH stock AS (
                    SELECT id_producto,
                           COALESCE(SUM(CASE WHEN tipo_movimiento='entrada' THEN cantidad
@@ -230,11 +255,17 @@ try {
                  SELECT p.id_producto,
                         p.nombre,
                         p.precio_unitario,
-                        COALESCE(s.stock_actual,0) AS stock_actual
+                        p.tipo_item,
+                        COALESCE(p.es_fraccion,false)            AS es_fraccion,
+                        p.id_producto_padre,
+                        COALESCE(p.factor_equivalencia,0)::float AS factor_equivalencia,
+                        COALESCE(p.unidad_base,'')               AS unidad_base,
+                        COALESCE(s.stock_actual,0)               AS stock_actual
                    FROM public.producto p
                    LEFT JOIN stock s ON s.id_producto = p.id_producto
-                  WHERE p.estado='Activo' AND p.tipo_item='P'
+                  WHERE p.estado='Activo'
                   ORDER BY p.nombre";
+
                 $serv = pg_query($conn, $sqlServ);
                 $ins  = pg_query($conn, $sqlIns);
                 if (!$serv || !$ins) json_error('No se pudieron cargar catálogos');
@@ -250,9 +281,12 @@ try {
 
                 $insRows = [];
                 while ($row = pg_fetch_assoc($ins)) {
-                    $row['id_producto'] = (int)$row['id_producto'];
-                    $row['precio_unitario'] = (float)$row['precio_unitario'];
-                    $row['stock_actual'] = (int)$row['stock_actual'];
+                    $row['id_producto']         = (int)$row['id_producto'];
+                    $row['precio_unitario']     = (float)$row['precio_unitario'];
+                    $row['stock_actual']        = (float)$row['stock_actual'];
+                    $row['es_fraccion']         = normalizar_bool($row['es_fraccion']);
+                    $row['factor_equivalencia'] = (float)$row['factor_equivalencia'];
+                    $row['id_producto_padre']   = $row['id_producto_padre'] !== null ? (int)$row['id_producto_padre'] : null;
                     $insRows[] = $row;
                 }
 
@@ -508,6 +542,16 @@ try {
                 if ($id_prod <= 0) json_error('id_producto requerido');
                 if ($cant <= 0) json_error('Cantidad inválida');
 
+                $sqlProd = "SELECT es_fraccion FROM public.producto WHERE id_producto=$1 AND estado='Activo'";
+                $rProd = pg_query_params($conn, $sqlProd, [$id_prod]);
+                if (!$rProd || pg_num_rows($rProd) === 0) {
+                    json_error('El producto seleccionado no existe o está inactivo');
+                }
+                $esFraccion = normalizar_bool(pg_fetch_result($rProd, 0, 0));
+                if (!$esFraccion) {
+                    json_error('El producto debe ser un fraccionado (es_fraccion=true)');
+                }
+
                 if ($item_nro <= 0) {
                     $sql = "INSERT INTO public.ot_insumo
                   (id_ot, id_producto, cantidad, deposito, lote, comentario)
@@ -705,7 +749,7 @@ try {
                     if ($cantidad <= 0) {
                         continue;
                     }
-                    $importe = round_money($data['importe'], 2); // total c/IVA
+                    $importe = round_money($data['importe'], 2);
                     $tipo_iva = $data['tipo_iva'] ?? 'EXE';
                     $tasa = tasa_iva($tipo_iva);
 
@@ -802,10 +846,47 @@ try {
                     }
                 }
 
+                // descuenta stock de insumos utilizados
+                $sqlInsumosOT = "
+                  SELECT id_producto, SUM(cantidad) AS total
+                    FROM public.ot_insumo
+                   WHERE id_ot = $1
+                   GROUP BY id_producto
+                ";
+                $resInsumos = pg_query_params($conn, $sqlInsumosOT, [$id_ot]);
+                if (!$resInsumos) {
+                    pg_query($conn, 'ROLLBACK');
+                    json_error('No se pudieron obtener los insumos de la OT');
+                }
+
+                while ($insumo = pg_fetch_assoc($resInsumos)) {
+                    $idProductoInsumo = (int)$insumo['id_producto'];
+                    $totalConsumido   = (float)$insumo['total'];
+
+                    if ($idProductoInsumo <= 0 || $totalConsumido <= 0) {
+                        continue;
+                    }
+
+                    $sqlMov = "
+  INSERT INTO public.movimiento_stock
+    (id_producto, tipo_movimiento, cantidad, fecha, observacion)
+  VALUES ($1, 'salida', $2, NOW(), $3)
+";
+                    $okMov = pg_query_params($conn, $sqlMov, [
+                        $idProductoInsumo,
+                        $totalConsumido,
+                        "Consumo OT #{$id_ot}"
+                    ]);
+
+                    if (!$okMov) {
+                        pg_query($conn, 'ROLLBACK');
+                        json_error('No se pudo registrar el movimiento de stock de los insumos');
+                    }
+                }
+
                 pg_query($conn, 'COMMIT');
                 json_ok(['id_pedido' => $id_pedido]);
             }
-
 
         default:
             json_error('op no reconocido');
