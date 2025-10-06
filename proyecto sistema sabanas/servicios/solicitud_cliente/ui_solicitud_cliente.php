@@ -294,6 +294,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </style>
 </head>
 <body>
+  <div id="navbar-container"></div>
+<script src="../../servicios/navbar/navbar.js"></script>
+
   <!-- 1) Buscar cliente -->
   <div class="card">
     <h3>1) Buscar Cliente</h3>

@@ -100,12 +100,84 @@ try {
       if(!$res) json_error('No se pudieron listar reclamos');
       $rows=[];
       while($row = pg_fetch_assoc($res)){
-        $row['id_reclamo'] = (int)$row['id_reclamo'];
-        $row['id_cliente'] = (int)$row['id_cliente'];
-        $row['id_ot'] = $row['id_ot']!==null ? (int)$row['id_ot'] : null;
-        $row['id_reserva'] = $row['id_reserva']!==null ? (int)$row['id_reserva'] : null;
+        $row['id_reclamo']    = (int)$row['id_reclamo'];
+        $row['id_cliente']    = (int)$row['id_cliente'];
+        $row['id_ot']         = $row['id_ot']!==null ? (int)$row['id_ot'] : null;
+        $row['id_reserva']    = $row['id_reserva']!==null ? (int)$row['id_reserva'] : null;
+        $row['id_profesional']= $row['id_profesional']!==null ? (int)$row['id_profesional'] : null;
+        $rows[] = $row;
+      }
+      json_ok(['rows'=>$rows]);
+    }
+
+    case 'list_ots_cliente': {
+      $id_cliente = (int)($in['id_cliente'] ?? 0);
+      if($id_cliente<=0) json_error('id_cliente requerido');
+      $sql = "
+        SELECT ot.id_ot,
+               ot.fecha_programada,
+               ot.hora_programada,
+               ot.estado,
+               ot.id_profesional,
+               pr.nombre AS profesional_nombre
+          FROM public.ot_cab ot
+          LEFT JOIN public.profesional pr ON pr.id_profesional = ot.id_profesional
+         WHERE ot.id_cliente = $1
+         ORDER BY ot.fecha_programada DESC NULLS LAST, ot.id_ot DESC
+         LIMIT 100
+      ";
+      $res = pg_query_params($conn,$sql,[$id_cliente]);
+      if(!$res) json_error('No se pudieron listar OT');
+      $rows=[];
+      while($row=pg_fetch_assoc($res)){
+        $row['id_ot'] = (int)$row['id_ot'];
         $row['id_profesional'] = $row['id_profesional']!==null ? (int)$row['id_profesional'] : null;
-        $rows[]=$row;
+        $rows[] = $row;
+      }
+      json_ok(['rows'=>$rows]);
+    }
+
+    case 'list_reservas_cliente': {
+      $id_cliente = (int)($in['id_cliente'] ?? 0);
+      if($id_cliente<=0) json_error('id_cliente requerido');
+      $sql = "
+        SELECT r.id_reserva,
+               r.fecha_reserva,
+               r.inicio_ts,
+               r.fin_ts,
+               r.estado,
+               r.id_profesional,
+               pr.nombre AS profesional_nombre
+          FROM public.reserva_cab r
+          LEFT JOIN public.profesional pr ON pr.id_profesional = r.id_profesional
+         WHERE r.id_cliente = $1
+         ORDER BY r.fecha_reserva DESC NULLS LAST, r.id_reserva DESC
+         LIMIT 100
+      ";
+      $res = pg_query_params($conn,$sql,[$id_cliente]);
+      if(!$res) json_error('No se pudieron listar reservas');
+      $rows=[];
+      while($row=pg_fetch_assoc($res)){
+        $row['id_reserva'] = (int)$row['id_reserva'];
+        $row['id_profesional'] = $row['id_profesional']!==null ? (int)$row['id_profesional'] : null;
+        $rows[] = $row;
+      }
+      json_ok(['rows'=>$rows]);
+    }
+
+    case 'list_profesionales': {
+      $sql = "
+        SELECT id_profesional, nombre, estado
+          FROM public.profesional
+         WHERE estado='Activo'
+         ORDER BY nombre
+      ";
+      $res = pg_query($conn,$sql);
+      if(!$res) json_error('No se pudieron listar profesionales');
+      $rows=[];
+      while($row=pg_fetch_assoc($res)){
+        $row['id_profesional'] = (int)$row['id_profesional'];
+        $rows[] = $row;
       }
       json_ok(['rows'=>$rows]);
     }

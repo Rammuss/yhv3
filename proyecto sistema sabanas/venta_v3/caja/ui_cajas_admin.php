@@ -99,6 +99,8 @@ if ($action === 'toggle' && is_post()) {
 <!doctype html>
 <html lang="es">
 <head>
+  <link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
+
 <meta charset="utf-8" />
 <title>Administración de Cajas</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -144,6 +146,10 @@ if ($action === 'toggle' && is_post()) {
 </style>
 </head>
 <body>
+  <div id="navbar-container"></div>
+  <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js"></script>
+
+
 <header class="top">
   <h1>Administración de Cajas</h1>
   <div class="right"></div>
