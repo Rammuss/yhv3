@@ -2,16 +2,16 @@
 // recibo_print.php — Vista A4 lista para imprimir
 session_start();
 if (empty($_SESSION['nombre_usuario'])) {
-  header('Location: /TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/acceso/acceso.html');
-  exit;
+    header('Location: /TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/acceso/acceso.html');
+    exit;
 }
-require_once __DIR__.'/../../conexion/configv2.php';
+require_once __DIR__ . '/../../conexion/configv2.php';
 
-function e($s){ return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
-function n($x,$d=0){ return number_format((float)$x,$d,',','.'); }
+function e($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
+function n($x, $d = 0) { return number_format((float)$x, $d, ',', '.'); }
 
 $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
-if ($id <= 0){ http_response_code(400); die('ID de recibo inválido'); }
+if ($id <= 0) { http_response_code(400); die('ID de recibo inválido'); }
 
 // CABECERA
 $sqlCab = "
@@ -24,13 +24,13 @@ $sqlCab = "
   LIMIT 1
 ";
 $rc = pg_query_params($conn, $sqlCab, [$id]);
-if (!$rc || pg_num_rows($rc)===0){ http_response_code(404); die('Recibo no encontrado'); }
+if (!$rc || pg_num_rows($rc) === 0) { http_response_code(404); die('Recibo no encontrado'); }
 $R = pg_fetch_assoc($rc);
-$cliente = trim(($R['nombre'] ?? '').' '.($R['apellido'] ?? ''));
+$cliente = trim(($R['nombre'] ?? '') . ' ' . ($R['apellido'] ?? ''));
 $estado  = strtolower($R['estado'] ?? '');
 $esAnulado = ($estado === 'anulado');
 
-// MEDIOS DE PAGO (usa cuenta_bancaria)
+// MEDIOS DE PAGO
 $sqlPag = "
   SELECT
     p.medio_pago,
@@ -53,7 +53,7 @@ $sqlPag = "
 ";
 $rp = pg_query_params($conn, $sqlPag, [$id]);
 
-// APLICACIONES A FACTURAS (resumen por documento)
+// APLICACIONES A FACTURAS
 $sqlApl = "
   SELECT a.id_factura,
          a.monto_aplicado::numeric(14,2) AS monto,
@@ -65,7 +65,7 @@ $sqlApl = "
 ";
 $ra = pg_query_params($conn, $sqlApl, [$id]);
 
-// DETALLE DE CUOTAS COBRADAS (usa movimiento_cxc + cuenta_cobrar)
+// DETALLE DE CUOTAS
 $sqlCuotas = "
   SELECT
     f.numero_documento,
@@ -79,226 +79,548 @@ $sqlCuotas = "
   WHERE mc.tipo='Pago' AND mc.referencia = $1
   ORDER BY f.numero_documento, cxc.nro_cuota
 ";
-$refRec = 'Recibo #'.$id;
+$refRec = 'Recibo #' . $id;
 $rcu = pg_query_params($conn, $sqlCuotas, [$refRec]);
 
-// Fallback: si no hay aplicaciones, resumimos por doc a partir de cuotas
+// Fallback de aplicaciones si corresponde
 $aplFallback = [];
-if ($ra && pg_num_rows($ra)===0 && $rcu && pg_num_rows($rcu)>0){
-  while($row = pg_fetch_assoc($rcu)){
-    $aplFallback[$row['numero_documento']] = ($aplFallback[$row['numero_documento']] ?? 0) + (float)$row['pagado'];
-  }
-  pg_free_result($rcu);
-  $rcu = pg_query_params($conn, $sqlCuotas, [$refRec]);
+if ($ra && pg_num_rows($ra) === 0 && $rcu && pg_num_rows($rcu) > 0) {
+    while ($row = pg_fetch_assoc($rcu)) {
+        $aplFallback[$row['numero_documento']] = ($aplFallback[$row['numero_documento']] ?? 0) + (float)$row['pagado'];
+    }
+    pg_free_result($rcu);
+    $rcu = pg_query_params($conn, $sqlCuotas, [$refRec]);
 }
 ?>
 <!doctype html>
 <html lang="es">
+
 <head>
-<meta charset="utf-8">
-<title>Recibo #<?= e($R['id_recibo']) ?></title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
-<style>
-  :root{ --text:#111827; --muted:#6b7280; --em:#2563eb; --danger:#b91c1c; }
-  body{ margin:0; color:var(--text); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto; background:#fff; }
-  .sheet{ width:210mm; min-height:297mm; margin:0 auto; padding:16mm 14mm; box-sizing:border-box; position:relative; }
-  .head{ display:flex; justify-content:space-between; align-items:flex-start; gap:16px; border-bottom:2px solid #eee; padding-bottom:10px; }
-  .brand h2{ margin:0 0 6px; font-size:20px; }
-  .brand small{ color:var(--muted); }
-  .docbox{ text-align:right; }
-  .docbox h1{ margin:0; font-size:22px; letter-spacing:.5px; }
-  .docbox .num{ font-weight:600; color:var(--em); }
-  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px; }
-  .box{ border:1px solid #e5e7eb; border-radius:8px; padding:10px; }
-  .box h3{ margin:0 0 8px; font-size:14px; }
-  table{ width:100%; border-collapse:collapse; margin-top:12px; }
-  th,td{ border-bottom:1px solid #eee; padding:8px; text-align:left; }
-  th{ background:#f8fafc; font-weight:600; }
-  .right{ text-align:right; }
-  .muted{ color:var(--muted); }
-  .badge{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; border:1px solid #e5e7eb; }
-  .badge.anulado{ color:#b91c1c; border-color:#fecaca; background:#fef2f2; }
-  .actions{ position:sticky; top:0; background:#fff; border-bottom:1px solid #eee; padding:8px 14px; display:flex; gap:8px; }
-  .btn{ display:inline-block; padding:8px 12px; border-radius:8px; border:1px solid #e5e7eb; text-decoration:none; color:#111; }
-  .btn.primary{ background:#2563eb; color:#fff; border-color:#2563eb; }
-  .no-print{ display:block; }
-  .watermark{ position:absolute; inset:0; pointer-events:none; display:<?= $esAnulado ? 'block':'none' ?>; }
-  .watermark::after{
-    content:'ANULADO';
-    position:absolute; top:40%; left:50%; transform:translate(-50%,-50%) rotate(-20deg);
-    font-size:120px; color:rgba(185,28,28,.12); font-weight:800; letter-spacing:6px;
-  }
-  @media print{ .no-print{ display:none !important; } .sheet{ box-shadow:none; margin:0; padding:12mm; } @page{ size:A4; margin:10mm; } }
-</style>
+    <meta charset="utf-8">
+    <title>Recibo #<?= e($R['id_recibo']) ?></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: linear-gradient(135deg, #ffe6f6 0%, #f8e8ff 45%, #fef9ff 100%);
+            --surface: rgba(255, 255, 255, 0.94);
+            --surface-soft: rgba(255, 255, 255, 0.86);
+            --border: rgba(214, 51, 132, 0.18);
+            --border-strong: rgba(214, 51, 132, 0.32);
+            --shadow: 0 32px 58px rgba(188, 70, 137, 0.22);
+            --text: #411f31;
+            --muted: #9d6f8b;
+            --accent: #d63384;
+            --accent-alt: #7f5dff;
+            --warn: #c26a07;
+            --ok: #1f7a4d;
+            --danger: #c5304a;
+            --radius: 24px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font: 14px/1.55 "Poppins", system-ui, -apple-system, Segoe UI, sans-serif;
+            color: var(--text);
+            background: var(--bg);
+            position: relative;
+            padding: 32px 18px 42px;
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            width: 420px;
+            height: 420px;
+            border-radius: 50%;
+            filter: blur(150px);
+            z-index: 0;
+            opacity: .55;
+        }
+
+        body::before {
+            top: -160px;
+            left: -140px;
+            background: rgba(214, 51, 132, 0.32);
+        }
+
+        body::after {
+            bottom: -200px;
+            right: -140px;
+            background: rgba(127, 93, 255, 0.26);
+        }
+
+        .actions {
+            position: sticky;
+            top: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            padding: 14px 18px;
+            margin: -32px -18px 24px;
+            background: rgba(255, 255, 255, 0.75);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 18px 36px rgba(64, 21, 53, 0.16);
+            border-radius: 0 0 24px 24px;
+            z-index: 2;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 9px 16px;
+            border-radius: 999px;
+            border: 1px solid rgba(214, 51, 132, 0.18);
+            background: rgba(255, 255, 255, 0.85);
+            color: var(--text);
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 16px 24px rgba(64, 21, 53, 0.18);
+            background: rgba(255, 255, 255, 0.96);
+        }
+
+        .btn.primary {
+            background: linear-gradient(135deg, var(--accent), var(--accent-alt));
+            border-color: transparent;
+            color: #fff;
+            box-shadow: 0 16px 32px rgba(188, 70, 137, 0.26);
+        }
+
+        .btn.primary:hover {
+            box-shadow: 0 22px 38px rgba(188, 70, 137, 0.32);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.82);
+            border: 1px solid rgba(214, 51, 132, 0.18);
+            color: var(--muted);
+        }
+
+        .badge.anulado {
+            background: rgba(245, 101, 101, 0.18);
+            border-color: rgba(245, 101, 101, 0.28);
+            color: var(--danger);
+        }
+
+        .sheet {
+            position: relative;
+            z-index: 1;
+            width: min(960px, 100%);
+            margin: 0 auto;
+            background: var(--surface);
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+            padding: 36px 40px 44px;
+        }
+
+        .watermark {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: <?= $esAnulado ? 'block' : 'none' ?>;
+        }
+
+        .watermark::after {
+            content: 'ANULADO';
+            position: absolute;
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-20deg);
+            font-size: 140px;
+            color: rgba(197, 48, 74, 0.14);
+            font-weight: 800;
+            letter-spacing: 10px;
+        }
+
+        .head {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 22px;
+            margin-bottom: 26px;
+        }
+
+        .brand h2 {
+            margin: 0 0 8px;
+            font-family: "Playfair Display", "Poppins", serif;
+            font-size: 2.05rem;
+            letter-spacing: .6px;
+        }
+
+        .brand small {
+            color: var(--muted);
+            font-size: .92rem;
+            line-height: 1.6;
+        }
+
+        .docbox {
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-end;
+        }
+
+        .docbox h1 {
+            margin: 0;
+            font-family: "Playfair Display", "Poppins", serif;
+            font-size: 2.3rem;
+            letter-spacing: .7px;
+        }
+
+        .docbox .num {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 14px;
+            background: rgba(214, 51, 132, 0.12);
+            border: 1px solid rgba(214, 51, 132, 0.2);
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 18px;
+        }
+
+        .box {
+            background: var(--surface-soft);
+            border-radius: 18px;
+            padding: 18px;
+            border: 1px solid var(--border);
+            box-shadow: inset 0 0 0 1px rgba(214, 51, 132, 0.08);
+        }
+
+        .box h3 {
+            margin: 0 0 10px;
+            font-size: 1.04rem;
+            text-transform: uppercase;
+            letter-spacing: .7px;
+            color: var(--accent);
+        }
+
+        .section-title {
+            margin: 24px 0 10px;
+            font-family: "Playfair Display", "Poppins", serif;
+            font-size: 1.35rem;
+            color: var(--accent);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 20px;
+            overflow: hidden;
+            margin-bottom: 12px;
+            box-shadow: 0 16px 34px rgba(64, 21, 53, 0.16);
+        }
+
+        th,
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(214, 51, 132, 0.12);
+            background: rgba(255, 255, 255, 0.86);
+        }
+
+        th {
+            text-align: left;
+            text-transform: uppercase;
+            letter-spacing: .6px;
+            font-size: .92rem;
+            font-weight: 600;
+            background: rgba(214, 51, 132, 0.14);
+        }
+
+        tbody tr:hover td {
+            background: rgba(214, 51, 132, 0.08);
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .muted {
+            color: var(--muted);
+        }
+
+        tfoot td {
+            font-weight: 600;
+            background: rgba(214, 51, 132, 0.1);
+        }
+
+        @media (max-width: 720px) {
+            body {
+                padding: 22px 12px 32px;
+            }
+
+            .actions {
+                margin: -22px -12px 18px;
+                border-radius: 0 0 18px 18px;
+            }
+
+            .sheet {
+                padding: 28px 22px 34px;
+                border-radius: 20px;
+            }
+
+            .head {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .docbox {
+                text-align: left;
+                align-items: flex-start;
+            }
+
+            table {
+                font-size: .9rem;
+            }
+
+            th,
+            td {
+                padding: 10px 12px;
+            }
+        }
+
+        @media print {
+            body {
+                background: #fff;
+                padding: 0;
+            }
+
+            body::before,
+            body::after,
+            .actions,
+            .no-print {
+                display: none !important;
+            }
+
+            .sheet {
+                width: 100%;
+                margin: 0;
+                border-radius: 0;
+                border: none;
+                box-shadow: none;
+                padding: 14mm 16mm;
+            }
+
+            table {
+                box-shadow: none;
+            }
+
+            @page {
+                size: A4;
+                margin: 10mm;
+            }
+        }
+    </style>
 </head>
+
 <body>
-<div id="navbar-container" class="no-print"></div>
+    <div id="navbar-container" class="no-print"></div>
 
-<div class="actions no-print">
-  <a href="javascript:window.print()" class="btn primary">Imprimir</a>
-  <a href="javascript:window.close()" class="btn">Cerrar</a>
-  <?php if ($esAnulado): ?>
-    <span class="badge anulado">Estado: ANULADO</span>
-  <?php else: ?>
-    <span class="badge">Estado: <?= e($R['estado']) ?></span>
-  <?php endif; ?>
-</div>
-
-<div class="sheet">
-  <div class="watermark"></div>
-
-  <div class="head">
-    <div class="brand">
-      <h2>Tu Empresa</h2>
-      <small class="muted">
-        RUC: 80000000-1 · Tel: (021) 000-000 · Asunción, PY<br>
-        Email: ventas@tuempresa.com
-      </small>
+    <div class="actions no-print">
+        <a href="javascript:window.print()" class="btn primary">Imprimir</a>
+        <a href="javascript:window.close()" class="btn">Cerrar</a>
+        <?php if ($esAnulado): ?>
+            <span class="badge anulado">Estado: ANULADO</span>
+        <?php else: ?>
+            <span class="badge">Estado: <?= e($R['estado']) ?></span>
+        <?php endif; ?>
     </div>
-    <div class="docbox">
-      <h1>RECIBO</h1>
-      <div>N° <span class="num"><?= e($R['id_recibo']) ?></span></div>
-      <div>Fecha: <strong><?= e($R['fecha']) ?></strong></div>
-      <div>Total recibido: <strong><?= n($R['total_recibo'], 0) ?></strong></div>
+
+    <div class="sheet">
+        <div class="watermark"></div>
+
+        <div class="head">
+            <div class="brand">
+                <h2>Beauty Creations</h2>
+                <small>
+                    RUC: 80000000-1 · Tel: (021) 000-000 · Asunción, PY<br>
+                    Email: ventas@beautycreations.com
+                </small>
+            </div>
+            <div class="docbox">
+                <h1>Recibo</h1>
+                <div>N° <span class="num"><?= e($R['id_recibo']) ?></span></div>
+                <div>Fecha: <strong><?= e($R['fecha']) ?></strong></div>
+                <div>Total recibido: <strong><?= n($R['total_recibo'], 0) ?></strong></div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="box">
+                <h3>Clienta</h3>
+                <div><strong><?= e($cliente) ?></strong></div>
+                <div>RUC/CI: <?= e($R['ruc_ci']) ?></div>
+                <?php if (!empty($R['direccion'])): ?>
+                    <div class="muted">Dirección: <?= e($R['direccion']) ?></div>
+                <?php endif; ?>
+            </div>
+            <div class="box">
+                <h3>Observación</h3>
+                <div class="muted"><?= nl2br(e($R['observacion'])) ?></div>
+            </div>
+        </div>
+
+        <h3 class="section-title">Medios de pago</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Medio</th>
+                    <th>Referencia</th>
+                    <th>Cuenta</th>
+                    <th>Fecha acredit.</th>
+                    <th class="right">Importe</th>
+                    <th class="right">Comisión</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                $sumPagos = 0; $sumCom = 0;
+                if ($rp && pg_num_rows($rp) > 0):
+                    while ($p = pg_fetch_assoc($rp)):
+                        $sumPagos += (float)$p['importe'];
+                        $sumCom   += (float)$p['comision']; ?>
+                        <tr>
+                            <td><?= e($p['medio_pago']) ?></td>
+                            <td><?= e($p['referencia']) ?></td>
+                            <td><?= e($p['cuenta_label']) ?></td>
+                            <td><?= e($p['fecha_acredit']) ?></td>
+                            <td class="right"><?= n($p['importe'], 0) ?></td>
+                            <td class="right"><?= n($p['comision'], 0) ?></td>
+                        </tr>
+                    <?php endwhile; else: ?>
+                    <tr>
+                        <td colspan="6" class="muted">Sin medios de pago cargados.</td>
+                    </tr>
+                <?php endif; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="4" class="right">Totales</td>
+                    <td class="right"><?= n($sumPagos, 0) ?></td>
+                    <td class="right"><?= n($sumCom, 0) ?></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <h3 class="section-title">Aplicado a documentos</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Documento</th>
+                    <th class="right">Monto aplicado</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                $sumApl = 0;
+                if ($ra && pg_num_rows($ra) > 0):
+                    while ($a = pg_fetch_assoc($ra)):
+                        $sumApl += (float)$a['monto']; ?>
+                        <tr>
+                            <td>Factura <?= e($a['numero_documento']) ?> (ID <?= (int)$a['id_factura'] ?>)</td>
+                            <td class="right"><?= n($a['monto'], 0) ?></td>
+                        </tr>
+                    <?php endwhile;
+                elseif (!empty($aplFallback)):
+                    foreach ($aplFallback as $doc => $monto):
+                        $sumApl += (float)$monto; ?>
+                        <tr>
+                            <td>Factura <?= e($doc) ?></td>
+                            <td class="right"><?= n($monto, 0) ?></td>
+                        </tr>
+                <?php endforeach;
+                else: ?>
+                    <tr><td colspan="2" class="muted">Este recibo aún no tiene aplicaciones registradas.</td></tr>
+                <?php endif; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td class="right">Total aplic.</td>
+                    <td class="right"><?= n($sumApl, 0) ?></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <h3 class="section-title">Detalle de cuotas cobradas</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Factura</th>
+                    <th>Cuota</th>
+                    <th>Vencimiento</th>
+                    <th class="right">Pagado</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php
+                $sumCuotas = 0;
+                if ($rcu && pg_num_rows($rcu) > 0):
+                    while ($c = pg_fetch_assoc($rcu)):
+                        $sumCuotas += (float)$c['pagado']; ?>
+                        <tr>
+                            <td><?= e($c['numero_documento']) ?></td>
+                            <td><?= (int)$c['nro_cuota'] ?>/<?= (int)$c['cant_cuotas'] ?></td>
+                            <td><?= $c['vencimiento'] ? e($c['vencimiento']) : '—' ?></td>
+                            <td class="right"><?= n($c['pagado'], 0) ?></td>
+                        </tr>
+                    <?php endwhile; else: ?>
+                    <tr><td colspan="4" class="muted">Sin cuotas asociadas a este recibo.</td></tr>
+                <?php endif; ?>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="3" class="right">Total cuotas</td>
+                    <td class="right"><?= n($sumCuotas, 0) ?></td>
+                </tr>
+            </tfoot>
+        </table>
+
+        <p class="muted" style="margin-top: 12px;">
+            *Documento generado por sistema — Usuario: <?= e($_SESSION['nombre_usuario'] ?? '') ?>.
+            <?php if ($esAnulado): ?>
+                <strong style="color: var(--danger);">Recibo ANULADO.</strong>
+            <?php endif; ?>
+        </p>
     </div>
-  </div>
 
-  <div class="grid">
-    <div class="box">
-      <h3>Cliente</h3>
-      <div><strong><?= e($cliente) ?></strong></div>
-      <div>RUC/CI: <?= e($R['ruc_ci']) ?></div>
-      <?php if (!empty($R['direccion'])): ?>
-        <div class="muted">Dirección: <?= e($R['direccion']) ?></div>
-      <?php endif; ?>
-    </div>
-    <div class="box">
-      <h3>Observación</h3>
-      <div class="muted"><?= nl2br(e($R['observacion'])) ?></div>
-    </div>
-  </div>
-
-  <!-- Medios de pago -->
-  <h3 style="margin-top:14px;margin-bottom:6px">Medios de pago</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Medio</th>
-        <th>Referencia</th>
-        <th>Cuenta</th>
-        <th>Fecha acredit.</th>
-        <th class="right">Importe</th>
-        <th class="right">Comisión</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php
-      $sumPagos = 0; $sumCom = 0;
-      if ($rp && pg_num_rows($rp)>0):
-        while($p = pg_fetch_assoc($rp)):
-          $sumPagos += (float)$p['importe'];
-          $sumCom   += (float)$p['comision'];
-      ?>
-        <tr>
-          <td><?= e($p['medio_pago']) ?></td>
-          <td><?= e($p['referencia']) ?></td>
-          <td><?= e($p['cuenta_label']) ?></td>
-          <td><?= e($p['fecha_acredit']) ?></td>
-          <td class="right"><?= n($p['importe'],0) ?></td>
-          <td class="right"><?= n($p['comision'],0) ?></td>
-        </tr>
-      <?php endwhile; else: ?>
-        <tr><td colspan="6" class="muted">Sin medios de pago cargados.</td></tr>
-      <?php endif; ?>
-      <tr>
-        <td colspan="4" class="right"><strong>Totales</strong></td>
-        <td class="right"><strong><?= n($sumPagos,0) ?></strong></td>
-        <td class="right"><strong><?= n($sumCom,0) ?></strong></td>
-      </tr>
-    </tbody>
-  </table>
-
-  <!-- Resumen aplicado -->
-  <h3 style="margin-top:14px;margin-bottom:6px">Aplicado a documentos</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Documento</th>
-        <th class="right">Monto aplicado</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php
-      $sumApl = 0;
-      if ($ra && pg_num_rows($ra)>0):
-        while($a = pg_fetch_assoc($ra)):
-          $sumApl += (float)$a['monto'];
-      ?>
-        <tr>
-          <td>Factura <?= e($a['numero_documento']) ?> (ID <?= (int)$a['id_factura'] ?>)</td>
-          <td class="right"><?= n($a['monto'],0) ?></td>
-        </tr>
-      <?php endwhile;
-        elseif (!empty($aplFallback)):
-          foreach($aplFallback as $doc=>$monto):
-            $sumApl += (float)$monto; ?>
-            <tr>
-              <td>Factura <?= e($doc) ?></td>
-              <td class="right"><?= n($monto,0) ?></td>
-            </tr>
-      <?php endforeach; else: ?>
-        <tr><td colspan="2" class="muted">Este recibo aún no tiene aplicaciones registradas.</td></tr>
-      <?php endif; ?>
-      <tr>
-        <td class="right"><strong>Total aplicado</strong></td>
-        <td class="right"><strong><?= n($sumApl,0) ?></strong></td>
-      </tr>
-    </tbody>
-  </table>
-
-  <!-- Detalle de cuotas cobradas -->
-  <h3 style="margin-top:14px;margin-bottom:6px">Detalle de cuotas cobradas</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Factura</th>
-        <th>Cuota</th>
-        <th>Vencimiento</th>
-        <th class="right">Pagado</th>
-      </tr>
-    </thead>
-    <tbody>
-      <?php
-      $sumCuotas = 0;
-      if ($rcu && pg_num_rows($rcu)>0):
-        while($c = pg_fetch_assoc($rcu)):
-          $sumCuotas += (float)$c['pagado']; ?>
-          <tr>
-            <td><?= e($c['numero_documento']) ?></td>
-            <td><?= (int)$c['nro_cuota'] ?>/<?= (int)$c['cant_cuotas'] ?></td>
-            <td><?= $c['vencimiento'] ? e($c['vencimiento']) : '—' ?></td>
-            <td class="right"><?= n($c['pagado'],0) ?></td>
-          </tr>
-      <?php endwhile; else: ?>
-        <tr><td colspan="4" class="muted">Sin cuotas asociadas a este recibo.</td></tr>
-      <?php endif; ?>
-      <tr>
-        <td colspan="3" class="right"><strong>Total cuotas</strong></td>
-        <td class="right"><strong><?= n($sumCuotas,0) ?></strong></td>
-      </tr>
-    </tbody>
-  </table>
-
-  <p class="muted" style="margin-top:8px">
-    *Generado por sistema — Usuario: <?= e($_SESSION['nombre_usuario'] ?? '') ?>.
-    <?php if ($esAnulado): ?> <strong style="color:var(--danger)">Recibo ANULADO</strong> <?php endif; ?>
-  </p>
-</div>
-
-<script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js" class="no-print"></script>
-<?php if (!empty($_GET['auto'])): ?>
-<script> window.addEventListener('load', ()=> setTimeout(()=>window.print(), 150)); </script>
-<?php endif; ?>
+    <script src="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/navbar/navbar.js" class="no-print"></script>
+    <?php if (!empty($_GET['auto'])): ?>
+        <script>
+            window.addEventListener('load', () => setTimeout(() => window.print(), 150));
+        </script>
+    <?php endif; ?>
 </body>
+
 </html>
