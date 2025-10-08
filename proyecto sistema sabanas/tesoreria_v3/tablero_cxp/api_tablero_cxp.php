@@ -1,4 +1,27 @@
 <?php
+/**
+ * API CxP (GET) — con cuotas
+ * - Detalle por id_cxp (incluye cuotas, OPs y movimientos)
+ * - Listado paginado con KPIs de cuotas (próximo venc., vencido, saldo de cuotas abiertas)
+ *
+ * Parámetros (query):
+ *   id_cxp                -> si viene, devuelve el detalle de esa CxP
+ *   with_movimientos      -> bool (default true)
+ *   with_cuotas           -> bool (default true)
+ *   with_totals           -> bool (default false) agrega summary en el listado
+ *   incluir_canceladas    -> bool (default false) incluye CxP cerradas/anuladas
+ *   solo_vencidas         -> bool (default false) usa c.fecha_venc de la madre
+ *   solo_vencidas_cuotas  -> bool (default false) usa vencimiento de cuotas
+ *   cuota_venc_desde      -> yyyy-mm-dd (filtra por venc. de cuotas >=)
+ *   cuota_venc_hasta      -> yyyy-mm-dd (filtra por venc. de cuotas <=)
+ *   estado                -> coma separada (Pendiente,Parcial,Cancelada,Anulada)
+ *   q                     -> texto libre (proveedor, ruc, nro doc, obs factura)
+ *   id_proveedor, id_sucursal, moneda, condicion
+ *   fecha_desde, fecha_hasta  -> por fecha_emision de la factura
+ *   venc_desde, venc_hasta    -> por fecha_venc de la madre
+ *   page, page_size
+ */
+
 session_start();
 require_once __DIR__ . '/../../conexion/configv2.php';
 
@@ -19,36 +42,30 @@ if ($method !== 'GET') {
 
 $idCxp = isset($_GET['id_cxp']) ? (int)$_GET['id_cxp'] : 0;
 
+/* ------------------------- helpers ------------------------- */
 function bad(string $msg, int $code = 400): void {
     http_response_code($code);
     echo json_encode(['ok' => false, 'error' => $msg]);
     exit;
 }
-
 function ok(array $payload = []): void {
     echo json_encode(['ok' => true] + $payload);
     exit;
 }
-
 function parse_bool($value, bool $default = false): bool {
-    if ($value === null) {
-        return $default;
-    }
-    if (is_bool($value)) {
-        return $value;
-    }
+    if ($value === null) return $default;
+    if (is_bool($value)) return $value;
     $filtered = filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
     return $filtered === null ? $default : $filtered;
 }
-
 function parse_date(?string $value): ?string {
-    if (!$value) {
-        return null;
-    }
+    if (!$value) return null;
     return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
 }
 
+/* -------------------- detalle por id_cxp ------------------- */
 if ($idCxp > 0) {
+    // header CxP
     $sql = "
         SELECT c.id_cxp,
                c.id_factura,
@@ -62,7 +79,7 @@ if ($idCxp > 0) {
                c.moneda,
                f.numero_documento,
                f.fecha_emision AS factura_fecha,
-               f.moneda AS factura_moneda,
+               f.moneda        AS factura_moneda,
                f.total_factura,
                f.condicion,
                f.cuotas,
@@ -70,25 +87,22 @@ if ($idCxp > 0) {
                f.intervalo_dias,
                f.timbrado_numero,
                f.id_sucursal,
-               s.nombre AS sucursal_nombre,
-               p.nombre AS proveedor_nombre,
-               p.ruc AS proveedor_ruc
+               s.nombre        AS sucursal_nombre,
+               p.nombre        AS proveedor_nombre,
+               p.ruc           AS proveedor_ruc
         FROM public.cuenta_pagar c
         JOIN public.factura_compra_cab f ON f.id_factura = c.id_factura
-        JOIN public.proveedores p ON p.id_proveedor = c.id_proveedor
-        LEFT JOIN public.sucursales s ON s.id_sucursal = f.id_sucursal
+        JOIN public.proveedores p        ON p.id_proveedor = c.id_proveedor
+        LEFT JOIN public.sucursales s    ON s.id_sucursal = f.id_sucursal
         WHERE c.id_cxp = $1
         LIMIT 1
     ";
     $stmt = pg_query_params($conn, $sql, [$idCxp]);
-    if (!$stmt) {
-        bad('Error al obtener la cuenta por pagar', 500);
-    }
+    if (!$stmt) bad('Error al obtener la cuenta por pagar', 500);
     $header = pg_fetch_assoc($stmt);
-    if (!$header) {
-        bad('Cuenta por pagar no encontrada', 404);
-    }
+    if (!$header) bad('Cuenta por pagar no encontrada', 404);
 
+    // órdenes de pago vinculadas
     $sqlOps = "
         SELECT opd.id_orden_pago,
                opc.fecha,
@@ -106,19 +120,15 @@ if ($idCxp > 0) {
                ch.fecha_cheque,
                ch.monto_cheque
         FROM public.orden_pago_det opd
-        JOIN public.orden_pago_cab opc
-          ON opc.id_orden_pago = opd.id_orden_pago
-        JOIN public.cuenta_bancaria cb
-          ON cb.id_cuenta_bancaria = opc.id_cuenta_bancaria
-        LEFT JOIN public.cheques ch
-          ON ch.id_orden_pago = opc.id_orden_pago
+        JOIN public.orden_pago_cab opc   ON opc.id_orden_pago = opd.id_orden_pago
+        JOIN public.cuenta_bancaria cb   ON cb.id_cuenta_bancaria = opc.id_cuenta_bancaria
+        LEFT JOIN public.cheques ch      ON ch.id_orden_pago = opc.id_orden_pago
         WHERE opd.id_cxp = $1
         ORDER BY opc.fecha DESC, opc.id_orden_pago DESC
     ";
     $stmtOps = pg_query_params($conn, $sqlOps, [$idCxp]);
-    if (!$stmtOps) {
-        bad('Error al obtener órdenes vinculadas', 500);
-    }
+    if (!$stmtOps) bad('Error al obtener órdenes vinculadas', 500);
+
     $ordenes = [];
     while ($op = pg_fetch_assoc($stmtOps)) {
         $ordenes[] = [
@@ -144,43 +154,76 @@ if ($idCxp > 0) {
         ];
     }
 
+    // movimientos (opcional)
     $includeMovs = parse_bool($_GET['with_movimientos'] ?? true, true);
     $movs = [];
     if ($includeMovs) {
         $sqlMov = "
-            SELECT id_mov,
-                   fecha,
-                   ref_tipo,
-                   ref_id,
-                   signo,
-                   monto,
-                   moneda,
-                   concepto,
-                   created_at
+            SELECT id_mov, fecha, ref_tipo, ref_id, signo, monto, moneda, concepto, created_at
             FROM public.cuenta_pagar_mov
             WHERE id_cxp = $1
             ORDER BY fecha ASC, id_mov ASC
         ";
         $stmtMov = pg_query_params($conn, $sqlMov, [$idCxp]);
-        if (!$stmtMov) {
-            bad('Error al obtener movimientos', 500);
-        }
+        if (!$stmtMov) bad('Error al obtener movimientos', 500);
         $saldo = 0.0;
         while ($m = pg_fetch_assoc($stmtMov)) {
             $signo = (int)$m['signo'];
             $monto = (float)$m['monto'] * $signo;
             $saldo += $monto;
             $movs[] = [
-                'id_mov'       => (int)$m['id_mov'],
-                'fecha'        => $m['fecha'],
-                'ref_tipo'     => $m['ref_tipo'],
-                'ref_id'       => $m['ref_id'] !== null ? (int)$m['ref_id'] : null,
-                'signo'        => $signo,
-                'monto'        => (float)$m['monto'],
-                'moneda'       => $m['moneda'],
-                'concepto'     => $m['concepto'],
-                'created_at'   => $m['created_at'],
-                'saldo_parcial'=> $saldo
+                'id_mov'        => (int)$m['id_mov'],
+                'fecha'         => $m['fecha'],
+                'ref_tipo'      => $m['ref_tipo'],
+                'ref_id'        => $m['ref_id'] !== null ? (int)$m['ref_id'] : null,
+                'signo'         => $signo,
+                'monto'         => (float)$m['monto'],
+                'moneda'        => $m['moneda'],
+                'concepto'      => $m['concepto'],
+                'created_at'    => $m['created_at'],
+                'saldo_parcial' => $saldo
+            ];
+        }
+    }
+
+    // agregados de cuotas + detalle (opcional)
+    $includeCuotas = parse_bool($_GET['with_cuotas'] ?? true, true);
+
+    $sqlAggCuotas = "
+      SELECT
+        COUNT(*)                                                      AS cuotas_total,
+        COUNT(*) FILTER (WHERE estado IN ('Pendiente','Parcial'))     AS cuotas_abiertas,
+        COUNT(*) FILTER (WHERE estado = 'Cancelada')                  AS cuotas_canceladas,
+        SUM(CASE WHEN estado IN ('Pendiente','Parcial') THEN saldo_cuota ELSE 0 END) AS saldo_cuotas_abiertas,
+        MIN(CASE WHEN estado IN ('Pendiente','Parcial') THEN fecha_venc END)         AS proximo_venc,
+        SUM(CASE WHEN estado IN ('Pendiente','Parcial') AND fecha_venc < CURRENT_DATE
+                 THEN saldo_cuota ELSE 0 END) AS monto_vencido
+      FROM public.cuenta_det_x_pagar
+      WHERE id_cxp = $1
+    ";
+    $stmtAgg = pg_query_params($conn, $sqlAggCuotas, [$idCxp]);
+    $agg = $stmtAgg ? pg_fetch_assoc($stmtAgg) : null;
+
+    $cuotas = [];
+    if ($includeCuotas) {
+        $sqlCuotas = "
+          SELECT id_cxp_det, id_cxp, nro_cuota, fecha_venc,
+                 monto_cuota, saldo_cuota, estado, observacion
+          FROM public.cuenta_det_x_pagar
+          WHERE id_cxp = $1
+          ORDER BY nro_cuota ASC
+        ";
+        $stmtCuotas = pg_query_params($conn, $sqlCuotas, [$idCxp]);
+        if (!$stmtCuotas) bad('Error al obtener cuotas', 500);
+        while ($d = pg_fetch_assoc($stmtCuotas)) {
+            $cuotas[] = [
+                'id_cxp_det'  => (int)$d['id_cxp_det'],
+                'nro'         => (int)$d['nro_cuota'],
+                'vencimiento' => $d['fecha_venc'],
+                'monto'       => (float)$d['monto_cuota'],
+                'saldo'       => (float)$d['saldo_cuota'],
+                'estado'      => $d['estado'],
+                'obs'         => $d['observacion'],
             ];
         }
     }
@@ -190,7 +233,7 @@ if ($idCxp > 0) {
             'id_cxp'        => (int)$header['id_cxp'],
             'id_factura'    => (int)$header['id_factura'],
             'proveedor'     => [
-                'id'   => (int)$header['id_proveedor'],
+                'id'     => (int)$header['id_proveedor'],
                 'nombre' => $header['proveedor_nombre'],
                 'ruc'    => $header['proveedor_ruc'],
             ],
@@ -218,15 +261,26 @@ if ($idCxp > 0) {
                 'id'     => $header['id_sucursal'] !== null ? (int)$header['id_sucursal'] : null,
                 'nombre' => $header['sucursal_nombre'],
             ],
+            // agregados de cuotas
+            'cuotas_info' => $agg ? [
+                'total'            => (int)$agg['cuotas_total'],
+                'abiertas'         => (int)$agg['cuotas_abiertas'],
+                'canceladas'       => (int)$agg['cuotas_canceladas'],
+                'saldo_abiertas'   => (float)$agg['saldo_cuotas_abiertas'],
+                'proximo_venc'     => $agg['proximo_venc'],
+                'monto_vencido'    => (float)$agg['monto_vencido'],
+            ] : null,
+            'cuotas' => $includeCuotas ? $cuotas : null,
         ],
         'ordenes_pago' => $ordenes,
         'movimientos'  => $movs,
     ]);
 }
 
-$page = max(1, (int)($_GET['page'] ?? 1));
-$pageSize = max(1, min(200, (int)($_GET['page_size'] ?? 50)));
-$offset = ($page - 1) * $pageSize;
+/* -------------------- listado paginado --------------------- */
+$page      = max(1, (int)($_GET['page'] ?? 1));
+$pageSize  = max(1, min(200, (int)($_GET['page_size'] ?? 50)));
+$offset    = ($page - 1) * $pageSize;
 $includeTotals = parse_bool($_GET['with_totals'] ?? false, false);
 
 $estadoFiltroRaw   = trim($_GET['estado'] ?? '');
@@ -238,106 +292,82 @@ foreach ($estadoFiltroLista as $estadoVal) {
         break;
     }
 }
-
 $includeCanceladas = parse_bool($_GET['incluir_canceladas'] ?? false, false);
 
-$where = [];
+$where  = [];
 $params = [];
-$idx = 1;
+$idx    = 1;
 
+// por defecto, solo abiertas (si no se piden canceladas) y con saldo > 0
 if (!$includeCanceladas && !$estadoIncluyeCanceladas) {
     $where[] = "(c.estado = ANY(ARRAY['Pendiente','Parcial']) OR c.saldo_actual > 0)";
     $where[] = "c.saldo_actual > 0";
 }
 
+// búsqueda libre
 $q = trim($_GET['q'] ?? '');
 if ($q !== '') {
     $where[] = "(p.nombre ILIKE $" . $idx . " OR p.ruc ILIKE $" . $idx . " OR f.numero_documento ILIKE $" . $idx . " OR COALESCE(f.observacion, '') ILIKE $" . $idx . ")";
-    $params[] = '%' . $q . '%';
-    $idx++;
+    $params[] = '%' . $q . '%'; $idx++;
 }
 
-if (!empty($_GET['id_proveedor'])) {
-    $where[] = "c.id_proveedor = $" . $idx;
-    $params[] = (int)$_GET['id_proveedor'];
-    $idx++;
-}
+// filtros directos
+if (!empty($_GET['id_proveedor'])) { $where[] = "c.id_proveedor = $" . $idx; $params[] = (int)$_GET['id_proveedor']; $idx++; }
+if (!empty($_GET['id_sucursal']))  { $where[] = "f.id_sucursal = $" . $idx;   $params[] = (int)$_GET['id_sucursal'];  $idx++; }
+if (!empty($_GET['moneda']))        { $where[] = "c.moneda = $" . $idx;        $params[] = $_GET['moneda'];           $idx++; }
+if (!empty($_GET['condicion']))     { $where[] = "UPPER(COALESCE(f.condicion,'')) = $" . $idx; $params[] = strtoupper($_GET['condicion']); $idx++; }
 
-if (!empty($_GET['id_sucursal'])) {
-    $where[] = "f.id_sucursal = $" . $idx;
-    $params[] = (int)$_GET['id_sucursal'];
-    $idx++;
-}
-
-if (!empty($_GET['moneda'])) {
-    $where[] = "c.moneda = $" . $idx;
-    $params[] = $_GET['moneda'];
-    $idx++;
-}
-
-
-if (!empty($_GET['condicion'])) {
-    $where[] = "UPPER(COALESCE(f.condicion,'')) = $" . $idx;
-    $params[] = strtoupper($_GET['condicion']);
-    $idx++;
-}
-
-
+// estados
 if ($estadoFiltroLista) {
     $placeholders = [];
-    foreach ($estadoFiltroLista as $estado) {
-        $placeholders[] = '$' . $idx;
-        $params[] = $estado;
-        $idx++;
-    }
+    foreach ($estadoFiltroLista as $estado) { $placeholders[] = '$' . $idx; $params[] = $estado; $idx++; }
     $where[] = 'c.estado IN (' . implode(',', $placeholders) . ')';
 }
 
-if (($fechaDesde = parse_date($_GET['fecha_desde'] ?? null))) {
-    $where[] = "f.fecha_emision >= $" . $idx;
-    $params[] = $fechaDesde;
-    $idx++;
-}
+// fechas por factura
+if (($fechaDesde = parse_date($_GET['fecha_desde'] ?? null))) { $where[] = "f.fecha_emision >= $" . $idx; $params[] = $fechaDesde; $idx++; }
+if (($fechaHasta = parse_date($_GET['fecha_hasta'] ?? null))) { $where[] = "f.fecha_emision <= $" . $idx; $params[] = $fechaHasta; $idx++; }
 
-if (($fechaHasta = parse_date($_GET['fecha_hasta'] ?? null))) {
-    $where[] = "f.fecha_emision <= $" . $idx;
-    $params[] = $fechaHasta;
-    $idx++;
-}
+// vencimiento madre
+if (($vencDesde = parse_date($_GET['venc_desde'] ?? null))) { $where[] = "c.fecha_venc >= $" . $idx; $params[] = $vencDesde; $idx++; }
+if (($vencHasta = parse_date($_GET['venc_hasta'] ?? null))) { $where[] = "c.fecha_venc <= $" . $idx; $params[] = $vencHasta; $idx++; }
+if (parse_bool($_GET['solo_vencidas'] ?? false, false)) { $where[] = "c.fecha_venc < CURRENT_DATE"; }
 
-if (($vencDesde = parse_date($_GET['venc_desde'] ?? null))) {
-    $where[] = "c.fecha_venc >= $" . $idx;
-    $params[] = $vencDesde;
-    $idx++;
+// ==== filtros basados en cuotas ====
+if (parse_bool($_GET['solo_vencidas_cuotas'] ?? false, false)) {
+    $where[] = "EXISTS (
+        SELECT 1 FROM public.cuenta_det_x_pagar d
+        WHERE d.id_cxp = c.id_cxp
+          AND d.estado IN ('Pendiente','Parcial')
+          AND d.fecha_venc < CURRENT_DATE
+    )";
 }
-
-if (($vencHasta = parse_date($_GET['venc_hasta'] ?? null))) {
-    $where[] = "c.fecha_venc <= $" . $idx;
-    $params[] = $vencHasta;
-    $idx++;
+if (($vencDesdeCuota = parse_date($_GET['cuota_venc_desde'] ?? null))) {
+    $where[] = "EXISTS (SELECT 1 FROM public.cuenta_det_x_pagar d WHERE d.id_cxp = c.id_cxp AND d.fecha_venc >= $" . $idx . ")";
+    $params[] = $vencDesdeCuota; $idx++;
 }
-
-if (parse_bool($_GET['solo_vencidas'] ?? false, false)) {
-    $where[] = "c.fecha_venc < CURRENT_DATE";
+if (($vencHastaCuota = parse_date($_GET['cuota_venc_hasta'] ?? null))) {
+    $where[] = "EXISTS (SELECT 1 FROM public.cuenta_det_x_pagar d WHERE d.id_cxp = c.id_cxp AND d.fecha_venc <= $" . $idx . ")";
+    $params[] = $vencHastaCuota; $idx++;
 }
 
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
+// FROM base + joins LATERAL (último mov, OPs y CUOTAS)
 $fromSql = "
     FROM public.cuenta_pagar c
     JOIN public.factura_compra_cab f ON f.id_factura = c.id_factura
-    JOIN public.proveedores p ON p.id_proveedor = c.id_proveedor
-    LEFT JOIN public.sucursales s ON s.id_sucursal = f.id_sucursal
+    JOIN public.proveedores p        ON p.id_proveedor = c.id_proveedor
+    LEFT JOIN public.sucursales s    ON s.id_sucursal = f.id_sucursal
+
     LEFT JOIN LATERAL (
-        SELECT m.fecha,
-               m.monto,
-               m.signo,
-               m.ref_tipo
+        SELECT m.fecha, m.monto, m.signo, m.ref_tipo
         FROM public.cuenta_pagar_mov m
         WHERE m.id_cxp = c.id_cxp
         ORDER BY m.fecha DESC, m.id_mov DESC
         LIMIT 1
     ) lm ON true
+
     LEFT JOIN LATERAL (
         SELECT
             COUNT(*)                                                      AS total_op,
@@ -351,6 +381,18 @@ $fromSql = "
         JOIN public.orden_pago_cab opc ON opc.id_orden_pago = opd.id_orden_pago
         WHERE opd.id_cxp = c.id_cxp
     ) op ON true
+
+    -- Agregados de CUOTAS
+    LEFT JOIN LATERAL (
+      SELECT
+        COUNT(*)                                                      AS cuotas_total,
+        COUNT(*) FILTER (WHERE d.estado IN ('Pendiente','Parcial'))   AS cuotas_abiertas,
+        SUM(CASE WHEN d.estado IN ('Pendiente','Parcial') THEN d.saldo_cuota ELSE 0 END) AS saldo_cuotas_abiertas,
+        MIN(CASE WHEN d.estado IN ('Pendiente','Parcial') THEN d.fecha_venc END)         AS proximo_venc,
+        SUM(CASE WHEN d.estado IN ('Pendiente','Parcial') AND d.fecha_venc < CURRENT_DATE THEN d.saldo_cuota ELSE 0 END) AS monto_vencido
+      FROM public.cuenta_det_x_pagar d
+      WHERE d.id_cxp = c.id_cxp
+    ) cq ON true
 ";
 
 $sqlList = "
@@ -366,7 +408,7 @@ $sqlList = "
            c.moneda,
            f.numero_documento,
            f.fecha_emision AS factura_fecha,
-           f.moneda AS factura_moneda,
+           f.moneda        AS factura_moneda,
            f.total_factura,
            f.condicion,
            f.cuotas,
@@ -374,43 +416,49 @@ $sqlList = "
            f.intervalo_dias,
            f.timbrado_numero,
            f.id_sucursal,
-           s.nombre AS sucursal_nombre,
-           p.nombre AS proveedor_nombre,
-           p.ruc AS proveedor_ruc,
+           s.nombre        AS sucursal_nombre,
+           p.nombre        AS proveedor_nombre,
+           p.ruc           AS proveedor_ruc,
            (CURRENT_DATE - c.fecha_venc) AS dias_al_venc,
            CASE WHEN c.fecha_venc < CURRENT_DATE THEN TRUE ELSE FALSE END AS vencida,
-           lm.fecha AS ultimo_mov_fecha,
-           lm.monto AS ultimo_mov_monto,
-           lm.signo AS ultimo_mov_signo,
-           lm.ref_tipo AS ultimo_mov_tipo,
-           COALESCE(op.total_op,0) AS total_op,
-           COALESCE(op.op_abiertas,0) AS op_abiertas,
-           COALESCE(op.monto_reservado,0) AS monto_reservado,
-           COALESCE(op.monto_total_op,0) AS monto_total_op,
+           lm.fecha        AS ultimo_mov_fecha,
+           lm.monto        AS ultimo_mov_monto,
+           lm.signo        AS ultimo_mov_signo,
+           lm.ref_tipo     AS ultimo_mov_tipo,
+
+           COALESCE(op.total_op,0)          AS total_op,
+           COALESCE(op.op_abiertas,0)       AS op_abiertas,
+           COALESCE(op.monto_reservado,0)   AS monto_reservado,
+           COALESCE(op.monto_total_op,0)    AS monto_total_op,
            op.ultima_fecha,
            op.ultimo_estado,
-           op.ultima_op
+           op.ultima_op,
+
+           cq.cuotas_total,
+           cq.cuotas_abiertas,
+           cq.saldo_cuotas_abiertas,
+           cq.proximo_venc    AS cuotas_proximo_venc,
+           cq.monto_vencido   AS cuotas_monto_vencido
+
     $fromSql
     $whereSql
     ORDER BY c.fecha_venc ASC, p.nombre ASC
     LIMIT $" . $idx . " OFFSET $" . ($idx + 1) . "
 ";
-
 $paramsList = $params;
 $paramsList[] = $pageSize;
 $paramsList[] = $offset;
 
 $stmtList = pg_query_params($conn, $sqlList, $paramsList);
-if (!$stmtList) {
-    bad('Error al listar cuentas por pagar', 500);
-}
+if (!$stmtList) bad('Error al listar cuentas por pagar', 500);
 
+// Totales (opcional)
 $sqlCount = "
     SELECT COUNT(*) AS total_rows,
            COALESCE(SUM(c.saldo_actual), 0) AS saldo_por_pagar,
-           COALESCE(SUM(c.total_cxp), 0) AS total_facturado,
+           COALESCE(SUM(c.total_cxp), 0)    AS total_facturado,
            COALESCE(SUM(CASE WHEN c.estado = 'Pendiente' THEN c.saldo_actual ELSE 0 END), 0) AS saldo_pendiente,
-           COALESCE(SUM(CASE WHEN c.estado = 'Parcial' THEN c.saldo_actual ELSE 0 END), 0) AS saldo_parcial,
+           COALESCE(SUM(CASE WHEN c.estado = 'Parcial'   THEN c.saldo_actual ELSE 0 END), 0) AS saldo_parcial,
            COALESCE(SUM(CASE WHEN c.fecha_venc < CURRENT_DATE AND c.saldo_actual > 0 THEN c.saldo_actual ELSE 0 END), 0) AS saldo_vencido,
            COALESCE(SUM(op_res.monto_reservado_cxp), 0) AS saldo_reservado_op
     $fromSql
@@ -422,14 +470,12 @@ $sqlCount = "
     ) op_res ON true
     $whereSql
 ";
-
 $stmtCount = pg_query_params($conn, $sqlCount, $params);
-if (!$stmtCount) {
-    bad('Error al calcular totales', 500);
-}
+if (!$stmtCount) bad('Error al calcular totales', 500);
 $meta = pg_fetch_assoc($stmtCount);
 $totalRows = (int)$meta['total_rows'];
 
+// construir respuesta
 $data = [];
 while ($row = pg_fetch_assoc($stmtList)) {
     $data[] = [
@@ -444,7 +490,7 @@ while ($row = pg_fetch_assoc($stmtList)) {
             'numero'   => $row['numero_documento'],
             'timbrado' => $row['timbrado_numero'],
         ],
-        'fecha_emision' => $row['fecha_emision'],
+        'fecha_emision' => $row['factura_fecha'],
         'fecha_venc'    => $row['fecha_venc'],
         'dias_al_venc'  => (int)$row['dias_al_venc'],
         'vencida'       => $row['vencida'] === 't',
@@ -466,13 +512,21 @@ while ($row = pg_fetch_assoc($stmtList)) {
             'tipo'  => $row['ultimo_mov_tipo'],
         ] : null,
         'orden_pago' => [
-            'total'          => (int)$row['total_op'],
-            'abiertas'       => (int)$row['op_abiertas'],
-            'monto_reservado'=> (float)$row['monto_reservado'],
-            'monto_total'    => (float)$row['monto_total_op'],
-            'ultima_fecha'   => $row['ultima_fecha'],
-            'ultimo_estado'  => $row['ultimo_estado'],
-            'ultima_op'      => $row['ultima_op'] ? (int)$row['ultima_op'] : null,
+            'total'           => (int)$row['total_op'],
+            'abiertas'        => (int)$row['op_abiertas'],
+            'monto_reservado' => (float)$row['monto_reservado'],
+            'monto_total'     => (float)$row['monto_total_op'],
+            'ultima_fecha'    => $row['ultima_fecha'],
+            'ultimo_estado'   => $row['ultimo_estado'],
+            'ultima_op'       => $row['ultima_op'] ? (int)$row['ultima_op'] : null,
+        ],
+        // KPI de cuotas para la grilla
+        'cuotas' => [
+            'total'          => (int)($row['cuotas_total'] ?? 0),
+            'abiertas'       => (int)($row['cuotas_abiertas'] ?? 0),
+            'saldo_abiertas' => (float)($row['saldo_cuotas_abiertas'] ?? 0),
+            'proximo_venc'   => $row['cuotas_proximo_venc'],
+            'monto_vencido'  => (float)($row['cuotas_monto_vencido'] ?? 0),
         ],
     ];
 }
