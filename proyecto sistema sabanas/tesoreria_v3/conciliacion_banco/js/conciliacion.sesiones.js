@@ -2,7 +2,8 @@
   const API = {
     sesiones: 'sesiones_api.php',
     reportes: 'reportes_api.php',
-    cuentas: '../bancos/cuentas_bancarias_api.php'
+    cuentas: '../bancos/cuentas_bancarias_api.php',
+    saldo: 'saldo_libro_api.php'
   };
 
   const store = window.ConcStore = {
@@ -74,6 +75,12 @@
         if (modal) toggleModal(modal, false);
       });
     });
+    if (els.formNueva) {
+      ['id_cuenta_bancaria','fecha_desde','fecha_hasta'].forEach(name => {
+        const input = els.formNueva.elements[name];
+        if (input) input.addEventListener('change', debounce(precalcularSaldos, 250));
+      });
+    }
   }
 
   async function loadCuentas() {
@@ -85,12 +92,12 @@
 
   function renderCuentas(cuentas) {
     const opts = ['<option value="">Todas</option>']
-      .concat(cuentas.map(c => `<option value="${c.id_cuenta_bancaria}">${c.banco} · ${c.numero_cuenta}</option>`));
+      .concat(cuentas.map(c => `<option value="${c.id_cuenta_bancaria}">${c.banco} - ${c.numero_cuenta}</option>`));
     els.fCuenta.innerHTML = opts.join('');
 
     const selectModal = els.formNueva?.querySelector('select[name="id_cuenta_bancaria"]');
     if (selectModal) {
-      selectModal.innerHTML = cuentas.map(c => `<option value="${c.id_cuenta_bancaria}">${c.banco} · ${c.numero_cuenta}</option>`).join('');
+      selectModal.innerHTML = cuentas.map(c => `<option value="${c.id_cuenta_bancaria}">${c.banco} - ${c.numero_cuenta}</option>`).join('');
     }
   }
 
@@ -121,13 +128,13 @@
       return;
     }
     els.listSesiones.innerHTML = sesiones.map(s => {
-      const periodo = `${s.fecha_desde} → ${s.fecha_hasta}`;
+      const periodo = `${s.fecha_desde} -> ${s.fecha_hasta}`;
       const estado = `<span class="badge ${badgeClass(s.estado)}">${s.estado}</span>`;
       return `
         <div class="session-card${s.id_conciliacion === state.selectedId ? ' active' : ''}" data-id="${s.id_conciliacion}">
           <div class="meta">
-            <strong>Conciliación #${s.id_conciliacion}</strong>
-            <span>${s.banco} · ${s.numero_cuenta} (${s.moneda})</span>
+            <strong>Conciliacion #${s.id_conciliacion}</strong>
+            <span>${s.banco} - ${s.numero_cuenta} (${s.moneda})</span>
             <span>Periodo: ${periodo}</span>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
@@ -176,19 +183,19 @@
 
   function renderKpis(conc, detail) {
     if (!conc) {
-      els.kpiId.textContent = '—';
-      els.kpiPeriodo.textContent = 'Sin selección';
-      els.kpiDif.textContent = '—';
+      els.kpiId.textContent = '--';
+      els.kpiPeriodo.textContent = 'Sin seleccion';
+      els.kpiDif.textContent = '--';
       els.badgeEstado.textContent = 'Sin estado';
       els.badgeEstado.className = 'badge';
-      els.kpiPendMov.textContent = '—';
+      els.kpiPendMov.textContent = '--';
       els.kpiPendMovDesc.textContent = '';
-      els.kpiPendExt.textContent = '—';
+      els.kpiPendExt.textContent = '--';
       els.kpiPendExtDesc.textContent = '';
       return;
     }
     els.kpiId.textContent = `#${conc.id_conciliacion}`;
-    els.kpiPeriodo.textContent = `${conc.fecha_desde} → ${conc.fecha_hasta}`;
+    els.kpiPeriodo.textContent = `${conc.fecha_desde} -> ${conc.fecha_hasta}`;
     els.kpiDif.textContent = formatMoneda(conc.diferencia_final, conc.moneda || 'PYG');
     els.badgeEstado.textContent = conc.estado;
     els.badgeEstado.className = `badge ${badgeClass(conc.estado)}`;
@@ -244,6 +251,8 @@
     if (!show) {
       const err = modal.querySelector('.badge.danger');
       if (err) err.style.display = 'none';
+    } else if (modal === els.modalNueva) {
+      precalcularSaldos();
     }
   }
 
@@ -263,7 +272,40 @@
 
   function handleError(err) {
     console.error(err);
-    alert(err.message || 'Ocurrió un error inesperado.');
+    alert(err.message || 'Ocurrio un error inesperado.');
+  }
+
+  function precalcularSaldos() {
+    if (!els.formNueva) return;
+    const form = els.formNueva;
+    const idCuenta = form.elements['id_cuenta_bancaria']?.value;
+    const desde = form.elements['fecha_desde']?.value;
+    const hasta = form.elements['fecha_hasta']?.value;
+    if (!idCuenta || !desde || !hasta) return;
+    if (els.nuevaError) els.nuevaError.style.display = 'none';
+
+    fetchJSON(`${API.saldo}?id_cuenta_bancaria=${idCuenta}&fecha_desde=${desde}&fecha_hasta=${hasta}`)
+      .then(data => {
+        form.elements['saldo_libro_inicial'].value = Number(data.saldo_libro_inicial || 0).toFixed(2);
+        form.elements['saldo_libro_final'].value = Number(data.saldo_libro_final || 0).toFixed(2);
+        if (els.nuevaError) els.nuevaError.style.display = 'none';
+      })
+      .catch(err => {
+        if (els.nuevaError) {
+          els.nuevaError.textContent = err.message;
+          els.nuevaError.style.display = 'inline-flex';
+        } else {
+          console.error(err);
+        }
+      });
+  }
+
+  function debounce(fn, wait) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn.apply(null, args), wait);
+    };
   }
 
   window.ConciliacionActions = {

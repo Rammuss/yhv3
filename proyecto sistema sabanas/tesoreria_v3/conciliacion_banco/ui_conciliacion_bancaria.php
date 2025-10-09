@@ -11,7 +11,7 @@ if (empty($_SESSION['nombre_usuario'])) {
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <title>Conciliación Bancaria</title>
+  <title>Conciliacion Bancaria</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -198,9 +198,9 @@ if (empty($_SESSION['nombre_usuario'])) {
 </head>
 <body>
   <header>
-    <h1>Conciliación Bancaria</h1>
+    <h1>Conciliacion Bancaria</h1>
     <div>
-      <button id="btn-nueva" class="primary">Nueva conciliación</button>
+      <button id="btn-nueva" class="primary">Nueva conciliacion</button>
       <button id="btn-descargar">Descargar reporte</button>
     </div>
   </header>
@@ -238,23 +238,23 @@ if (empty($_SESSION['nombre_usuario'])) {
 
     <section class="cards" id="kpis">
       <div class="card">
-        <h3>Conciliación</h3>
-        <strong id="kpi-id">—</strong>
-        <div id="kpi-periodo" class="muted">Sin selección</div>
+        <h3>Conciliacion</h3>
+        <strong id="kpi-id">--</strong>
+        <div id="kpi-periodo" class="muted">Sin seleccion</div>
       </div>
       <div class="card">
         <h3>Diferencia</h3>
-        <strong id="kpi-diferencia">—</strong>
+        <strong id="kpi-diferencia">--</strong>
         <span class="badge" id="badge-estado">Sin estado</span>
       </div>
       <div class="card">
         <h3>Movimientos pendientes</h3>
-        <strong id="kpi-pend-mov">—</strong>
+        <strong id="kpi-pend-mov">--</strong>
         <div class="muted" id="kpi-pend-mov-desc"></div>
       </div>
       <div class="card">
         <h3>Extracto pendiente</h3>
-        <strong id="kpi-pend-ext">—</strong>
+        <strong id="kpi-pend-ext">--</strong>
         <div class="muted" id="kpi-pend-ext-desc"></div>
       </div>
     </section>
@@ -275,13 +275,13 @@ if (empty($_SESSION['nombre_usuario'])) {
               <tr>
                 <th></th>
                 <th>Fecha</th>
-                <th>Descripción</th>
+                <th>Descripcion</th>
                 <th class="right">Monto</th>
                 <th>Estado</th>
               </tr>
             </thead>
             <tbody id="tbl-movimientos">
-              <tr><td colspan="5" class="empty">Seleccione una conciliación para ver movimientos.</td></tr>
+              <tr><td colspan="5" class="empty">Seleccione una conciliacion para ver movimientos.</td></tr>
             </tbody>
           </table>
         </div>
@@ -315,11 +315,11 @@ if (empty($_SESSION['nombre_usuario'])) {
     </section>
   </main>
 
-  <!-- Modal Nueva conciliación -->
+  <!-- Modal Nueva conciliacion -->
   <div class="modal-backdrop" id="modal-nueva">
     <div class="modal">
       <header>
-        <h3>Nueva conciliación</h3>
+        <h3>Nueva conciliacion</h3>
         <button type="button" data-close>&times;</button>
       </header>
       <div class="body">
@@ -345,7 +345,7 @@ if (empty($_SESSION['nombre_usuario'])) {
           <label>Saldo banco final
             <input type="number" step="0.01" name="saldo_banco_final" required />
           </label>
-          <label>Observación
+          <label>Observacion
             <textarea name="observacion" rows="2"></textarea>
           </label>
           <div class="badge danger" id="nueva-error" style="display:none;"></div>
@@ -418,11 +418,11 @@ if (empty($_SESSION['nombre_usuario'])) {
           </label>
           <label>Signo
             <select name="signo">
-              <option value="1">Ingreso / Crédito</option>
-              <option value="-1">Egreso / Débito</option>
+              <option value="1">Ingreso / Credito</option>
+              <option value="-1">Egreso / Debito</option>
             </select>
           </label>
-          <label>Descripción
+          <label>Descripcion
             <textarea name="descripcion" rows="2"></textarea>
           </label>
           <div class="badge danger" id="ajuste-error" style="display:none;"></div>

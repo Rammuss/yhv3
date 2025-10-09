@@ -29,7 +29,7 @@
 
   function renderDetalle(detail) {
     if (!detail || !detail.conciliacion) {
-      renderEmpty(els.tblMov, 5, 'Seleccione una conciliación para ver movimientos.');
+      renderEmpty(els.tblMov, 5, 'Seleccione una conciliacion para ver movimientos.');
       renderEmpty(els.tblExt, 5, 'Sin datos de extracto.');
       selection.mov = null;
       selection.ext = null;
@@ -107,7 +107,7 @@
     els.errExtr.style.display = 'none';
     const concId = store.state.conciliacion?.id_conciliacion;
     if (!concId) {
-      els.errExtr.textContent = 'Seleccione una conciliación primero.';
+      els.errExtr.textContent = 'Seleccione una conciliacion primero.';
       els.errExtr.style.display = 'inline-flex';
       return;
     }

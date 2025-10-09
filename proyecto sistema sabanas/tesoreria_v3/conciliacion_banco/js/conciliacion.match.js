@@ -40,7 +40,7 @@
 
   async function autoMatch() {
     const conc = store.state.conciliacion;
-    if (!conc) return alert('Seleccione una conciliación.');
+    if (!conc) return alert('Seleccione una conciliacion.');
     try {
       await postJSON({ accion: 'auto_match', id_conciliacion: conc.id_conciliacion });
       window.ConciliacionActions?.refreshDetalle();
@@ -57,7 +57,7 @@
       return;
     }
     const conc = store.state.conciliacion;
-    if (!conc) return alert('Seleccione una conciliación.');
+    if (!conc) return alert('Seleccione una conciliacion.');
     try {
       await postJSON({
         accion: 'match_manual',
@@ -75,7 +75,7 @@
 
   function abrirAjuste(tipo) {
     const conc = store.state.conciliacion;
-    if (!conc) return alert('Seleccione una conciliación.');
+    if (!conc) return alert('Seleccione una conciliacion.');
     els.formAjuste.reset();
     els.formAjuste.elements['accion'].value = tipo;
     els.formAjuste.elements['id_conciliacion'].value = conc.id_conciliacion;
@@ -91,7 +91,7 @@
     payload.monto = parseFloat(payload.monto || 0);
     payload.signo = parseInt(payload.signo || 1, 10);
     if (isNaN(payload.monto) || payload.monto <= 0) {
-      els.ajusteError.textContent = 'Ingrese un monto válido.';
+      els.ajusteError.textContent = 'Ingrese un monto valido.';
       els.ajusteError.style.display = 'inline-flex';
       return;
     }
@@ -108,7 +108,7 @@
   function openManualModal() {
     els.matchError.style.display = 'none';
     if (!selection.mov || !selection.ext) {
-      alert('Seleccioná un movimiento pendiente y un registro de extracto pendiente para conciliar.');
+      alert('Seleccione un movimiento pendiente y un registro de extracto pendiente para conciliar.');
       return;
     }
     toggleModal(els.modalMatch, true);
@@ -131,7 +131,7 @@
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) {
-      throw new Error(data.error || 'Operación no completada');
+      throw new Error(data.error || 'Operacion no completada');
     }
     return data;
   }
