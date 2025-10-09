@@ -1,0 +1,25 @@
+perfecto—acá va la **lista depurada (sin opcionales)**.
+
+# APIs (backend)
+
+<!-- 1. `ff/api/proveedores_ff_api.php` – CRUD de proveedores FF. -->
+<!-- 2. `ff/api/asignaciones_ff_api.php` – Crear/cerrar asignación inicial y ver saldo/historial. -->
+3. `ff/api/rendiciones_ff_api.php` – Crear/editar rendición, adjuntos, aprobar/rechazar, impacto provisional.
+4. `ff/api/reposiciones_ff_api.php` – Generar **CxP interna** de reposición y estados de reposición.
+5. `ff/api/movimientos_ff_api.php` – Listado de movimientos del FF.
+6. **Ajustes en existentes**
+
+   * `cuentas_pagar/crear_cxp_interna_api.php` (para reposición FF).
+   * `orden_pago/ordenes_pago_gestion_api.php` (soporta CxP internas FF y filtros).
+
+# UIs (frontend)
+
+<!-- 1. `ff/ui/proveedores_ff.php` – ABM de proveedores FF. -->
+<!-- 2. `ff/ui/asignar_ff.php` – Asignación inicial/ampliaciones, saldo e historial. -->
+3. `ff/ui/rendir_ff.php` – Carga de rendiciones, adjuntos, envío y aprobación.
+4. `ff/ui/reponer_ff.php` – Wizard de reposición → genera CxP interna y linkea a OP.
+5. `ff/ui/historial_ff.php` – Saldos, movimientos y KPIs por responsable.
+6. **Toques en existentes**
+
+   * `cuentas_pagar/ui/cxp_listado.php` – Filtro “Origen: Normal / Fondo Fijo”.
+   * `orden_pago/ui/ordenes_pago.php` – Indicador “Reposición FF”.
