@@ -131,26 +131,55 @@ if ($method==='POST'){
     $nombre  = trim($in['nombre_caja'] ?? '');
     $moneda  = ($in['moneda'] ?? 'PYG');
     $tope    = (float)($in['tope'] ?? 0);
+    $saldoInicial = array_key_exists('saldo_inicial', $in)
+      ? max(0.0, (float)$in['saldo_inicial'])
+      : max(0.0, $tope);
     $obs     = trim($in['observacion'] ?? '');
     $user    = $_SESSION['nombre_usuario'];
 
     if($id_prov<=0) bad('Proveedor inválido');
     if($nombre==='') bad('Nombre de caja requerido');
     if($tope<0) bad('El tope debe ser >= 0');
+    if($saldoInicial < 0) bad('Saldo inicial inválido');
+    if($tope>0 && $saldoInicial > $tope) bad('El saldo inicial no puede superar el tope asignado');
 
     // validar proveedor existe y es FONDO_FIJO (opcional pero recomendado)
     $v=pg_query_params($conn,"SELECT 1 FROM public.proveedores WHERE id_proveedor=$1 AND estado='Activo' AND tipo='FONDO_FIJO'",[$id_prov]);
     if(!$v || !pg_num_rows($v)) bad('El proveedor no es válido o no es de tipo FONDO_FIJO',422);
 
+    pg_query($conn,'BEGIN');
     $st=pg_query_params($conn,"
       INSERT INTO public.fondo_fijo
         (id_proveedor, nombre_caja, moneda, monto_asignado, saldo_actual, estado, observacion, created_at, created_by)
       VALUES ($1,$2,$3,$4,0,'Activo',$5, now(), $6)
       RETURNING id_ff
     ",[$id_prov,$nombre,$moneda,$tope, $obs!==''?$obs:null, $user]);
-    if(!$st) bad('No se pudo crear la caja',500);
-    $row=pg_fetch_assoc($st);
-    ok(['id_ff'=>pgi($row['id_ff']),'mensaje'=>'Caja creada']);
+    if(!$st){ pg_query($conn,'ROLLBACK'); bad('No se pudo crear la caja',500); }
+    $idFf = (int)pg_fetch_result($st,0,0);
+
+    if ($saldoInicial > 0) {
+      $okMov = pg_query_params(
+        $conn,
+        "INSERT INTO public.fondo_fijo_mov
+           (id_ff, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at, created_by)
+         VALUES ($1, current_date, 'ASIGNACION', 1, $2, 'Saldo inicial', 'bootstrap', NULL, now(), $3)",
+        [$idFf, $saldoInicial, $user]
+      );
+      if(!$okMov){ pg_query($conn,'ROLLBACK'); bad('No se pudo registrar el saldo inicial',500); }
+
+      $okUpd = pg_query_params(
+        $conn,
+        "UPDATE public.fondo_fijo
+            SET saldo_actual = COALESCE(saldo_actual,0) + $1,
+                updated_at = now()
+          WHERE id_ff = $2",
+        [$saldoInicial, $idFf]
+      );
+      if(!$okUpd){ pg_query($conn,'ROLLBACK'); bad('No se pudo actualizar el saldo inicial',500); }
+    }
+
+    pg_query($conn,'COMMIT');
+    ok(['id_ff'=>$idFf,'saldo_inicial'=>$saldoInicial,'mensaje'=>'Caja creada']);
   }
 
   /* asignar (movimiento de caja, opcional) */

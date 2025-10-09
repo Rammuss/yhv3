@@ -16,14 +16,13 @@
  *      body: {
  *        accion: "aprobar_lote",
  *        all_or_nothing?: true|false,
+ *        permitir_negativo?: true|false,
  *        items: [
  *          { id_item, aprobar: true|false, imputa_libro?: true|false|"true"|"false"|"", motivo_rechazo?: string }
  *        ]
  *      }
  *      -> aprueba/rechaza en lote; inserta en public.libro_compras si imputa_libro=true
- *
- * Notas:
- *  - NO mueve el saldo del FF aquí. El impacto al saldo se hará en Reposición.
+ *         y **DESCUENTA** saldo del Fondo Fijo por los ítems aprobados (idempotente).
  */
 
 session_start();
@@ -57,7 +56,12 @@ function read_json(): array {
 }
 function ffloat($v): float { return $v === null ? 0.0 : (float)$v; }
 function fint($v): int     { return $v === null ? 0   : (int)$v;   }
-
+function parse_bool($v, bool $default=false): bool {
+    if ($v === null) return $default;
+    if (is_bool($v)) return $v;
+    $r = filter_var($v, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    return $r === null ? $default : $r;
+}
 /** Normaliza cualquier cosa a 'true'/'false'/null para SET boolean. */
 function to_bool_text_or_null($v) {
     if (is_null($v)) return null;
@@ -88,7 +92,7 @@ function recompute_rendicion_estado($conn, int $id_rendicion): string {
     if ($pend > 0) return 'En revisión';
     if ($apr > 0 && $rej === 0) return 'Aprobada';
     if ($apr > 0 && $rej > 0)   return 'Parcial';
-    if ($apr === 0 && $rej > 0) return 'Parcial'; // o 'Rechazada' si preferís
+    if ($apr === 0 && $rej > 0) return 'Parcial'; // o 'Rechazada'
     return 'En revisión';
 }
 
@@ -356,7 +360,7 @@ if ($method === 'POST') {
             $ok_count++;
         }
 
-        // Recalcular estado (puede quedar En revisión o Parcial según haya otros ítems)
+        // Recalcular estado
         $nuevo_estado = recompute_rendicion_estado($conn, $id_rendicion);
         $upH = pg_query_params(
             $conn,
@@ -385,19 +389,25 @@ if ($method === 'PATCH') {
     }
 
     $items = is_array($input['items'] ?? null) ? $input['items'] : [];
-    $all_or_nothing = !empty($input['all_or_nothing']);
+    $all_or_nothing   = !empty($input['all_or_nothing']);
+    $permitir_negativo= parse_bool($input['permitir_negativo'] ?? false, false);
+    $hoy = date('Y-m-d');
 
     if (empty($items)) bad('No hay selección para aprobar/rechazar');
 
-    // Validar cabecera (debe estar en revisión)
+    // Validar cabecera (debe estar en revisión) y traer id_ff
     $h = pg_query_params(
         $conn,
-        "SELECT id_rendicion, estado FROM public.ff_rendiciones WHERE id_rendicion = $1 FOR UPDATE",
+        "SELECT id_rendicion, id_ff, estado
+           FROM public.ff_rendiciones
+          WHERE id_rendicion = $1
+          FOR UPDATE",
         [$id_rendicion]
     );
     if (!$h || !pg_num_rows($h)) bad('Rendición no existe', 404);
     $rd = pg_fetch_assoc($h);
     if ($rd['estado'] !== 'En revisión') bad('Sólo se puede aprobar/rechazar una rendición en revisión');
+    $id_ff = (int)$rd['id_ff'];
 
     pg_query($conn, 'BEGIN');
 
@@ -413,7 +423,7 @@ if ($method === 'PATCH') {
         $id_item   = (int)($x['id_item'] ?? 0);
         $aprobar   = (bool)($x['aprobar'] ?? false);
         $rawImpta  = $x['imputa_libro'] ?? null;              // "", null, "true", true, etc.
-        $imputaTxt = to_bool_text_or_null($rawImpta);         // 'true'/'false'/null
+        $imptaTxt  = to_bool_text_or_null($rawImpta);         // 'true'/'false'/null
         $motivo    = trim($x['motivo_rechazo'] ?? '');
 
         if ($id_item <= 0) {
@@ -460,7 +470,7 @@ if ($method === 'PATCH') {
             continue;
         }
 
-        // Aprobación: actualizar estado e imputa_libro (sólo si vino algo interpretable)
+        // Aprobación
         $sqlUpd = "
             UPDATE public.ff_rendiciones_items
                SET estado_item='Aprobado',
@@ -472,7 +482,7 @@ if ($method === 'PATCH') {
                    END,
                    updated_at = now()
              WHERE id_item = $2";
-        $upd = pg_query_params($conn, $sqlUpd, [$imputaTxt, $id_item]); // <- corregido
+        $upd = pg_query_params($conn, $sqlUpd, [$imptaTxt, $id_item]);
         if (!$upd) {
             if ($all_or_nothing) { pg_query($conn, 'ROLLBACK'); bad("No se pudo aprobar ítem $id_item", 500); }
             $result['errores'][] = ['id_item'=>$id_item, 'error'=>'Fallo al aprobar'];
@@ -524,11 +534,98 @@ if ($method === 'PATCH') {
     );
     if (!$upH) { pg_query($conn, 'ROLLBACK'); bad('No se pudo actualizar estado de la rendición', 500); }
 
+    /* =============================
+       DESCUENTO IDPOTENTE DE FF
+       =============================
+       total_aprob_actual = SUM(total de items Aprobado)
+       mov_previos        = SUM(monto en fondo_fijo_mov donde tipo='RENDICION', signo=-1, ref_tabla='rendicion', ref_id=id_rendicion)
+       delta = total_aprob_actual - mov_previos
+       si delta > 0 => descontar FF por delta e insertar movimiento
+    */
+    // 1) total aprobado de la rendición
+    $stTot = pg_query_params(
+        $conn,
+        "SELECT COALESCE(SUM(total),0) AS total_aprob
+           FROM public.ff_rendiciones_items
+          WHERE id_rendicion=$1 AND estado_item='Aprobado'",
+        [$id_rendicion]
+    );
+    if (!$stTot) { pg_query($conn, 'ROLLBACK'); bad('No se pudo calcular total aprobado de la rendición', 500); }
+    $total_aprobado = (float)pg_fetch_result($stTot, 0, 0);
+
+    // 2) lo ya descontado en FF por esta rendición
+    $stMov = pg_query_params(
+        $conn,
+        "SELECT COALESCE(SUM(monto),0) AS ya_descontado
+           FROM public.fondo_fijo_mov
+          WHERE ref_tabla='rendicion' AND ref_id=$1 AND tipo='RENDICION' AND signo=-1",
+        [$id_rendicion]
+    );
+    $ya_descontado = $stMov ? (float)pg_fetch_result($stMov, 0, 0) : 0.0;
+
+    $delta = $total_aprobado - $ya_descontado;
+
+    if ($delta > 0.000001) {
+        // 3) Lock y verificar saldo
+        $ffLock = pg_query_params(
+            $conn,
+            "SELECT id_ff, COALESCE(saldo_actual,0) AS saldo_actual
+               FROM public.fondo_fijo
+              WHERE id_ff=$1
+              FOR UPDATE",
+            [$id_ff]
+        );
+        if (!$ffLock || !pg_num_rows($ffLock)) { pg_query($conn, 'ROLLBACK'); bad('Fondo Fijo no encontrado', 404); }
+        $FF = pg_fetch_assoc($ffLock);
+        $saldo_actual = (float)$FF['saldo_actual'];
+
+        if (!$permitir_negativo && $delta > $saldo_actual + 0.000001) {
+            pg_query($conn, 'ROLLBACK');
+            bad('Saldo insuficiente en el Fondo Fijo para aprobar. Saldo: '.number_format($saldo_actual,2,'.',',').' / Requiere: '.number_format($delta,2,'.',','));
+        }
+
+        // 4) Insertar movimiento de egreso
+        $desc = 'Rendición #'.$id_rendicion.' (aprobación lote)';
+        $insFFMov = pg_query_params(
+            $conn,
+            "INSERT INTO public.fondo_fijo_mov
+               (id_ff, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at, created_by)
+             VALUES
+               ($1, $2::date, 'RENDICION', -1, $3, $4, 'rendicion', $5, now(), $6)",
+            [$id_ff, $hoy, $delta, $desc, $id_rendicion, $_SESSION['nombre_usuario']]
+        );
+        if (!$insFFMov) { pg_query($conn, 'ROLLBACK'); bad('No se pudo registrar el movimiento de Fondo Fijo', 500); }
+
+        // 5) Actualizar saldo del Fondo Fijo
+        if ($permitir_negativo) {
+            $updFF = pg_query_params(
+                $conn,
+                "UPDATE public.fondo_fijo
+                    SET saldo_actual = COALESCE(saldo_actual,0) - $1,
+                        updated_at = now()
+                  WHERE id_ff = $2",
+                [$delta, $id_ff]
+            );
+        } else {
+            $updFF = pg_query_params(
+                $conn,
+                "UPDATE public.fondo_fijo
+                    SET saldo_actual = GREATEST(COALESCE(saldo_actual,0) - $1, 0),
+                        updated_at = now()
+                  WHERE id_ff = $2",
+                [$delta, $id_ff]
+            );
+        }
+        if (!$updFF) { pg_query($conn, 'ROLLBACK'); bad('No se pudo actualizar el saldo del Fondo Fijo', 500); }
+    }
+
     pg_query($conn, 'COMMIT');
 
     ok([
         'id_rendicion'     => $id_rendicion,
+        'id_ff'            => $id_ff,
         'estado'           => $nuevo_estado,
+        'descuento_delta'  => round(max($delta,0), 2),
         'resumen'          => $result
     ]);
 }

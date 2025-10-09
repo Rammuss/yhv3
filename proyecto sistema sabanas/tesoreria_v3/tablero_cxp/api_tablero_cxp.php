@@ -4,22 +4,12 @@
  * - Detalle por id_cxp (incluye cuotas, OPs y movimientos)
  * - Listado paginado con KPIs de cuotas (próximo venc., vencido, saldo de cuotas abiertas)
  *
- * Parámetros (query):
- *   id_cxp                -> si viene, devuelve el detalle de esa CxP
- *   with_movimientos      -> bool (default true)
- *   with_cuotas           -> bool (default true)
- *   with_totals           -> bool (default false) agrega summary en el listado
- *   incluir_canceladas    -> bool (default false) incluye CxP cerradas/anuladas
- *   solo_vencidas         -> bool (default false) usa c.fecha_venc de la madre
- *   solo_vencidas_cuotas  -> bool (default false) usa vencimiento de cuotas
- *   cuota_venc_desde      -> yyyy-mm-dd (filtra por venc. de cuotas >=)
- *   cuota_venc_hasta      -> yyyy-mm-dd (filtra por venc. de cuotas <=)
- *   estado                -> coma separada (Pendiente,Parcial,Cancelada,Anulada)
- *   q                     -> texto libre (proveedor, ruc, nro doc, obs factura)
- *   id_proveedor, id_sucursal, moneda, condicion
- *   fecha_desde, fecha_hasta  -> por fecha_emision de la factura
- *   venc_desde, venc_hasta    -> por fecha_venc de la madre
- *   page, page_size
+ * Cambios:
+ *  - LEFT JOIN a factura_compra_cab (incluye CxP sin factura: reposición FF)
+ *  - Búsqueda q incluye c.observacion
+ *  - Fechas por COALESCE(f.fecha_emision, c.fecha_emision)
+ *  - Filtros nuevos: solo_ff, solo_sin_factura, excluir_ff
+ *  - Flag es_ff en la respuesta
  */
 
 session_start();
@@ -62,10 +52,14 @@ function parse_date(?string $value): ?string {
     if (!$value) return null;
     return preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) ? $value : null;
 }
+function es_ff_row(array $r): bool {
+    // Heurística: id_factura NULL o la observación arranca con “Reposición FF”
+    return ($r['id_factura'] === null || (isset($r['observacion']) && stripos($r['observacion'], 'Reposición FF') === 0));
+}
 
 /* -------------------- detalle por id_cxp ------------------- */
 if ($idCxp > 0) {
-    // header CxP
+    // header CxP (LEFT JOIN para incluir CxP sin factura - reposición FF)
     $sql = "
         SELECT c.id_cxp,
                c.id_factura,
@@ -91,9 +85,9 @@ if ($idCxp > 0) {
                p.nombre        AS proveedor_nombre,
                p.ruc           AS proveedor_ruc
         FROM public.cuenta_pagar c
-        JOIN public.factura_compra_cab f ON f.id_factura = c.id_factura
-        JOIN public.proveedores p        ON p.id_proveedor = c.id_proveedor
-        LEFT JOIN public.sucursales s    ON s.id_sucursal = f.id_sucursal
+        LEFT JOIN public.factura_compra_cab f ON f.id_factura = c.id_factura
+        JOIN public.proveedores p             ON p.id_proveedor = c.id_proveedor
+        LEFT JOIN public.sucursales s         ON s.id_sucursal = f.id_sucursal
         WHERE c.id_cxp = $1
         LIMIT 1
     ";
@@ -228,17 +222,19 @@ if ($idCxp > 0) {
         }
     }
 
+    $esFF = es_ff_row($header);
+
     ok([
         'cxp' => [
             'id_cxp'        => (int)$header['id_cxp'],
-            'id_factura'    => (int)$header['id_factura'],
+            'id_factura'    => $header['id_factura'] !== null ? (int)$header['id_factura'] : null,
             'proveedor'     => [
                 'id'     => (int)$header['id_proveedor'],
                 'nombre' => $header['proveedor_nombre'],
                 'ruc'    => $header['proveedor_ruc'],
             ],
             'documento'     => [
-                'numero'   => $header['numero_documento'],
+                'numero'   => $header['numero_documento'] ?: $header['observacion'],
                 'timbrado' => $header['timbrado_numero'],
             ],
             'fecha_emision' => $header['fecha_emision'],
@@ -251,7 +247,7 @@ if ($idCxp > 0) {
             'factura'       => [
                 'fecha'          => $header['factura_fecha'],
                 'moneda'         => $header['factura_moneda'],
-                'total_factura'  => (float)$header['total_factura'],
+                'total_factura'  => $header['total_factura'] !== null ? (float)$header['total_factura'] : null,
                 'condicion'      => $header['condicion'],
                 'cuotas'         => $header['cuotas'] !== null ? (int)$header['cuotas'] : null,
                 'dias_plazo'     => $header['dias_plazo'] !== null ? (int)$header['dias_plazo'] : null,
@@ -261,6 +257,7 @@ if ($idCxp > 0) {
                 'id'     => $header['id_sucursal'] !== null ? (int)$header['id_sucursal'] : null,
                 'nombre' => $header['sucursal_nombre'],
             ],
+            'es_ff'         => $esFF,
             // agregados de cuotas
             'cuotas_info' => $agg ? [
                 'total'            => (int)$agg['cuotas_total'],
@@ -294,6 +291,11 @@ foreach ($estadoFiltroLista as $estadoVal) {
 }
 $includeCanceladas = parse_bool($_GET['incluir_canceladas'] ?? false, false);
 
+// NUEVOS filtros
+$soloFF          = parse_bool($_GET['solo_ff'] ?? null, false);
+$soloSinFactura  = parse_bool($_GET['solo_sin_factura'] ?? null, false);
+$excluirFF       = parse_bool($_GET['excluir_ff'] ?? null, false);
+
 $where  = [];
 $params = [];
 $idx    = 1;
@@ -304,10 +306,16 @@ if (!$includeCanceladas && !$estadoIncluyeCanceladas) {
     $where[] = "c.saldo_actual > 0";
 }
 
-// búsqueda libre
+// búsqueda libre: incluye c.observacion (para CxP sin factura)
 $q = trim($_GET['q'] ?? '');
 if ($q !== '') {
-    $where[] = "(p.nombre ILIKE $" . $idx . " OR p.ruc ILIKE $" . $idx . " OR f.numero_documento ILIKE $" . $idx . " OR COALESCE(f.observacion, '') ILIKE $" . $idx . ")";
+    $where[] = "("
+             . "p.nombre ILIKE $" . $idx
+             . " OR p.ruc ILIKE $" . $idx
+             . " OR COALESCE(f.numero_documento,'') ILIKE $" . $idx
+             . " OR COALESCE(f.observacion,'') ILIKE $" . $idx
+             . " OR COALESCE(c.observacion,'') ILIKE $" . $idx
+             . ")";
     $params[] = '%' . $q . '%'; $idx++;
 }
 
@@ -324,9 +332,9 @@ if ($estadoFiltroLista) {
     $where[] = 'c.estado IN (' . implode(',', $placeholders) . ')';
 }
 
-// fechas por factura
-if (($fechaDesde = parse_date($_GET['fecha_desde'] ?? null))) { $where[] = "f.fecha_emision >= $" . $idx; $params[] = $fechaDesde; $idx++; }
-if (($fechaHasta = parse_date($_GET['fecha_hasta'] ?? null))) { $where[] = "f.fecha_emision <= $" . $idx; $params[] = $fechaHasta; $idx++; }
+// fechas por EMISIÓN: usar COALESCE(f.fecha_emision, c.fecha_emision)
+if (($fechaDesde = parse_date($_GET['fecha_desde'] ?? null))) { $where[] = "COALESCE(f.fecha_emision, c.fecha_emision) >= $" . $idx; $params[] = $fechaDesde; $idx++; }
+if (($fechaHasta = parse_date($_GET['fecha_hasta'] ?? null))) { $where[] = "COALESCE(f.fecha_emision, c.fecha_emision) <= $" . $idx; $params[] = $fechaHasta; $idx++; }
 
 // vencimiento madre
 if (($vencDesde = parse_date($_GET['venc_desde'] ?? null))) { $where[] = "c.fecha_venc >= $" . $idx; $params[] = $vencDesde; $idx++; }
@@ -351,14 +359,25 @@ if (($vencHastaCuota = parse_date($_GET['cuota_venc_hasta'] ?? null))) {
     $params[] = $vencHastaCuota; $idx++;
 }
 
+/* -------- filtros NUEVOS: FF / sin factura -------- */
+$condFF = "(c.id_factura IS NULL OR c.observacion ILIKE 'Reposición FF%')";
+if ($soloFF) {
+    $where[] = $condFF;
+} elseif ($soloSinFactura) {
+    $where[] = "c.id_factura IS NULL";
+} elseif ($excluirFF) {
+    $where[] = "NOT " . $condFF;
+}
+
 $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
 // FROM base + joins LATERAL (último mov, OPs y CUOTAS)
+// LEFT JOIN a factura para incluir reposiciones
 $fromSql = "
     FROM public.cuenta_pagar c
-    JOIN public.factura_compra_cab f ON f.id_factura = c.id_factura
-    JOIN public.proveedores p        ON p.id_proveedor = c.id_proveedor
-    LEFT JOIN public.sucursales s    ON s.id_sucursal = f.id_sucursal
+    LEFT JOIN public.factura_compra_cab f ON f.id_factura = c.id_factura
+    JOIN public.proveedores p             ON p.id_proveedor = c.id_proveedor
+    LEFT JOIN public.sucursales s         ON s.id_sucursal = f.id_sucursal
 
     LEFT JOIN LATERAL (
         SELECT m.fecha, m.monto, m.signo, m.ref_tipo
@@ -407,7 +426,7 @@ $sqlList = "
            c.observacion,
            c.moneda,
            f.numero_documento,
-           f.fecha_emision AS factura_fecha,
+           COALESCE(f.fecha_emision, c.fecha_emision) AS factura_fecha,
            f.moneda        AS factura_moneda,
            f.total_factura,
            f.condicion,
@@ -478,16 +497,17 @@ $totalRows = (int)$meta['total_rows'];
 // construir respuesta
 $data = [];
 while ($row = pg_fetch_assoc($stmtList)) {
+    $esFF = ($row['id_factura'] === null) || (isset($row['observacion']) && stripos($row['observacion'], 'Reposición FF') === 0);
     $data[] = [
         'id_cxp'        => (int)$row['id_cxp'],
-        'id_factura'    => (int)$row['id_factura'],
+        'id_factura'    => $row['id_factura'] !== null ? (int)$row['id_factura'] : null,
         'proveedor'     => [
             'id'     => (int)$row['id_proveedor'],
             'nombre' => $row['proveedor_nombre'],
             'ruc'    => $row['proveedor_ruc'],
         ],
         'documento'     => [
-            'numero'   => $row['numero_documento'],
+            'numero'   => $row['numero_documento'] ?: $row['observacion'],
             'timbrado' => $row['timbrado_numero'],
         ],
         'fecha_emision' => $row['factura_fecha'],
@@ -496,7 +516,7 @@ while ($row = pg_fetch_assoc($stmtList)) {
         'vencida'       => $row['vencida'] === 't',
         'condicion'     => $row['condicion'],
         'moneda'        => $row['moneda'],
-        'total_factura' => (float)$row['total_factura'],
+        'total_factura' => $row['total_factura'] !== null ? (float)$row['total_factura'] : null,
         'total_cxp'     => (float)$row['total_cxp'],
         'saldo_actual'  => (float)$row['saldo_actual'],
         'estado'        => $row['estado'],
@@ -505,6 +525,7 @@ while ($row = pg_fetch_assoc($stmtList)) {
             'id'     => $row['id_sucursal'] !== null ? (int)$row['id_sucursal'] : null,
             'nombre' => $row['sucursal_nombre'],
         ],
+        'es_ff'         => $esFF,
         'ultimo_movimiento' => $row['ultimo_mov_fecha'] ? [
             'fecha' => $row['ultimo_mov_fecha'],
             'monto' => (float)$row['ultimo_mov_monto'],

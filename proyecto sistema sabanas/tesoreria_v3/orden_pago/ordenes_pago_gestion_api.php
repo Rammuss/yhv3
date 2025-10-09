@@ -2,8 +2,13 @@
 /**
  * Gestión de Órdenes de Pago (lectura, entrega, impresión, anulación)
  * GET   /ordenes_pago_gestion_api.php           -> listar órdenes (filtros)
- * GET   /ordenes_pago_gestion_api.php?id=123    -> detalle
+ * GET   /ordenes_pago_gestion_api.php?id=123    -> detalle (incluye cuotas abiertas por CxP)
  * PATCH /ordenes_pago_gestion_api.php?id=123    -> acciones: entrega, anular, imprimir
+ *
+ * Requiere en public.cuenta_pagar:
+ *   es_ff boolean DEFAULT false
+ *   id_ff integer
+ *   id_rendicion integer
  */
 
 session_start();
@@ -110,28 +115,42 @@ function find_cuotas_table($conn): array {
         $meta = ['table' => 'public.cuenta_pagar_det', 'saldo_col' => 'saldo', 'obs_col' => 'observacion', 'estado_col' => 'estado'];
         return $meta;
     }
-    // Ensure a return value for all paths
     bad('No se encontró la tabla de cuotas (cuenta_det_x_pagar / cuenta_pagar_det).', 500);
-    return []; // This line ensures all paths return a value (unreachable, but required for strict checks)
+    return [];
 }
 
-function fetch_cuota($conn, int $id_cxp_det, bool $forUpdate = false): array {
+/** Lista cuotas abiertas de una CxP ordenadas FIFO (vencimiento, nro). */
+function fetch_cuotas_abiertas_by_cxp($conn, int $id_cxp): array {
     $m = find_cuotas_table($conn);
-    $lock = $forUpdate ? 'FOR UPDATE' : '';
     $sql = "
-        SELECT id_cxp_det, id_cxp,
-               COALESCE({$m['saldo_col']},0) AS saldo,
-               {$m['estado_col']} AS estado,
-               COALESCE({$m['obs_col']},'') AS obs
-        FROM {$m['table']}
-        WHERE id_cxp_det = $1
-        $lock
+      SELECT id_cxp_det,
+             id_cxp,
+             COALESCE({$m['saldo_col']},0) AS saldo,
+             {$m['estado_col']} AS estado,
+             COALESCE({$m['obs_col']},'') AS obs,
+             CASE WHEN to_regclass('public.cuenta_det_x_pagar') IS NOT NULL THEN fecha_venc ELSE NULL END AS fecha_venc,
+             CASE WHEN to_regclass('public.cuenta_det_x_pagar') IS NOT NULL THEN nro_cuota ELSE NULL END AS nro_cuota
+      FROM {$m['table']}
+      WHERE id_cxp = $1
+        AND {$m['estado_col']} IN ('Pendiente','Parcial')
+        AND COALESCE({$m['saldo_col']},0) > 0
+      ORDER BY fecha_venc NULLS LAST, nro_cuota NULLS LAST, id_cxp_det ASC
     ";
-    $st = pg_query_params($conn, $sql, [$id_cxp_det]);
-    if (!$st || !pg_num_rows($st)) bad("Cuota $id_cxp_det no encontrada", 404);
-    $row = pg_fetch_assoc($st);
-    $row['_meta'] = $m;
-    return $row;
+    $st = pg_query_params($conn, $sql, [$id_cxp]);
+    if (!$st) return [];
+    $out = [];
+    while ($r = pg_fetch_assoc($st)) {
+        $out[] = [
+            'id_cxp_det' => (int)$r['id_cxp_det'],
+            'id_cxp'     => (int)$r['id_cxp'],
+            'nro'        => $r['nro_cuota'] !== null ? (int)$r['nro_cuota'] : null,
+            'fecha_venc' => $r['fecha_venc'],
+            'saldo'      => (float)$r['saldo'],
+            'estado'     => $r['estado'],
+            'obs'        => $r['obs'],
+        ];
+    }
+    return $out;
 }
 
 /** Actualiza observación y/o estado de una cuota. */
@@ -151,29 +170,30 @@ function update_cuota_obs_estado($conn, int $id_cxp_det, ?string $newObs, ?strin
 
 /** Descuenta/repone saldo de la cuota y setea estado según saldo (>0 Parcial/Pendiente, 0 Cancelada). */
 function apply_cuota_saldo($conn, int $id_cxp_det, float $deltaSigno): array {
-    $c = fetch_cuota($conn, $id_cxp_det, true);
-    $m = $c['_meta'];
+    $m = find_cuotas_table($conn);
+    $st = pg_query_params($conn, "
+        SELECT id_cxp_det, id_cxp, COALESCE({$m['saldo_col']},0) AS saldo, {$m['estado_col']} AS estado,
+               COALESCE({$m['obs_col']},'') AS obs
+        FROM {$m['table']} WHERE id_cxp_det=$1 FOR UPDATE", [$id_cxp_det]);
+    if (!$st || !pg_num_rows($st)) bad("Cuota $id_cxp_det no encontrada", 404);
+    $c = pg_fetch_assoc($st);
 
-    $newSaldo = max(((float)$c['saldo']) + $deltaSigno, 0); // deltaSigno negativo descuenta; positivo repone
-    // Si descontamos (delta < 0): estado Entregada/Cancelada. Si reponemos (delta > 0): Pendiente/Parcial.
-    if ($deltaSigno < 0) {
-        $newEstado = $newSaldo <= 0 ? 'Cancelada' : 'Entregada';
-    } else {
-        $newEstado = $newSaldo > 0 ? 'Pendiente' : 'Cancelada';
-    }
+    $newSaldo = max(((float)$c['saldo']) + $deltaSigno, 0);
+    $newEstado = $deltaSigno < 0
+        ? ($newSaldo <= 0 ? 'Cancelada' : 'Entregada')
+        : ($newSaldo > 0 ? 'Pendiente' : 'Cancelada');
 
-    $sql = "UPDATE {$m['table']} SET {$m['saldo_col']}=$1, {$m['estado_col']}=$2 WHERE id_cxp_det=$3";
-    $ok  = pg_query_params($conn, $sql, [$newSaldo, $newEstado, $id_cxp_det]);
+    $ok  = pg_query_params($conn, "UPDATE {$m['table']} SET {$m['saldo_col']}=$1, {$m['estado_col']}=$2 WHERE id_cxp_det=$3",
+        [$newSaldo, $newEstado, $id_cxp_det]);
     if (!$ok) bad("No se pudo actualizar saldo de la cuota $id_cxp_det", 500);
 
-    return ['id_cxp' => (int)$c['id_cxp'], 'old_saldo' => (float)$c['saldo'], 'new_saldo' => $newSaldo, 'estado' => $newEstado];
+    return ['id_cxp' => (int)$c['id_cxp'], 'old_saldo' => (float)$c['saldo'], 'new_saldo' => $newSaldo, 'estado' => $newEstado, 'obs' => $c['obs']];
 }
 
 /** Recalcula estado de la cabecera CxP; si saldo_actual = 0, fuerza Cancelada. */
 function recalc_cxp_estado($conn, int $id_cxp): void {
     $m = find_cuotas_table($conn);
 
-    // saldo_actual de la cabecera
     $stCab = pg_query_params($conn, "SELECT saldo_actual FROM public.cuenta_pagar WHERE id_cxp=$1 FOR UPDATE", [$id_cxp]);
     if (!$stCab || !pg_num_rows($stCab)) bad('CxP no encontrada', 500);
     $saldoActual = (float)pg_fetch_result($stCab, 0, 0);
@@ -183,7 +203,6 @@ function recalc_cxp_estado($conn, int $id_cxp): void {
         return;
     }
 
-    // Cuotas abiertas
     $sqlOpen = "
         SELECT COUNT(*)::int AS abiertas
         FROM {$m['table']}
@@ -202,37 +221,89 @@ function recalc_cxp_estado($conn, int $id_cxp): void {
 /** -------- GET -------- */
 if ($method === 'GET') {
     $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+
     if ($id > 0) {
         $head = fetch_op($conn, $id, false);
         if (!$head) bad('Orden de pago no encontrada', 404);
 
+        // Detalle de CxP de la OP (soporta con/sin factura)
         $sqlDet = "
-            SELECT opd.id_cxp,
-                   f.numero_documento,
-                   cxp.fecha_venc,
-                   cxp.saldo_actual,
-                   opd.monto_aplicado,
-                   opd.moneda
-            FROM public.orden_pago_det opd
-            JOIN public.cuenta_pagar cxp ON cxp.id_cxp = opd.id_cxp
-            JOIN public.factura_compra_cab f ON f.id_factura = cxp.id_factura
-            WHERE opd.id_orden_pago = $1
-            ORDER BY opd.id_det
+          SELECT
+            opd.id_cxp,
+            COALESCE(f.numero_documento, cxp.observacion, '—') AS numero_documento,
+            cxp.fecha_venc,
+            cxp.saldo_actual,
+            opd.monto_aplicado,
+            opd.moneda
+          FROM public.orden_pago_det opd
+          JOIN public.cuenta_pagar cxp
+            ON cxp.id_cxp = opd.id_cxp
+          LEFT JOIN public.factura_compra_cab f
+            ON f.id_factura = cxp.id_factura
+          WHERE opd.id_orden_pago = $1
+          ORDER BY opd.id_det
         ";
         $stmtDet = pg_query_params($conn, $sqlDet, [$id]);
         if (!$stmtDet) bad('Error al obtener detalle', 500);
+
         $detalles = [];
         while ($row = pg_fetch_assoc($stmtDet)) {
+            $idCxp = (int)$row['id_cxp'];
+
+            // cuotas abiertas de esa CxP
+            $q = pg_query_params(
+              $conn,
+              "SELECT id_cxp_det, id_cxp, nro_cuota, fecha_venc,
+                      monto_cuota, saldo_cuota AS saldo, estado
+               FROM public.cuenta_det_x_pagar
+               WHERE id_cxp = $1
+                 AND estado IN ('Pendiente','Parcial')
+                 AND saldo_cuota > 0
+               ORDER BY fecha_venc ASC, nro_cuota ASC",
+              [$idCxp]
+            );
+            $cuotas = [];
+            $restante = (float)$row['monto_aplicado'];
+            $sugerido = [];
+
+            if ($q) {
+              while ($c = pg_fetch_assoc($q)) {
+                $cuotas[] = [
+                  'id_cxp_det' => (int)$c['id_cxp_det'],
+                  'nro'        => (int)$c['nro_cuota'],
+                  'venc'       => $c['fecha_venc'],
+                  'monto'      => (float)$c['monto_cuota'],
+                  'saldo'      => (float)$c['saldo'],
+                  'estado'     => $c['estado'],
+                ];
+                // sugerencia FIFO hasta cubrir el monto aplicado
+                if ($restante > 0) {
+                  $aplica = min($restante, (float)$c['saldo']);
+                  if ($aplica > 0) {
+                    $sugerido[] = [
+                      'id_cxp'     => $idCxp,
+                      'id_cxp_det' => (int)$c['id_cxp_det'],
+                      'monto'      => $aplica,
+                    ];
+                    $restante -= $aplica;
+                  }
+                }
+              }
+            }
+
             $detalles[] = [
-                'id_cxp'         => (int)$row['id_cxp'],
-                'numero'         => $row['numero_documento'],
-                'fecha_venc'     => $row['fecha_venc'],
-                'saldo_actual'   => (float)$row['saldo_actual'],
-                'monto_aplicado' => (float)$row['monto_aplicado'],
-                'moneda'         => $row['moneda'],
+              'id_cxp'         => $idCxp,
+              'numero'         => $row['numero_documento'],
+              'fecha_venc'     => $row['fecha_venc'],
+              'saldo_actual'   => (float)$row['saldo_actual'],
+              'monto_aplicado' => (float)$row['monto_aplicado'],
+              'moneda'         => $row['moneda'],
+              'cuotas_abiertas'=> $cuotas,
+              'sugerido'       => $sugerido,
             ];
         }
 
+        // Movimientos bancarios asociados a la OP
         $sqlMov = "
             SELECT id_mov, fecha, tipo, monto, signo, descripcion, created_at
             FROM public.cuenta_bancaria_mov
@@ -284,8 +355,8 @@ if ($method === 'GET') {
                 'fecha_cheque'   => $cheque['fecha_cheque'],
                 'fecha_entrega'  => $cheque['fecha_entrega'],
                 'recibido_por'   => $cheque['recibido_por'],
-                'ci'             => $cheque['ci'],
                 'observaciones'  => $cheque['observaciones'],
+                'ci'             => $cheque['ci'],
                 'impreso_at'     => $cheque['impreso_at'],
                 'impreso_por'    => $cheque['impreso_por'],
                 'id_chequera'    => $cheque['id_chequera'] !== null ? (int)$cheque['id_chequera'] : null,
@@ -362,7 +433,7 @@ if ($method === 'PATCH') {
     $input  = read_json();
     $accion = $input['accion'] ?? '';
 
-    /** ---------- ENTREGA (descuenta saldos + marca cuotas Entregada) ---------- */
+    /** ---------- ENTREGA (descuenta saldos + marca cuotas Entregada + acredita FF si corresponde) ---------- */
     if ($accion === 'entrega') {
         $fecha      = $input['fecha_entrega'] ?? date('Y-m-d');
         $recibido   = trim($input['recibido_por'] ?? '');
@@ -380,6 +451,20 @@ if ($method === 'PATCH') {
         if (!$op['cheque'] || $op['cheque']['estado'] !== 'Reservado') {
             pg_query($conn, 'ROLLBACK');
             bad('Sólo se puede registrar la entrega si el cheque está reservado.', 409);
+        }
+
+        // Evitar duplicar movimientos bancarios si la entrega ya fue registrada
+        $chkMov = pg_query_params(
+            $conn,
+            "SELECT COUNT(*) 
+               FROM public.cuenta_bancaria_mov 
+              WHERE ref_tabla = 'orden_pago' AND ref_id = $1 AND tipo = 'PAGO_OP'",
+            [$id]
+        );
+        if (!$chkMov) { pg_query($conn, 'ROLLBACK'); bad('No se pudo validar movimientos existentes', 500); }
+        if ((int)pg_fetch_result($chkMov, 0, 0) > 0) {
+            pg_query($conn, 'ROLLBACK');
+            bad('La orden ya posee un movimiento de pago registrado.', 409);
         }
 
         // 1) Cheque → Entregado
@@ -406,7 +491,7 @@ if ($method === 'PATCH') {
         $stmtCxp = pg_query_params($conn, "SELECT DISTINCT id_cxp FROM public.orden_pago_det WHERE id_orden_pago = $1", [$id]);
         if ($stmtCxp) { while ($r = pg_fetch_assoc($stmtCxp)) $cxpIds[(int)$r['id_cxp']] = true; }
 
-        // 4) Para cada cuota: tag, estado=Entregada y DESCONTAR saldos cuota + cabecera CxP. Inserta mov PAGO (-1)
+        // 4) Para cada cuota: tag, estado y descuento de saldos + MOV PAGO
         $marcadas = [];
         foreach ($cuotasEnt as $q) {
             $idCxp    = (int)($q['id_cxp'] ?? 0);
@@ -415,30 +500,32 @@ if ($method === 'PATCH') {
             if ($idCxp <= 0 || $idCxpDet <= 0 || $monto <= 0) { pg_query($conn, 'ROLLBACK'); bad('Cuota inválida en la entrega.', 422); }
             if (empty($cxpIds[$idCxp])) { pg_query($conn, 'ROLLBACK'); bad("La cuota $idCxpDet no pertenece a una CxP de esta OP.", 422); }
 
-            $c = fetch_cuota($conn, $idCxpDet, true);
-            if (!in_array($c['estado'], ['Pendiente','Parcial'], true) || (float)$c['saldo'] <= 0) {
+            $m = find_cuotas_table($conn);
+            $st = pg_query_params($conn, "
+                SELECT {$m['estado_col']} AS estado, COALESCE({$m['saldo_col']},0) AS saldo
+                FROM {$m['table']} WHERE id_cxp_det=$1 FOR UPDATE", [$idCxpDet]);
+            if (!$st || !pg_num_rows($st)) { pg_query($conn, 'ROLLBACK'); bad("Cuota $idCxpDet no encontrada.", 404); }
+            $cRow = pg_fetch_assoc($st);
+            if (!in_array($cRow['estado'], ['Pendiente','Parcial'], true) || (float)$cRow['saldo'] <= 0) {
                 pg_query($conn, 'ROLLBACK'); bad("La cuota $idCxpDet no está abierta o no tiene saldo.", 409);
             }
-            if ($monto > (float)$c['saldo'] + 0.000001) {
+            if ($monto > (float)$cRow['saldo'] + 0.000001) {
                 pg_query($conn, 'ROLLBACK'); bad("El monto excede el saldo de la cuota $idCxpDet.", 422);
             }
 
-            // Tag
             $tag = sprintf('[ENTREGADA OP #%d %s FE:%s M:%s]',
                 $id,
                 $op['cheque']['numero_cheque'] ? ('CH:' . $op['cheque']['numero_cheque']) : 'CH:-',
                 $fecha,
                 number_format($monto, 2, '.', '')
             );
-            $newObs = trim(($c['obs'] ?? '').' '.$tag);
 
-            // Descontar saldo de la cuota (delta negativo) y fijar estado (Entregada/Cancelada)
             $resCuota = apply_cuota_saldo($conn, $idCxpDet, -$monto);
+            $newObs = trim(($resCuota['obs'] ?? '').' '.$tag);
             if (!update_cuota_obs_estado($conn, $idCxpDet, $newObs, $resCuota['estado'])) {
                 pg_query($conn, 'ROLLBACK'); bad("No se pudo actualizar la cuota $idCxpDet.", 500);
             }
 
-            // Descontar saldo_actual de la CxP
             $uCxp = pg_query_params($conn,
                 "UPDATE public.cuenta_pagar
                  SET saldo_actual = GREATEST(saldo_actual - $1, 0)
@@ -447,40 +534,132 @@ if ($method === 'PATCH') {
             );
             if (!$uCxp) { pg_query($conn, 'ROLLBACK'); bad('No se pudo actualizar el saldo de la CxP', 500); }
 
-            // Movimiento en CxP (PAGO, signo -1)
             $insMov = pg_query_params(
-    $conn,
-    "INSERT INTO public.cuenta_pagar_mov
-       (id_proveedor, fecha, ref_tipo, ref_id, id_cxp,
-        concepto, signo, monto, moneda, created_at)
-     SELECT cxp.id_proveedor,
-            $1::date,              -- fecha
-            'PAGO',
-            $2::int,               -- ref_id = id OP
-            cxp.id_cxp,
-            CONCAT('Cheque entregado OP #', $3::text, ' cuota ', $4::int),
-            -1,
-            $5::numeric,           -- monto
-            cxp.moneda,
-            now()
-     FROM public.cuenta_pagar cxp
-     WHERE cxp.id_cxp = $6",
-    [
-      $fecha,         // $1
-      $id,            // $2  (ref_id INT)
-      $id,            // $3  (para texto en CONCAT)
-      $idCxpDet,      // $4
-      $monto,         // $5
-      $idCxp          // $6
-    ]
-);
-
+                $conn,
+                "INSERT INTO public.cuenta_pagar_mov
+                   (id_proveedor, fecha, ref_tipo, ref_id, id_cxp,
+                    concepto, signo, monto, moneda, created_at)
+                 SELECT cxp.id_proveedor,
+                        $1::date,
+                        'PAGO',
+                        $2::int,
+                        cxp.id_cxp,
+                        CONCAT('Cheque entregado OP #', $2::text, ' cuota ', $3::int),
+                        -1,
+                        $4::numeric,
+                        cxp.moneda,
+                        now()
+                 FROM public.cuenta_pagar cxp
+                 WHERE cxp.id_cxp = $5",
+                [$fecha, $id, $idCxpDet, $monto, $idCxp]
+            );
             if (!$insMov) { pg_query($conn, 'ROLLBACK'); bad('No se pudo registrar el movimiento en la cuenta por pagar', 500); }
 
-            // Recalcular estado de la CxP
             recalc_cxp_estado($conn, $idCxp);
 
             $marcadas[] = ['id_cxp'=>$idCxp, 'id_cxp_det'=>$idCxpDet, 'monto'=>$monto, 'estado'=>$resCuota['estado']];
+        }
+
+        /* =======================
+           5) MOVIMIENTOS BANCARIOS
+           ======================= */
+        $totalOperacion = (float)$op['total'];
+        if ($totalOperacion <= 0) {
+            pg_query($conn, 'ROLLBACK');
+            bad('El total de la orden es inválido.');
+        }
+        $numeroCheque = $op['cheque']['numero_cheque'] ?? '-';
+
+        $descLiberacion = sprintf('Liberación por entrega OP #%d Cheque #%s', $id, $numeroCheque);
+        $insLib = pg_query_params(
+            $conn,
+            "INSERT INTO public.cuenta_bancaria_mov
+               (id_cuenta_bancaria, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at)
+             VALUES ($1, $2::date, 'LIBERACION', 1, $3, $4, 'orden_pago', $5, now())",
+            [(int)$op['id_cuenta_bancaria'], $fecha, $totalOperacion, $descLiberacion, $id]
+        );
+        if (!$insLib) {
+            pg_query($conn, 'ROLLBACK');
+            bad('No se pudo registrar la liberación bancaria', 500);
+        }
+
+        $descPago = sprintf('Cheque emitido OP #%d Cheque #%s', $id, $numeroCheque);
+        $insPago = pg_query_params(
+            $conn,
+            "INSERT INTO public.cuenta_bancaria_mov
+               (id_cuenta_bancaria, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at)
+             VALUES ($1, $2::date, 'PAGO_OP', -1, $3, $4, 'orden_pago', $5, now())",
+            [(int)$op['id_cuenta_bancaria'], $fecha, $totalOperacion, $descPago, $id]
+        );
+        if (!$insPago) {
+            pg_query($conn, 'ROLLBACK');
+            bad('No se pudo registrar el movimiento de pago en banco', 500);
+        }
+
+        /* =======================
+           6) ACREDITAR FONDO FIJO
+           ======================= */
+        // total aplicado por CxP
+        $sumPorCxp = [];
+        foreach ($marcadas as $m) {
+            $sumPorCxp[$m['id_cxp']] = ($sumPorCxp[$m['id_cxp']] ?? 0) + (float)$m['monto'];
+        }
+
+        if ($sumPorCxp) {
+            // Traer id_ff solamente de CxP marcadas como FF (es_ff=true)
+            $placeholders = [];
+            $params = [];
+            $i = 1;
+            foreach (array_keys($sumPorCxp) as $idc) { $placeholders[] = '$'.$i; $params[] = (int)$idc; $i++; }
+
+            $sqlCxps = "
+              SELECT cxp.id_cxp, cxp.id_ff
+                FROM public.cuenta_pagar cxp
+               WHERE cxp.id_cxp IN (".implode(',', $placeholders).")
+                 AND cxp.es_ff = true
+                 AND cxp.id_ff IS NOT NULL
+            ";
+            $stCxps = pg_query_params($conn, $sqlCxps, $params);
+            if (!$stCxps) { pg_query($conn,'ROLLBACK'); bad('No se pudieron leer CxP FF para aplicar al Fondo Fijo',500); }
+
+            $porFF = []; // id_ff => monto
+            while ($cx = pg_fetch_assoc($stCxps)) {
+                $idc     = (int)$cx['id_cxp'];
+                $idFf    = (int)$cx['id_ff'];
+                $montoAp = (float)($sumPorCxp[$idc] ?? 0);
+                if ($idFf > 0 && $montoAp > 0) {
+                    $porFF[$idFf] = ($porFF[$idFf] ?? 0) + $montoAp;
+                }
+            }
+
+            // acreditar FF + movimiento
+            if ($porFF) {
+                $numCheque = ($op['cheque']['numero_cheque'] ?? '');
+                foreach ($porFF as $idFf => $montoRepo) {
+                    // actualizar saldo_actual
+                    $okFf = pg_query_params(
+                        $conn,
+                        "UPDATE public.fondo_fijo
+                           SET saldo_actual = COALESCE(saldo_actual,0) + $1,
+                               updated_at = now()
+                         WHERE id_ff = $2",
+                        [$montoRepo, $idFf]
+                    );
+                    if (!$okFf) { pg_query($conn,'ROLLBACK'); bad('No se pudo actualizar saldo del Fondo Fijo',500); }
+
+                    // movimiento de reposición
+                    $desc = 'Reposición FF via OP #'.$id.( $numCheque ? ' · Cheque #'.$numCheque : '' );
+                    $insFFMov = pg_query_params(
+                        $conn,
+                        "INSERT INTO public.fondo_fijo_mov
+                           (id_ff, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at, created_by)
+                         VALUES
+                           ($1, $2::date, 'REPOSICION', 1, $3, $4, 'orden_pago', $5, now(), $6)",
+                        [$idFf, $fecha, $montoRepo, $desc, $id, $_SESSION['nombre_usuario']]
+                    );
+                    if (!$insFFMov) { pg_query($conn,'ROLLBACK'); bad('No se pudo registrar el movimiento en Fondo Fijo',500); }
+                }
+            }
         }
 
         pg_query($conn, 'COMMIT');
@@ -491,165 +670,183 @@ if ($method === 'PATCH') {
         ]);
     }
 
-    /** ---------- ANULAR (libera reserva + revierte saldos/estados/etiquetas) ---------- */
+    /** ---------- ANULAR (reversa banco, cuotas y también Fondo Fijo si se había acreditado) ---------- */
     if ($accion === 'anular') {
-    $motivo = trim($input['motivo'] ?? '');
+        $motivo = trim($input['motivo'] ?? '');
 
-    pg_query($conn, 'BEGIN');
-    $op = fetch_op($conn, $id, true);
-    if (!$op) { pg_query($conn, 'ROLLBACK'); bad('Orden no encontrada', 404); }
-    if (!$op['cheque']) { pg_query($conn, 'ROLLBACK'); bad('La orden no tiene cheque asociado', 409); }
+        pg_query($conn, 'BEGIN');
+        $op = fetch_op($conn, $id, true);
+        if (!$op) { pg_query($conn, 'ROLLBACK'); bad('Orden no encontrada', 404); }
+        if (!$op['cheque']) { pg_query($conn, 'ROLLBACK'); bad('La orden no tiene cheque asociado', 409); }
 
-    // Permitimos anular si NO está compensado (estados esperados)
-    $cheqEstado = $op['cheque']['estado'];
-    $opEstado   = $op['estado'];
-    if (!in_array($cheqEstado, ['Reservado','Entregado'], true) || !in_array($opEstado, ['Reservada','Entregada'], true)) {
-        pg_query($conn, 'ROLLBACK');
-        bad('Sólo se puede anular una orden con cheque no compensado (Reservado/Entregado).', 409);
-    }
-
-    // 1) Movimiento de LIBERACIÓN en banco
-    $desc = sprintf('Liberación reserva OP #%d Cheque #%s', $op['id_orden_pago'], $op['cheque']['numero_cheque']);
-    $insMov = pg_query_params(
-        $conn,
-        "INSERT INTO public.cuenta_bancaria_mov
-            (id_cuenta_bancaria, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at)
-         VALUES ($1, current_date, 'LIBERACION', 1, $2, $3, 'orden_pago', $4, now())",
-        [(int)$op['id_cuenta_bancaria'], (float)$op['total'], $desc, $id]
-    );
-    if (!$insMov) { pg_query($conn, 'ROLLBACK'); bad('No se pudo liberar la reserva bancaria', 500); }
-
-    // 2) Cheque → Anulado
-    $updCheque = pg_query_params(
-        $conn,
-        "UPDATE public.cheques
-         SET estado='Anulado',
-             observaciones = CASE WHEN $1 <> '' THEN CONCAT(COALESCE(observaciones,''),' | ', $1) ELSE observaciones END,
-             updated_at = now()
-         WHERE id=$2",
-        [$motivo, (int)$op['cheque']['id']]
-    );
-    if (!$updCheque) { pg_query($conn, 'ROLLBACK'); bad('No se pudo actualizar el cheque', 500); }
-
-    // 3) OP → Anulada
-    $updOP = pg_query_params(
-        $conn,
-        "UPDATE public.orden_pago_cab
-         SET estado='Anulada',
-             observacion = CASE WHEN $1 <> '' THEN CONCAT(COALESCE(observacion,''),' | Anulación: ',$1) ELSE observacion END
-         WHERE id_orden_pago=$2",
-        [$motivo, $id]
-    );
-    if (!$updOP) { pg_query($conn, 'ROLLBACK'); bad('No se pudo actualizar la orden', 500); }
-
-    // 4) Revertir cuotas marcadas con el tag [ENTREGADA OP #id ... M:xxxxx]
-    //    Localizamos por patrón en la observación y revertimos saldos.
-    $pattern = '\\[ENTREGADA OP #' . (int)$id . '[^\\]]*\\]';
-    $sqlSel = "
-        SELECT id_cxp_det, id_cxp,
-               COALESCE(saldo_cuota,0) AS saldo_cuota,
-                COALESCE(observacion,'') AS obs
-        FROM public.cuenta_det_x_pagar
-        WHERE observacion ~ $1
-        FOR UPDATE
-    ";
-    $stC = pg_query_params($conn, $sqlSel, [$pattern]);
-    if ($stC === false) { pg_query($conn, 'ROLLBACK'); bad('No se pudo localizar cuotas comprometidas', 500); }
-
-    while ($c = pg_fetch_assoc($stC)) {
-        $idCxpDet = (int)$c['id_cxp_det'];
-        $idCxp    = (int)$c['id_cxp'];
-        $obsOld   = $c['obs'];
-
-        // Extraer monto del tag (M:###.##)
-        $monto = 0.0;
-        if (preg_match('/M:([0-9]+(?:\.[0-9]{1,2})?)/', $obsOld, $mm)) {
-            $monto = (float)$mm[1];
+        $cheqEstado = $op['cheque']['estado'];
+        $opEstado   = $op['estado'];
+        if (!in_array($cheqEstado, ['Reservado','Entregado'], true) || !in_array($opEstado, ['Reservada','Entregada'], true)) {
+            pg_query($conn, 'ROLLBACK');
+            bad('Sólo se puede anular una orden con cheque no compensado (Reservado/Entregado).', 409);
         }
 
-        // Limpiar tag en obs
-        $cleanObs = trim(preg_replace("/$pattern/", '', $obsOld));
-        $obsToSave = ($cleanObs === '') ? null : $cleanObs;
+        // 0) Revertir Fondo Fijo si hubo reposición por esta OP (busco por ref_tabla/ref_id)
+        $stFFMov = pg_query_params(
+            $conn,
+            "SELECT id_ff, SUM(monto) AS total
+               FROM public.fondo_fijo_mov
+              WHERE ref_tabla='orden_pago' AND ref_id=$1 AND tipo='REPOSICION'
+              GROUP BY id_ff",
+            [$id]
+        );
+        if ($stFFMov && pg_num_rows($stFFMov) > 0) {
+            while ($r = pg_fetch_assoc($stFFMov)) {
+                $idFf = (int)$r['id_ff'];
+                $tot  = (float)$r['total'];
+                if ($idFf > 0 && $tot > 0) {
+                    // bajar saldo
+                    $okFf = pg_query_params(
+                        $conn,
+                        "UPDATE public.fondo_fijo
+                           SET saldo_actual = GREATEST(COALESCE(saldo_actual,0) - $1, 0),
+                               updated_at = now()
+                         WHERE id_ff = $2",
+                        [$tot, $idFf]
+                    );
+                    if (!$okFf) { pg_query($conn,'ROLLBACK'); bad('No se pudo revertir saldo del Fondo Fijo',500); }
+                    // movimiento de anulación
+                    $desc = 'Anulación reposición FF de OP #'.$id;
+                    $insFFMov = pg_query_params(
+                        $conn,
+                        "INSERT INTO public.fondo_fijo_mov
+                           (id_ff, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at, created_by)
+                         VALUES
+                           ($1, current_date, 'ANULACION', -1, $2, $3, 'orden_pago', $4, now(), $5)",
+                        [$idFf, $tot, $desc, $id, $_SESSION['nombre_usuario']]
+                    );
+                    if (!$insFFMov) { pg_query($conn,'ROLLBACK'); bad('No se pudo registrar movimiento de anulación FF',500); }
+                }
+            }
+        }
 
-        if ($monto > 0) {
-            // 4.1) Reponer saldo de la cuota
-            $uCuota = pg_query_params(
+        $totalOp = (float)$op['total'];
+        $numeroCheque = $op['cheque']['numero_cheque'] ?? '-';
+
+        // 1) Movimientos bancarios según estado del cheque
+        if ($cheqEstado === 'Reservado') {
+            $desc = sprintf('Liberación reserva OP #%d Cheque #%s', $id, $numeroCheque);
+            $insMov = pg_query_params(
+                $conn,
+                "INSERT INTO public.cuenta_bancaria_mov
+                    (id_cuenta_bancaria, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at)
+                 VALUES ($1, current_date, 'LIBERACION', 1, $2, $3, 'orden_pago', $4, now())",
+                [(int)$op['id_cuenta_bancaria'], $totalOp, $desc, $id]
+            );
+            if (!$insMov) { pg_query($conn, 'ROLLBACK'); bad('No se pudo liberar la reserva bancaria', 500); }
+        } else { // Entregado
+            $desc = sprintf('Reverso pago OP #%d Cheque #%s', $id, $numeroCheque);
+            $insMov = pg_query_params(
+                $conn,
+                "INSERT INTO public.cuenta_bancaria_mov
+                    (id_cuenta_bancaria, fecha, tipo, signo, monto, descripcion, ref_tabla, ref_id, created_at)
+                 VALUES ($1, current_date, 'REVERSO_PAGO_OP', 1, $2, $3, 'orden_pago', $4, now())",
+                [(int)$op['id_cuenta_bancaria'], $totalOp, $desc, $id]
+            );
+            if (!$insMov) { pg_query($conn, 'ROLLBACK'); bad('No se pudo revertir el movimiento de pago', 500); }
+        }
+
+        // 2) Cheque → Anulado
+        $updCheque = pg_query_params(
+            $conn,
+            "UPDATE public.cheques
+             SET estado='Anulado',
+                 observaciones = CASE WHEN $1 <> '' THEN CONCAT(COALESCE(observaciones,''),' | ', $1) ELSE observaciones END,
+                 updated_at = now()
+             WHERE id=$2",
+            [$motivo, (int)$op['cheque']['id']]
+        );
+        if (!$updCheque) { pg_query($conn, 'ROLLBACK'); bad('No se pudo actualizar el cheque', 500); }
+
+        // 3) OP → Anulada
+        $updOP = pg_query_params(
+            $conn,
+            "UPDATE public.orden_pago_cab
+             SET estado='Anulada',
+                 observacion = CASE WHEN $1 <> '' THEN CONCAT(COALESCE(observacion,''),' | Anulación: ',$1) ELSE observacion END
+             WHERE id_orden_pago=$2",
+            [$motivo, $id]
+        );
+        if (!$updOP) { pg_query($conn, 'ROLLBACK'); bad('No se pudo actualizar la orden', 500); }
+
+        // 4) Revertir cuotas marcadas por esta OP (se busca por TAG en observación de cuota)
+        $pattern = '\\[ENTREGADA OP #' . (int)$id . '[^\\]]*\\]';
+        $stC = pg_query_params($conn, "
+            SELECT id_cxp_det, id_cxp, COALESCE(saldo_cuota,0) AS saldo_cuota, COALESCE(observacion,'') AS obs
+            FROM public.cuenta_det_x_pagar
+            WHERE observacion ~ $1
+            FOR UPDATE
+        ", [$pattern]);
+        if ($stC === false) { pg_query($conn, 'ROLLBACK'); bad('No se pudo localizar cuotas comprometidas', 500); }
+
+        while ($c = pg_fetch_assoc($stC)) {
+            $idCxpDet = (int)$c['id_cxp_det'];
+            $idCxp    = (int)$c['id_cxp'];
+            $obsOld   = $c['obs'];
+
+            $monto = 0.0;
+            if (preg_match('/M:([0-9]+(?:\.[0-9]{1,2})?)/', $obsOld, $mm)) $monto = (float)$mm[1];
+
+            $cleanObs = trim(preg_replace("/$pattern/", '', $obsOld));
+            $obsToSave = ($cleanObs === '') ? null : $cleanObs;
+
+            if ($monto > 0) {
+                $uCuota = pg_query_params($conn, "UPDATE public.cuenta_det_x_pagar SET saldo_cuota = saldo_cuota + $1 WHERE id_cxp_det = $2", [$monto, $idCxpDet]);
+                if (!$uCuota) { pg_query($conn, 'ROLLBACK'); bad('No se pudo restaurar saldo de la cuota '.$idCxpDet, 500); }
+
+                $uCxp = pg_query_params($conn, "UPDATE public.cuenta_pagar SET saldo_actual = saldo_actual + $1 WHERE id_cxp = $2", [$monto, $idCxp]);
+                if (!$uCxp) { pg_query($conn, 'ROLLBACK'); bad('No se pudo restaurar saldo de la CxP', 500); }
+
+                $insMovRv = pg_query_params(
+                  $conn,
+                  "INSERT INTO public.cuenta_pagar_mov
+                     (id_proveedor, fecha, ref_tipo, ref_id, id_cxp,
+                      concepto, signo, monto, moneda, created_at)
+                   SELECT cxp.id_proveedor,
+                          current_date,
+                          'PAGO',
+                          $1::int,
+                          cxp.id_cxp,
+                          CONCAT('Reverso OP #', $2::text, ' cuota ', $3::int),
+                          1,
+                          $4::numeric,
+                          cxp.moneda,
+                          now()
+                   FROM public.cuenta_pagar cxp
+                   WHERE cxp.id_cxp = $5",
+                  [$id, $id, $idCxpDet, $monto, $idCxp]
+                );
+                if (!$insMovRv) { pg_query($conn, 'ROLLBACK'); bad('No se pudo registrar reverso en CxP', 500); }
+            }
+
+            $updCuotaObs = pg_query_params(
                 $conn,
                 "UPDATE public.cuenta_det_x_pagar
-                 SET saldo_cuota = saldo_cuota + $1
+                   SET observacion = $1,
+                       estado = CASE WHEN saldo_cuota > 0 THEN 'Pendiente' ELSE 'Cancelada' END
                  WHERE id_cxp_det = $2",
-                [$monto, $idCxpDet]
+                [$obsToSave, $idCxpDet]
             );
-            if (!$uCuota) { pg_query($conn, 'ROLLBACK'); bad('No se pudo restaurar saldo de la cuota '.$idCxpDet, 500); }
+            if (!$updCuotaObs) { pg_query($conn, 'ROLLBACK'); bad('No se pudo limpiar la observación de la cuota '.$idCxpDet, 500); }
 
-            // 4.2) Devolver saldo_actual en CxP
-            $uCxp = pg_query_params(
+            $updEstadoCxp = pg_query_params(
                 $conn,
                 "UPDATE public.cuenta_pagar
-                 SET saldo_actual = saldo_actual + $1
-                 WHERE id_cxp = $2",
-                [$monto, $idCxp]
+                   SET estado = CASE WHEN saldo_actual > 0 THEN 'Parcial' ELSE 'Cancelada' END
+                 WHERE id_cxp = $1",
+                [$idCxp]
             );
-            if (!$uCxp) { pg_query($conn, 'ROLLBACK'); bad('No se pudo restaurar saldo de la CxP', 500); }
-
-            // 4.3) Movimiento reverso en CxP (ref_tipo='PAGO', signo=+1) para cumplir el CHECK
-            $insMovRv = pg_query_params(
-              $conn,
-              "INSERT INTO public.cuenta_pagar_mov
-                 (id_proveedor, fecha, ref_tipo, ref_id, id_cxp,
-                  concepto, signo, monto, moneda, created_at)
-               SELECT cxp.id_proveedor,
-                      current_date,
-                      'PAGO',               -- reverso usando tipo PAGO
-                      $1::int,              -- ref_id = id OP
-                      cxp.id_cxp,
-                      CONCAT('Reverso OP #', $2::text, ' cuota ', $3::int),
-                      1,                    -- +1 devuelve saldo
-                      $4::numeric,
-                      cxp.moneda,
-                      now()
-               FROM public.cuenta_pagar cxp
-               WHERE cxp.id_cxp = $5",
-              [$id, $id, $idCxpDet, $monto, $idCxp]
-            );
-            if (!$insMovRv) { pg_query($conn, 'ROLLBACK'); bad('No se pudo registrar reverso en CxP', 500); }
+            if (!$updEstadoCxp) { pg_query($conn, 'ROLLBACK'); bad('No se pudo recalcular estado de la CxP', 500); }
         }
 
-        // 4.4) Guardar observación limpia y asegurar estado NO nulo
-        $updCuotaObs = pg_query_params(
-            $conn,
-            "UPDATE public.cuenta_det_x_pagar
-               SET observacion = $1,
-                   estado = CASE
-                              WHEN saldo_cuota > 0 THEN 'Pendiente'
-                              ELSE 'Cancelada'
-                            END
-             WHERE id_cxp_det = $2",
-            [$obsToSave, $idCxpDet]
-        );
-        if (!$updCuotaObs) {
-            pg_query($conn, 'ROLLBACK');
-            bad('No se pudo limpiar la observación de la cuota '.$idCxpDet, 500);
-        }
-
-        // 4.5) Recalcular estado de la CxP (simple: si queda saldo > 0 => Parcial, si 0 => Cancelada)
-        $updEstadoCxp = pg_query_params(
-            $conn,
-            "UPDATE public.cuenta_pagar
-               SET estado = CASE WHEN saldo_actual > 0 THEN 'Parcial' ELSE 'Cancelada' END
-             WHERE id_cxp = $1",
-            [$idCxp]
-        );
-        if (!$updEstadoCxp) {
-            pg_query($conn, 'ROLLBACK');
-            bad('No se pudo recalcular estado de la CxP', 500);
-        }
+        pg_query($conn, 'COMMIT');
+        ok(['id_orden_pago' => $id, 'estado' => 'Anulada', 'cuotas_revertidas' => true]);
     }
-
-    pg_query($conn, 'COMMIT');
-    ok(['id_orden_pago' => $id, 'estado' => 'Anulada', 'cuotas_revertidas' => true]);
-}
-
 
     /** ---------- IMPRIMIR CHEQUE ---------- */
     if ($accion === 'imprimir') {
