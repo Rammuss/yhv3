@@ -5,16 +5,16 @@ $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
 if ($method !== 'POST' && $method !== 'PATCH') {
   http_response_code(405);
-  echo json_encode(['ok'=>false,'error'=>'M茅todo no permitido']);
+  echo json_encode(['ok'=>false,'error'=>'Metodo no permitido']);
   exit;
 }
 
 $in = read_json();
 $accion = $in['accion'] ?? '';
-if ($accion === '') bad('Acci贸n requerida');
+if ($accion === '') bad('Accion requerida');
 
 if ($accion === 'auto_match') {
-  $idConc = require_int($in['id_conciliacion'] ?? null, 'Conciliaci贸n');
+  $idConc = require_int($in['id_conciliacion'] ?? null, 'Conciliacion');
   $conc = require_conciliacion($conn, $idConc, true);
 
   $tolerancia = isset($in['tolerancia']) ? (float)$in['tolerancia'] : 0.0;
@@ -104,8 +104,8 @@ if ($accion === 'auto_match') {
       $conn,
       "INSERT INTO public.conciliacion_bancaria_det
         (id_conciliacion, id_movimiento, id_extracto, tipo, signo, monto, descripcion, origen, created_by)
-       SELECT $1, $2, $3, 'MATCH', m.signo, m.monto,
-              CONCAT('Match autom谩tico con extracto ', $3::text),
+       SELECT $1::int, $2::int, $3::bigint, 'MATCH', m.signo, m.monto,
+              'Match auto extracto #' || $3::text,
               'Auto', $4
          FROM public.cuenta_bancaria_mov m
         WHERE m.id_mov = $2",
@@ -119,7 +119,7 @@ if ($accion === 'auto_match') {
 }
 
 if ($accion === 'match_manual') {
-  $idConc = require_int($in['id_conciliacion'] ?? null, 'Conciliaci贸n');
+  $idConc = require_int($in['id_conciliacion'] ?? null, 'Conciliacion');
   $conc = require_conciliacion($conn, $idConc, true);
   $idMov = require_int($in['id_movimiento'] ?? null, 'Movimiento');
   $idExt = require_int($in['id_extracto'] ?? null, 'Extracto');
@@ -171,7 +171,7 @@ if ($accion === 'match_manual') {
     $conn,
     "INSERT INTO public.conciliacion_bancaria_det
         (id_conciliacion, id_movimiento, id_extracto, tipo, signo, monto, descripcion, origen, created_by)
-       VALUES ($1, $2, $3, 'MATCH', $4, $5, $6, 'Manual', $7)",
+       VALUES ($1::int, $2::int, $3::bigint, 'MATCH', $4, $5, $6, 'Manual', $7)",
     [$idConc, $idMov, $idExt, (int)$movRow['signo'], (float)$movRow['monto'],
      'Match manual', $_SESSION['nombre_usuario']]
   );
@@ -182,13 +182,13 @@ if ($accion === 'match_manual') {
 }
 
 if ($accion === 'ajuste_libro' || $accion === 'ajuste_banco') {
-  $idConc = require_int($in['id_conciliacion'] ?? null, 'Conciliaci贸n');
+  $idConc = require_int($in['id_conciliacion'] ?? null, 'Conciliacion');
   $conc = require_conciliacion($conn, $idConc, true);
   $monto = (float)($in['monto'] ?? 0);
-  if ($monto <= 0) bad('Monto inv谩lido');
+  if ($monto <= 0) bad('Monto invido');
   $descripcion = trim($in['descripcion'] ?? '');
   $signo = (int)($in['signo'] ?? 1);
-  if (!in_array($signo, [1,-1], true)) bad('Signo inv谩lido');
+  if (!in_array($signo, [1,-1], true)) bad('Signo invido');
 
   pg_query($conn,'BEGIN');
   $movId = null;
@@ -203,7 +203,7 @@ if ($accion === 'ajuste_libro' || $accion === 'ajuste_banco') {
     ";
     $st = pg_query_params($conn, $sqlMov, [
       (int)$conc['id_cuenta_bancaria'], $signo, $monto,
-      ($descripcion !== '' ? $descripcion : 'Ajuste conciliaci贸n'),
+      ($descripcion !== '' ? $descripcion : 'Ajuste conciliacion'),
       $idConc
     ]);
     if (!$st){ pg_query($conn,'ROLLBACK'); bad('No se pudo crear ajuste en libro', 500); }
@@ -228,7 +228,7 @@ if ($accion === 'ajuste_libro' || $accion === 'ajuste_banco') {
       RETURNING id_extracto
     ";
     $st = pg_query_params($conn, $sqlExt, [
-      $idConc, ($descripcion !== '' ? $descripcion : 'Ajuste conciliaci贸n'), $signo, $monto
+      $idConc, ($descripcion !== '' ? $descripcion : 'Ajuste conciliacion'), $signo, $monto
     ]);
     if (!$st){ pg_query($conn,'ROLLBACK'); bad('No se pudo crear ajuste en banco', 500); }
     $extId = (int)pg_fetch_result($st, 0, 0);
@@ -246,7 +246,7 @@ if ($accion === 'ajuste_libro' || $accion === 'ajuste_banco') {
       $accion === 'ajuste_libro' ? 'AJUSTE_LIBRO' : 'AJUSTE_BANCO',
       $signo,
       $monto,
-      $descripcion !== '' ? $descripcion : 'Ajuste conciliaci贸n',
+      $descripcion !== '' ? $descripcion : 'Ajuste conciliacion',
       $_SESSION['nombre_usuario'],
       $movId ?? $extId
     ]
@@ -317,4 +317,19 @@ if ($accion === 'revertir_match') {
   ok(['revertido' => true]);
 }
 
-bad('Acci贸n no soportada', 405);
+bad('Accion no soportada', 405);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
