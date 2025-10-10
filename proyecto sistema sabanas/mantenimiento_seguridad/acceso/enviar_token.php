@@ -58,14 +58,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $mail->SMTPDebug = 2;              // opcional
             $mail->Debugoutput = 'error_log';  // opcional
 
-            // === PROD (Brevo) ===
-            // $mail->Host       = 'smtp-relay.brevo.com';
-            // $mail->Port       = 587;
-            // $mail->SMTPAuth   = true;
-            // $mail->Username   = '960d25002@smtp-brevo.com';     // ⚠️ credenciales NUEVAS
-            // $mail->Password   = 'sUXgc5VGY13jqxfH';    // ⚠️ credenciales NUEVAS
-            // $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-            // $mail->CharSet    = 'UTF-8';
+            
 
             // ⚠️ From debe ser un remitente VERIFICADO en Brevo
             $mail->setFrom('mmarcoscaceres@gmail.com', 'Tu Sistema');

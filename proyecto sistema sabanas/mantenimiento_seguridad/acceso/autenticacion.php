@@ -85,14 +85,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $mail->CharSet  = 'UTF-8';
                 $mail->SMTPDebug = 2; $mail->Debugoutput = 'error_log';
 
-                // --- PROD con Brevo ---
-                // $mail->Host       = 'smtp-relay.brevo.com';
-                // $mail->Port       = 587;
-                // $mail->SMTPAuth   = true;
-                // $mail->Username   = '960d25002@smtp-brevo.com';    // <-- tus credenciales
-                // $mail->Password   = 'sUXgc5VGY13jqxfH';   // <-- tus credenciales
-                // $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
-                // $mail->CharSet    = 'UTF-8';
+                
 
                 // Remitente verificado en Brevo
                 $mail->setFrom('mmarcoscaceres@gmail.com', 'Sistema compra,venta,tesoreria');
