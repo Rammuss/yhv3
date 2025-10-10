@@ -50,6 +50,8 @@
     els.btnNueva = document.getElementById('btn-nueva');
     els.btnCrearConc = document.getElementById('btn-crear-conc');
     els.btnDescargar = document.getElementById('btn-descargar');
+    els.btnCerrar = document.getElementById('btn-accion-cerrar');
+    els.btnReabrir = document.getElementById('btn-accion-reabrir');
     els.listSesiones = document.getElementById('sesiones-list');
     els.kpiId = document.getElementById('kpi-id');
     els.kpiPeriodo = document.getElementById('kpi-periodo');
@@ -69,6 +71,8 @@
     els.btnReset.addEventListener('click', resetFiltros);
     els.btnNueva.addEventListener('click', () => toggleModal(els.modalNueva, true));
     els.btnCrearConc.addEventListener('click', crearConciliacion);
+    els.btnCerrar?.addEventListener('click', () => cambiarEstado('cerrar'));
+    els.btnReabrir?.addEventListener('click', () => cambiarEstado('reabrir'));
     document.querySelectorAll('[data-close]').forEach(btn => {
       btn.addEventListener('click', () => {
         const modal = btn.closest('.modal-backdrop');
@@ -190,10 +194,15 @@
       els.badgeEstado.className = 'badge';
       els.kpiPendMov.textContent = '--';
       els.kpiPendMovDesc.textContent = '';
-      els.kpiPendExt.textContent = '--';
-      els.kpiPendExtDesc.textContent = '';
-      return;
-    }
+    els.kpiPendExt.textContent = '--';
+    els.kpiPendExtDesc.textContent = '';
+    if (els.btnCerrar) els.btnCerrar.disabled = true;
+    if (els.btnReabrir) els.btnReabrir.disabled = true;
+    if (els.btnCerrar) els.btnCerrar.dataset.idConciliacion = '';
+    if (els.btnReabrir) els.btnReabrir.dataset.idConciliacion = '';
+    if (els.btnDescargar) els.btnDescargar.dataset.idConciliacion = '';
+    return;
+  }
     els.kpiId.textContent = `#${conc.id_conciliacion}`;
     els.kpiPeriodo.textContent = `${conc.fecha_desde} -> ${conc.fecha_hasta}`;
     els.kpiDif.textContent = formatMoneda(conc.diferencia_final, conc.moneda || 'PYG');
@@ -210,6 +219,20 @@
     els.kpiPendMovDesc.textContent = `Saldo: ${formatMoneda(movTotal, conc.moneda || 'PYG')}`;
     els.kpiPendExt.textContent = `${ePend.length} registros`;
     els.kpiPendExtDesc.textContent = `Saldo: ${formatMoneda(extTotal, conc.moneda || 'PYG')}`;
+
+    if (els.btnCerrar) {
+      const habilitarCerrar = conc.estado === 'Abierta' && Math.abs(Number(conc.diferencia_final || 0)) < 0.01 && !mPend.length && !ePend.length;
+      els.btnCerrar.disabled = !habilitarCerrar;
+      els.btnCerrar.dataset.idConciliacion = conc.id_conciliacion;
+    }
+    if (els.btnReabrir) {
+      els.btnReabrir.disabled = conc.estado !== 'Cerrada';
+      els.btnReabrir.dataset.idConciliacion = conc.id_conciliacion;
+    }
+    if (els.btnDescargar) {
+      els.btnDescargar.dataset.idConciliacion = conc.id_conciliacion;
+      els.btnDescargar.disabled = false;
+    }
   }
 
   function resetFiltros() {
@@ -316,4 +339,21 @@
       return state.selectedId;
     }
   };
+
+  async function cambiarEstado(accion) {
+    const btn = accion === 'cerrar' ? els.btnCerrar : els.btnReabrir;
+    const idAttr = btn?.dataset.idConciliacion;
+    const idConc = Number(idAttr || state.selectedId || 0);
+    if (!idConc) return alert('Seleccione una conciliacion.');
+    try {
+      await fetchJSON(API.sesiones, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_conciliacion: idConc, accion })
+      });
+      await loadSesiones();
+    } catch (err) {
+      handleError(err);
+    }
+  }
 })();

@@ -257,6 +257,13 @@ if (empty($_SESSION['nombre_usuario'])) {
         <strong id="kpi-pend-ext">--</strong>
         <div class="muted" id="kpi-pend-ext-desc"></div>
       </div>
+      <div class="card" style="align-items:flex-start;">
+        <h3>Acciones</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button id="btn-accion-cerrar" class="primary" disabled>Cerrar conciliacion</button>
+          <button id="btn-accion-reabrir" disabled>Reabrir</button>
+        </div>
+      </div>
     </section>
 
     <section class="board">

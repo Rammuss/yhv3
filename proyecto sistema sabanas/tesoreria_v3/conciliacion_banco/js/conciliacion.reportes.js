@@ -6,12 +6,12 @@
   if (!btnDescargar) return;
 
   btnDescargar.addEventListener('click', () => {
-    const conc = store.state.conciliacion;
-    if (!conc) {
+    const id = btnDescargar.dataset.idConciliacion || (store.state.conciliacion && store.state.conciliacion.id_conciliacion);
+    if (!id) {
       alert('Seleccione una conciliacion primero.');
       return;
     }
-    const url = `reportes_api.php?id_conciliacion=${conc.id_conciliacion}&formato=csv`;
+    const url = `reportes_api.php?id_conciliacion=${id}&formato=csv`;
     window.open(url, '_blank');
   });
 })();
