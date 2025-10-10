@@ -183,6 +183,11 @@ function canAccess($roles, $current)
             height: 46px;
             border-radius: 50%;
             object-fit: cover;
+<<<<<<< HEAD
+            border: 2px solid rgba(0, 0, 0, .08);
+            display: block;
+            flex-shrink: 0;
+=======
             border: 2px solid rgba(214, 51, 132, 0.36);
             display: block;
             flex-shrink: 0;
@@ -197,6 +202,7 @@ function canAccess($roles, $current)
         .greeting strong {
             font-weight: 600;
             font-size: 1rem;
+>>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
         }
 
         .badge {
@@ -360,8 +366,43 @@ function canAccess($roles, $current)
         }
 
         .pill.service {
+<<<<<<< HEAD
+            background: rgba(79, 70, 229, .18);
+            color: #312e81;
+        }
+
+        /* Iconos via mask (sin libs) */
+        .ico {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            background: currentColor;
+            mask-size: cover;
+            -webkit-mask-size: cover
+        }
+
+        .i-users {
+            mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23000" d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V20h14v-3.5C15 14.17 10.33 13 8 13zm8 0c-.29 0-.62.02-.97.05C16.69 13.77 18 14.68 18 16.5V20h6v-3.5c0-2.33-4.67-3.5-8-3.5z"/></svg>')
+        }
+
+        .i-bag {
+            mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23000" d="M16 6V4a4 4 0 0 0-8 0v2H3v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6h-5zm-6-2a2 2 0 1 1 4 0v2h-4V4z"/></svg>')
+        }
+
+        .i-sale {
+            mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23000" d="M17.5 17.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0zm-6-11A2.5 2.5 0 1 1 9 4a2.5 2.5 0 0 1 2.5 2.5zM6 14l12-4" stroke="%23000" stroke-width="2" fill="none"/></svg>')
+        }
+
+        .i-cash {
+            mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23000" d="M3 6h18v12H3zM7 10h2v4H7zm8 0h2v4h-2z"/></svg>')
+=======
             background: rgba(214, 51, 132, 0.2);
             color: #a3175b;
+>>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
+        }
+
+        .i-service {
+            mask: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="%23000" d="M21 7l-1.41 1.41-3-3L18 4l3 3zm-4.24-.59l-9.9 9.9a2 2 0 0 0-.52.93l-.79 3.16a.5.5 0 0 0 .61.61l3.16-.79a2 2 0 0 0 .93-.52l9.9-9.9-3.39-3.39zM5 8a3 3 0 1 1 0-6 3 3 0 0 1 0 6zm0 2a5 5 0 0 1 5 5v1H0v-1a5 5 0 0 1 5-5z"/></svg>');
         }
 
         .icon {
@@ -483,9 +524,13 @@ function canAccess($roles, $current)
             <h1 class="hello">Bienvenida a tu universo Beauty Creations</h1>
             <p class="sub">Gestioná turnos, servicios y todo lo que hace brillar a tu salón desde un único lugar pensado para vos.</p>
 
+<<<<<<< HEAD
+            <h2 id="modulos" style="margin:22px 0 8px;font-size:1.2rem">Módulos</h2>
+=======
             <div id="frase-dia">Cargando frase motivacional...</div>
 
             <h2>Módulos disponibles</h2>
+>>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
             <div class="grid modules">
                 <a class="card" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/mantenimiento_seguridad/panel_usuario/ui_panel_usuario.php">
                     <span class="icon"><i class="ico i-users"></i></span>
@@ -537,6 +582,16 @@ function canAccess($roles, $current)
                         <span class="pill service">Servicios</span>
                     </a>
                 <?php endif; ?>
+
+                <!-- Servicios (admin o servicios) -->
+                <!-- <?php if (canAccess(['admin', 'servicios'], $rol)): ?>
+                    <a class="card" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/orden_reserva/ui_reserva.php">
+                        <div class="icon"><i class="ico i-service"></i></div>
+                        <div class="module-title">Módulo de Servicios</div>
+                        <div class="muted">Agenda, órdenes y seguimiento de tareas</div>
+                        <span class="pill service">Servicios</span>
+                    </a>
+                <?php endif; ?> -->
             </div>
         </main>
 

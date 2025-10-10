@@ -376,6 +376,37 @@ ORDER BY inicio;
 <html lang="es">
 
 <head>
+<<<<<<< HEAD
+<meta charset="UTF-8" />
+<title>Orden de Reserva</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="stylesheet" type="text/css" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/css/styles_servicios.css" />
+<style>
+  :root{ --g:#10b981; --r:#ef4444; --b:#111; --shadow:0 10px 20px rgba(0,0,0,.12); }
+  body{ font-family:system-ui,Segoe UI,Roboto,Arial; margin:20px; color:#111; background:#fff }
+  .card{ border:1px solid #e5e7eb; border-radius:10px; padding:12px; margin:10px 0; background:#fff }
+  .row{ display:flex; gap:8px; flex-wrap:wrap; align-items:end }
+  .row>*{ flex:1 }
+  label{ display:block; font-size:12px; color:#374151; margin:6px 0 4px }
+  input,select,button{ padding:8px 10px; border:1px solid #d1d5db; border-radius:8px }
+  button{ background:#111; color:#fff; border:none; cursor:pointer; }
+  button.sec{ background:#f3f4f6; color:#111 }
+  table{ width:100%; border-collapse:collapse; margin-top:8px }
+  th,td{ border:1px solid #e5e7eb; padding:8px; font-size:14px; text-align:left }
+  th{ background:#f3f4f6; text-transform:uppercase; font-size:12px; letter-spacing:.05em }
+  .grid{ display:grid; grid-template-columns: repeat(auto-fill, minmax(220px,1fr)); gap:10px; }
+  .svc{ border:1px solid #e5e7eb; border-radius:10px; padding:10px; background:#fff; transition:transform .06s; }
+  .svc:hover{ transform:scale(1.01) }
+  .svc h4{ margin:0 0 6px; font-size:14px; }
+  .svc.promo{ border-color:#fecaca; background:#fef2f2; }
+  .svc-section{ margin-bottom:14px; }
+  .svc-section h3{ margin:0 0 8px; font-size:15px; }
+  .muted{ color:#6b7280; font-size:12px }
+  .qtybtn{ padding:4px 8px; border-radius:6px; margin:0 3px; }
+  .danger{ background:#fee2e2; color:#991b1b; }
+  .stat{ flex:0 0 210px; font-weight:600; font-size:14px; }
+  .stat span{ font-weight:700; }
+=======
   <meta charset="UTF-8" />
   <title>Orden de Reserva</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -387,6 +418,7 @@ ORDER BY inicio;
       --b: #111;
       --shadow: 0 10px 20px rgba(0, 0, 0, .12);
     }
+>>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
 
     body {
       font-family: system-ui, Segoe UI, Roboto, Arial;
@@ -641,8 +673,13 @@ ORDER BY inicio;
 </head>
 
 <body>
+<<<<<<< HEAD
+   <div id="navbar-container"></div>
+<script src="../../servicios/navbar/navbar.js"></script>
+=======
   <div id="navbar-container"></div>
   <script src="../../servicios/navbar/navbar.js"></script>
+>>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
   <h1>Orden de Reserva</h1>
 
   <!-- 1) Cliente -->

@@ -7,6 +7,52 @@ session_start();
 <html lang="es">
 
 <head>
+<<<<<<< HEAD
+<meta charset="UTF-8">
+<title>Órdenes de Trabajo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" type="text/css" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/css/styles_servicios.css" />
+<style>
+  :root{ --g:#10b981; --r:#ef4444; --b:#111; --shadow:0 10px 24px rgba(15,23,42,.12); }
+  body{ font-family:system-ui,Segoe UI,Roboto,Arial; margin:20px; color:#111; background:#fff; }
+  h1{ margin:0 0 20px; }
+  .layout{ display:grid; grid-template-columns: minmax(320px,2.4fr) minmax(360px,3fr); gap:16px; align-items:start; }
+  .card{ border:1px solid #e5e7eb; border-radius:12px; padding:16px; background:#fff; box-shadow:0 6px 18px rgba(15,23,42,.06); }
+  .card h2{ margin:0 0 12px; font-size:18px; }
+  .row{ display:flex; gap:10px; flex-wrap:wrap; }
+  label{ display:block; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:#4b5563; margin-bottom:4px; }
+  input, select, button, textarea{ padding:9px 12px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; }
+  textarea{ width:100%; min-height:80px; resize:vertical; }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.2); }
+  button{ cursor:pointer; background:#111; color:#fff; border:none; }
+  button.sec{ background:#fff; color:#111; border:1px solid #d1d5db; }
+  button.danger{ background:#dc2626; }
+  button:disabled{ opacity:.6; cursor:not-allowed; }
+  table{ width:100%; border-collapse:collapse; margin-top:10px; }
+  th,td{ border-bottom:1px solid #e5e7eb; padding:8px; text-align:left; font-size:13px; }
+  th{ background:#f3f4f6; text-transform:uppercase; letter-spacing:.04em; font-size:12px; color:#4b5563; }
+  tr:hover td{ background:#f9fafb; }
+  .badge{ display:inline-flex; align-items:center; gap:4px; padding:2px 8px; border-radius:999px; font-size:12px; }
+  .badge.estado{ background:#e0f2fe; color:#075985; }
+  .muted{ color:#6b7280; font-size:12px; }
+  .list-actions{ display:flex; gap:8px; align-items:flex-end; margin-bottom:10px; flex-wrap:wrap; }
+  .toast-layer{ position:fixed; inset:0; pointer-events:none; display:grid; place-items:flex-end center; padding:24px; z-index:9999; }
+  .toast{ pointer-events:auto; min-width:300px; padding:14px 16px; background:#111; color:#fff; border-radius:12px; margin-top:12px; box-shadow:var(--shadow); display:flex; justify-content:space-between; gap:12px; animation:toast-in .18s ease-out both; }
+  .toast.error{ background:#b91c1c; }
+  .toast button{ background:transparent; color:#fff; border:none; font-size:18px; cursor:pointer; padding:0; margin-left:12px; }
+  @keyframes toast-in{ from{ transform:translateY(12px); opacity:0 } to{ transform:translateY(0); opacity:1 } }
+  .section-title{ font-size:15px; font-weight:600; margin:16px 0 8px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .inline-form{ display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; margin-top:8px; }
+  .inline-form > div{ flex:1; min-width:160px; }
+  .tag{ display:inline-flex; padding:2px 6px; font-size:11px; border-radius:6px; background:#f1f5f9; color:#0f172a; text-transform:uppercase; letter-spacing:.05em; }
+  .solicitud-list{ display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+  .solicitud-card{ border:1px solid #e5e7eb; border-radius:10px; padding:10px 12px; background:#f8fafc; display:flex; gap:10px; align-items:flex-start; cursor:pointer; }
+  .solicitud-card input{ margin-top:4px; }
+  .solicitud-card strong{ display:block; margin-bottom:4px; font-size:13px; color:#0f172a; }
+  .solicitud-items{ font-size:12px; color:#475569; }
+  .solicitud-items span{ display:inline-block; margin-right:8px; margin-bottom:4px; padding:2px 6px; background:#e2e8f0; border-radius:6px; }
+</style>
+=======
   <meta charset="UTF-8">
   <title>Órdenes de Trabajo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -297,11 +343,17 @@ session_start();
       border-radius: 6px;
     }
   </style>
+>>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
 </head>
 
 <body>
+<<<<<<< HEAD
+     <div id="navbar-container"></div>
+<script src="../../servicios/navbar/navbar.js"></script>
+=======
   <div id="navbar-container"></div>
   <script src="../../servicios/navbar/navbar.js"></script>
+>>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
   <h1>Órdenes de Trabajo</h1>
   <div class="layout">
     <div class="card" id="panel_lista">
