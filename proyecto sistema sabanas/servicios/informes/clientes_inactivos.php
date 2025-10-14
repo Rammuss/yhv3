@@ -371,7 +371,8 @@ function format_fecha(?string $fecha, string $tz): string
             }
         }
     </style>
-    <link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_servicios.css">
+    <link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/servicios/css/styles_servicios.css">
+
 
 </head>
 

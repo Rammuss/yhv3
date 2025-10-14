@@ -29,6 +29,8 @@ body {
   background: var(--bg-gradient);
   position: relative;
 }
+
+/* Burbujas de fondo: no interceptan clics y quedan detrás */
 body::before,
 body::after {
   content: "";
@@ -37,29 +39,15 @@ body::after {
   height: 360px;
   border-radius: 50%;
   filter: blur(120px);
-  z-index: -1;          /* opcional, para enviarlos detrás */
   opacity: 0.5;
-  pointer-events: none; /* clave: ya no bloquean el mouse */
+  pointer-events: none;
+  z-index: -1;
 }
-
-body::before,
-body::after {
-  content: "";
-  position: fixed;
-  width: 360px;
-  height: 360px;
-  border-radius: 50%;
-  filter: blur(120px);
-  z-index: 0;
-  opacity: 0.5;
-}
-
 body::before {
   top: -140px;
   left: -140px;
   background: rgba(240, 128, 168, 0.26);
 }
-
 body::after {
   bottom: -160px;
   right: -120px;
@@ -68,7 +56,7 @@ body::after {
 
 .navbar {
   position: relative;
-  z-index: 1;
+  z-index: 2000; /* subir capa sin cambiar layout */
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -140,7 +128,6 @@ body::after {
   color: var(--text-main);
   box-shadow: inset 0 0 0 1px rgba(228, 84, 128, 0.18);
 }
-
 .navbar ul li a.cerrar-sesion:hover {
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
   box-shadow: 0 16px 28px rgba(228, 84, 128, 0.24);
@@ -159,7 +146,7 @@ body::after {
   box-shadow: 0 22px 40px rgba(228, 84, 128, 0.18);
   backdrop-filter: blur(16px);
   overflow: hidden;
-  z-index: 5;
+  z-index: 2100; /* menú por encima del resto */
 }
 
 .dropdown-content a {
@@ -179,7 +166,7 @@ body::after {
   padding-left: 24px;
 }
 
-/* Colores específicos por módulo (ahora todos al rosa, sin multicolores) */
+/* Colores específicos por módulo (todos al rosa) */
 .navbar li.mod-dashboard > a,
 .navbar li.mod-agenda > a,
 .navbar li.mod-solicitudes > a,
@@ -272,6 +259,12 @@ body::after {
   text-overflow: ellipsis;
   font-weight: 500;
   max-width: 180px;
+}
+
+/* Evitar que headers/tabs recorten o tapen el dropdown */
+.header, .subheader, .toolbar, .tabs, .hero {
+  overflow: visible !important;
+  z-index: auto !important;
 }
 
 /* Toast palette */
