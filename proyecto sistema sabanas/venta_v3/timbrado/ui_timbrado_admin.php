@@ -254,7 +254,6 @@ if ($action === 'combo.timbrados') {
   --chip: #eef2ff;
 }
 
-<<<<<<< HEAD
 * {
   box-sizing: border-box;
 }
@@ -493,41 +492,6 @@ select {
 /* Small helpers */
 .spacer { flex: 1; }
 
-=======
-  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 14px 0}
-  .chip{display:inline-flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--line);border-radius:999px;padding:6px 10px}
-  .chip select,.chip input{border:none;background:transparent;outline:none;font:inherit}
-  .chip input[type="text"]{min-width:200px}
-  .btn{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff;cursor:pointer}
-  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
-  .btn.icon{display:inline-flex;align-items:center;gap:8px}
-
-  .tabs{display:flex;gap:6px;border-bottom:1px solid var(--line);margin:0 0 14px 0}
-  .tab{padding:10px 12px;border:1px solid var(--line);border-bottom:none;background:#fafafa;border-top-left-radius:8px;border-top-right-radius:8px;cursor:pointer}
-  .tab.active{background:#fff;font-weight:600}
-
-  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
-  .card .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
-  .title{font-weight:700}
-  .muted{color:var(--muted);font-size:13px}
-  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
-  .kv{display:inline-flex;gap:6px;align-items:center;background:#f9fafb;border:1px solid var(--line);border-radius:10px;padding:6px 8px}
-  .actions{display:flex;gap:8px;margin-top:6px}
-  .badge{padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--line);background:#fff}
-  .ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
-  .off{background:#fff1f2;color:#9f1239;border-color:#fecdd3}
-
-  .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.38);z-index:30;padding:16px}
-  .modal .card{max-width:760px;width:100%;box-shadow:0 15px 50px rgba(0,0,0,.2)}
-  .modal .card header{padding-bottom:10px;border-bottom:1px solid var(--line);font-weight:600}
-  .content{display:grid;gap:10px;margin-top:10px}
-  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  label.l{display:grid;gap:6px;font-size:13px}
-  input[type="text"],input[type="date"],input[type="number"],select{padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fff}
-
-  .spacer{flex:1}
->>>>>>> d71d402065b80231eb2d65088df20d8db87d90bb
 </style>
 <link rel="stylesheet" href="/TALLER DE ANALISIS Y PROGRAMACIÓN I/proyecto sistema sabanas/venta_v3/css/styles_venta.css">
 

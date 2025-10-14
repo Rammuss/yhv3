@@ -1,18 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500&family=Poppins:wght@300;400;500;600&display=swap');
 
 :root {
-  --bg-gradient: linear-gradient(140deg, #e8fdf7 0%, #d9f1ff 45%, #f7fbff 100%);
+  --bg-gradient: linear-gradient(140deg, #fff7fa 0%, #fffafe 45%, #ffffff 100%);
   --navbar-bg: rgba(255, 255, 255, 0.9);
-  --navbar-border: rgba(37, 180, 162, 0.28);
-  --navbar-shadow: 0 18px 34px rgba(23, 136, 166, 0.22);
+  --navbar-border: rgba(228, 84, 128, 0.20);
+  --navbar-shadow: 0 18px 34px rgba(228, 84, 128, 0.15);
 
-  --text-main: #21434d;
-  --text-muted: #6a95a1;
+  --text-main: #3f2a34;
+  --text-muted: #8a6b78;
   --text-light: #ffffff;
 
-  --accent: #23a6bf;       /* turquesa intenso */
-  --accent-hover: #3fc6d8;
-  --accent-alt: #8be0c0;   /* verde agua */
+  --accent: #e45480;       /* rosa */
+  --accent-hover: #f07fa5; /* rosa claro */
+  --accent-alt: #ffd1de;   /* rosa pastel */
 
   --radius: 20px;
   --transition: 0.18s ease-in-out;
@@ -57,13 +57,13 @@ body::after {
 body::before {
   top: -140px;
   left: -140px;
-  background: rgba(63, 198, 216, 0.32);
+  background: rgba(240, 128, 168, 0.26);
 }
 
 body::after {
   bottom: -160px;
   right: -120px;
-  background: rgba(139, 224, 192, 0.28);
+  background: rgba(255, 182, 193, 0.22);
 }
 
 .navbar {
@@ -86,7 +86,7 @@ body::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(125deg, rgba(63, 198, 216, 0.12), transparent 70%);
+  background: linear-gradient(125deg, rgba(228, 84, 128, 0.10), transparent 70%);
   pointer-events: none;
 }
 
@@ -124,7 +124,7 @@ body::after {
   text-decoration: none;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.72);
-  box-shadow: inset 0 0 0 1px rgba(63, 198, 216, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(228, 84, 128, 0.18);
   transition: transform var(--transition), box-shadow var(--transition), background var(--transition), color var(--transition);
 }
 
@@ -132,18 +132,18 @@ body::after {
 .navbar a:focus-visible {
   color: var(--text-light);
   transform: translateY(-1px);
-  box-shadow: 0 16px 28px rgba(35, 166, 191, 0.26);
+  box-shadow: 0 16px 28px rgba(228, 84, 128, 0.24);
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
 }
 
 .navbar ul li a.cerrar-sesion {
-  color: #d75252;
-  box-shadow: inset 0 0 0 1px rgba(215, 82, 82, 0.18);
+  color: var(--text-main);
+  box-shadow: inset 0 0 0 1px rgba(228, 84, 128, 0.18);
 }
 
 .navbar ul li a.cerrar-sesion:hover {
-  background: linear-gradient(135deg, #d75252 0%, #f58b8b 100%);
-  box-shadow: 0 16px 28px rgba(215, 82, 82, 0.28);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  box-shadow: 0 16px 28px rgba(228, 84, 128, 0.24);
 }
 
 .dropdown-content {
@@ -155,8 +155,8 @@ body::after {
   padding: 8px 0;
   background: rgba(255, 255, 255, 0.96);
   border-radius: 18px;
-  border: 1px solid rgba(63, 198, 216, 0.18);
-  box-shadow: 0 22px 40px rgba(23, 136, 166, 0.22);
+  border: 1px solid rgba(228, 84, 128, 0.18);
+  box-shadow: 0 22px 40px rgba(228, 84, 128, 0.18);
   backdrop-filter: blur(16px);
   overflow: hidden;
   z-index: 5;
@@ -174,9 +174,62 @@ body::after {
 }
 
 .dropdown-content a:hover {
-  background: rgba(63, 198, 216, 0.14);
+  background: rgba(228, 84, 128, 0.12);
   color: var(--accent);
   padding-left: 24px;
+}
+
+/* Colores específicos por módulo (ahora todos al rosa, sin multicolores) */
+.navbar li.mod-dashboard > a,
+.navbar li.mod-agenda > a,
+.navbar li.mod-solicitudes > a,
+.navbar li.mod-presupuestos > a,
+.navbar li.mod-reclamos > a,
+.navbar li.mod-referenciales > a,
+.navbar li.mod-informes > a {
+  background: rgba(228, 84, 128, 0.12);
+  color: #7e304a;
+  box-shadow: inset 0 0 0 1px rgba(228, 84, 128, 0.22);
+}
+
+.navbar li.mod-dashboard > a:hover,
+.navbar li.mod-agenda > a:hover,
+.navbar li.mod-solicitudes > a:hover,
+.navbar li.mod-presupuestos > a:hover,
+.navbar li.mod-reclamos > a:hover,
+.navbar li.mod-referenciales > a:hover,
+.navbar li.mod-informes > a:hover,
+.navbar li.mod-dashboard > a:focus-visible,
+.navbar li.mod-agenda > a:focus-visible,
+.navbar li.mod-solicitudes > a:focus-visible,
+.navbar li.mod-presupuestos > a:focus-visible,
+.navbar li.mod-reclamos > a:focus-visible,
+.navbar li.mod-referenciales > a:focus-visible,
+.navbar li.mod-informes > a:focus-visible {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-hover) 100%);
+  color: #ffffff;
+  box-shadow: 0 16px 28px rgba(228, 84, 128, 0.24);
+}
+
+.navbar li.mod-dashboard .dropdown-content,
+.navbar li.mod-agenda .dropdown-content,
+.navbar li.mod-solicitudes .dropdown-content,
+.navbar li.mod-presupuestos .dropdown-content,
+.navbar li.mod-reclamos .dropdown-content,
+.navbar li.mod-referenciales .dropdown-content,
+.navbar li.mod-informes .dropdown-content {
+  border-color: rgba(228, 84, 128, 0.18);
+}
+
+.navbar li.mod-dashboard .dropdown-content a:hover,
+.navbar li.mod-agenda .dropdown-content a:hover,
+.navbar li.mod-solicitudes .dropdown-content a:hover,
+.navbar li.mod-presupuestos .dropdown-content a:hover,
+.navbar li.mod-reclamos .dropdown-content a:hover,
+.navbar li.mod-referenciales .dropdown-content a:hover,
+.navbar li.mod-informes .dropdown-content a:hover {
+  background: rgba(228, 84, 128, 0.12);
+  color: var(--accent);
 }
 
 .dropdown:hover .dropdown-content { display: block; }
@@ -194,7 +247,7 @@ body::after {
   padding: 6px 12px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.78);
-  box-shadow: inset 0 0 0 1px rgba(63, 198, 216, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(228, 84, 128, 0.16);
 }
 
 #nombre-usuario {
@@ -209,8 +262,8 @@ body::after {
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
-  border: 2px solid rgba(63, 198, 216, 0.34);
-  box-shadow: 0 10px 24px rgba(63, 198, 216, 0.22);
+  border: 2px solid rgba(228, 84, 128, 0.30);
+  box-shadow: 0 10px 24px rgba(228, 84, 128, 0.18);
 }
 
 .p2_perfil {
@@ -227,9 +280,9 @@ body::after {
 .toast {
   pointer-events: auto;
   background: rgba(255, 255, 255, 0.96);
-  border: 1px solid rgba(63, 198, 216, 0.24);
+  border: 1px solid rgba(228, 84, 128, 0.22);
   border-left: 4px solid var(--accent);
-  box-shadow: 0 18px 32px rgba(23, 136, 166, 0.22);
+  box-shadow: 0 18px 32px rgba(228, 84, 128, 0.16);
   border-radius: 14px;
   padding: 14px 16px;
   display: flex;
@@ -286,7 +339,7 @@ body::after {
   .dropdown-content {
     position: static;
     width: 100%;
-    box-shadow: 0 14px 28px rgba(23, 136, 166, 0.18);
+    box-shadow: 0 14px 28px rgba(228, 84, 128, 0.16);
   }
   .perfil_contenedor {
     width: 100%;

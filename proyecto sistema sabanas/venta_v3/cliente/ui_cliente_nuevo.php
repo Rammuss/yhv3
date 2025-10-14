@@ -549,8 +549,16 @@ $nombre = $_SESSION['nombre_usuario'] ?? 'Usuario';
         async function fetchClientes() {
             try {
                 const res = await fetch(`${API_URL}?q=${encodeURIComponent(filtro)}`);
-                if (!res.ok) throw new Error('No se pudieron obtener las clientas');
-                clientes = await res.json();
+                const data = await res.json();
+                if (!res.ok || (data && data.ok === false)) {
+                    const message = data && (data.error || data.message);
+                    throw new Error(message || 'No se pudieron obtener las clientas');
+                }
+                if (Array.isArray(data)) {
+                    clientes = data;
+                } else {
+                    clientes = Array.isArray(data?.data) ? data.data : [];
+                }
                 renderTabla();
             } catch (err) {
                 console.error(err);
@@ -593,7 +601,9 @@ $nombre = $_SESSION['nombre_usuario'] ?? 'Usuario';
                     body: formData
                 });
                 const data = await res.json();
-                if (!res.ok || !data.success) throw new Error(data.message || 'No se pudo guardar');
+                if (!res.ok || (data && data.ok === false)) {
+                    throw new Error(data?.error || data?.message || 'No se pudo guardar');
+                }
                 form.reset();
                 showToast('Clienta creada correctamente.');
                 fetchClientes();
@@ -619,7 +629,9 @@ $nombre = $_SESSION['nombre_usuario'] ?? 'Usuario';
                 try {
                     const res = await fetch(`${API_URL}?id=${id}`, { method: 'DELETE' });
                     const data = await res.json();
-                    if (!res.ok || !data.success) throw new Error(data.message || 'No se pudo eliminar');
+                    if (!res.ok || (data && data.ok === false)) {
+                        throw new Error(data?.error || data?.message || 'No se pudo eliminar');
+                    }
                     showToast('Clienta eliminada.');
                     fetchClientes();
                 } catch (err) {
@@ -668,7 +680,9 @@ $nombre = $_SESSION['nombre_usuario'] ?? 'Usuario';
                     body: JSON.stringify(payload)
                 });
                 const data = await res.json();
-                if (!res.ok || !data.success) throw new Error(data.message || 'No se pudo actualizar');
+                if (!res.ok || (data && data.ok === false)) {
+                    throw new Error(data?.error || data?.message || 'No se pudo actualizar');
+                }
                 closeModal();
                 showToast('Datos actualizados.');
                 fetchClientes();

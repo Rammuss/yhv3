@@ -61,7 +61,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             
 
             // ⚠️ From debe ser un remitente VERIFICADO en Brevo
-            $mail->setFrom('mmarcoscaceres@gmail.com', 'Tu Sistema');
+            $mail->setFrom('sistema@tusistema.com', 'Sistema');
             // opcional: Reply-To si querés recibir respuestas en tu Gmail
             // $mail->addReplyTo('mmarcoscaceres@gmail.com', 'Marcos');
 

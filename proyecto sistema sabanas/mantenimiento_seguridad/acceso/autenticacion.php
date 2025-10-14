@@ -88,7 +88,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 
 
                 // Remitente verificado en Brevo
-                $mail->setFrom('mmarcoscaceres@gmail.com', 'Sistema compra,venta,tesoreria');
+                $mail->setFrom('sistema@tusistema.com', 'Sistema');
 
                 // Destinatario: correo del usuario (de la BD)
                 $mail->addAddress($user['email']);
